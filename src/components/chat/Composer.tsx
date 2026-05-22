@@ -181,7 +181,11 @@ export function Composer({
         </div>
         <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
           <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
-          <button onClick={onParams} className="hover:text-text" disabled={!modelReady}>
+          <button
+            onClick={onParams}
+            disabled={!modelReady}
+            className={modelReady ? 'hover:text-text' : 'opacity-50 cursor-not-allowed'}
+          >
             thread parameters →
           </button>
         </div>

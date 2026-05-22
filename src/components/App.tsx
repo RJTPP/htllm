@@ -164,6 +164,18 @@ export default function App() {
     setPage('chat');
   }, [createThread, loadedModelId]);
 
+  // Cmd/Ctrl + Shift + O — new chat.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyO') {
+        e.preventDefault();
+        handleCreateThread();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleCreateThread]);
+
   const handleChangeSystemPrompt = useCallback(
     (value: string) => {
       if (activeThreadId) updateThread(activeThreadId, { systemPrompt: value });
