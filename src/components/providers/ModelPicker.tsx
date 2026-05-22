@@ -8,7 +8,7 @@ import type {
 } from '../../providers/types';
 import { groupByModel, familyRank, brandForFamily, type GroupedModel } from '../../lib/model-meta';
 import { fitFor } from '../../lib/fit';
-import { OPENAI_COMPAT_ID } from '../../providers/openai-compat/index';
+import { getHttpProviders, WEBLLM_ID } from '../../providers/registry';
 import { Modal } from '../ui/Modal';
 import { Search } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
@@ -16,8 +16,6 @@ import { StatusPanel } from './StatusPanel';
 import { ParamControls } from './ParamControls';
 import { ModelGridCard } from './ModelGridCard';
 import { ApiModelList } from './ApiModelList';
-
-type ProviderTab = 'webllm' | 'openai-compat';
 
 function FamilyChip({
   family,
@@ -77,21 +75,18 @@ export function ModelPicker({
   onParamsChange: (patch: Partial<ModelParams>) => void;
   defaultProviderId: string;
   apiModelId: string | null;
-  onSelectApiModel: (modelId: string) => void;
+  onSelectApiModel: (providerId: string, modelId: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const [family, setFamily] = useState<string | null>(null);
   const [hideTooLarge, setHideTooLarge] = useState(true);
   const [showParams, setShowParams] = useState(false);
-  const [tab, setTab] = useState<ProviderTab>(
-    defaultProviderId === OPENAI_COMPAT_ID ? 'openai-compat' : 'webllm',
-  );
+  const httpProviders = getHttpProviders();
+  const [tab, setTab] = useState<string>(defaultProviderId);
 
   // Open the picker on the tab matching the active thread's provider.
   useEffect(() => {
-    if (open) {
-      setTab(defaultProviderId === OPENAI_COMPAT_ID ? 'openai-compat' : 'webllm');
-    }
+    if (open) setTab(defaultProviderId);
   }, [open, defaultProviderId]);
 
   const grouped = useMemo(() => groupByModel(models), [models]);
@@ -137,7 +132,7 @@ export function ModelPicker({
   }, [grouped, search, family, hideTooLarge, mem, loadedModelId]);
 
   const subtitle =
-    tab === 'webllm'
+    tab === WEBLLM_ID
       ? `${filtered.length} chat models · runs in-browser via WebLLM`
       : 'API models · served by your configured endpoint';
 
@@ -149,17 +144,15 @@ export function ModelPicker({
       subtitle={subtitle}
       width="max-w-4xl"
     >
-      <div className="flex border-b border-line">
-        {(
-          [
-            ['webllm', 'In-browser · WebLLM'],
-            ['openai-compat', 'OpenAI-compatible API'],
-          ] as [ProviderTab, string][]
-        ).map(([id, label]) => (
+      <div className="flex border-b border-line overflow-x-auto">
+        {[
+          { id: WEBLLM_ID, label: 'In-browser · WebLLM' },
+          ...httpProviders.map((p) => ({ id: p.id, label: p.displayName })),
+        ].map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`font-mono text-[11px] px-4 py-2.5 border-r border-line ${
+            className={`font-mono text-[11px] px-4 py-2.5 border-r border-line whitespace-nowrap ${
               tab === id ? 'text-accent bg-accent/5' : 'text-mute hover:text-text'
             }`}
           >
@@ -168,8 +161,12 @@ export function ModelPicker({
         ))}
       </div>
 
-      {tab === 'openai-compat' ? (
-        <ApiModelList apiModelId={apiModelId} onSelect={onSelectApiModel} />
+      {tab !== WEBLLM_ID ? (
+        <ApiModelList
+          provider={httpProviders.find((p) => p.id === tab) ?? httpProviders[0]!}
+          apiModelId={apiModelId}
+          onSelect={(modelId) => onSelectApiModel(tab, modelId)}
+        />
       ) : (
         <>
       <div className="px-4 pt-3 border-b border-line space-y-3 sticky top-0 bg-bg z-10">

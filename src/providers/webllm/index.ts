@@ -34,6 +34,7 @@ export class WebLLMProvider implements ChatProvider {
   readonly id = 'webllm';
   readonly displayName = 'WebLLM (In-Browser)';
   readonly authMode = 'none' as const;
+  readonly needsModelLoad = true;
   readonly capabilities = {
     streaming: true,
     toolCalls: false,

@@ -7,7 +7,8 @@ import { Badge } from '../ui/Badge';
 import { Dot } from '../ui/Dot';
 import { ParamControls } from '../providers/ParamControls';
 import { ImportExport } from './ImportExport';
-import { OpenAICompatConfig } from './OpenAICompatConfig';
+import { ProviderConfig } from './ProviderConfig';
+import { getHttpProviders } from '../../providers/registry';
 
 type SettingsTab = 'templates' | 'providers' | 'params' | 'about';
 
@@ -18,85 +19,27 @@ const TABS: [SettingsTab, string][] = [
   ['about', 'About'],
 ];
 
-interface ProviderMeta {
-  id: string;
-  name: string;
-  group: 'in-browser' | 'localhost' | 'byok';
-  desc: string;
-  builtIn?: boolean;
-  phase?: number;
-}
-
-const PROVIDERS: ProviderMeta[] = [
-  {
-    id: 'webllm',
-    name: 'WebLLM',
-    group: 'in-browser',
-    desc: "In-browser inference. Runs on this device's GPU via WebGPU.",
-    builtIn: true,
-  },
-  {
-    id: 'ollama',
-    name: 'Ollama',
-    group: 'localhost',
-    desc: 'Local Ollama daemon on localhost:11434.',
-    phase: 2,
-  },
-  {
-    id: 'lmstudio',
-    name: 'LM Studio',
-    group: 'localhost',
-    desc: 'Local LM Studio server, OpenAI-compatible.',
-    phase: 2,
-  },
-  {
-    id: 'openai-compat',
-    name: 'OpenAI-compatible API',
-    group: 'byok',
-    desc: 'Any /v1/chat/completions endpoint — Groq, OpenRouter, Together or a custom server.',
-    phase: 2,
-  },
-];
-
-function ProviderRow({ provider }: { provider: ProviderMeta }) {
-  const live = !provider.phase;
+function WebLLMRow() {
   return (
     <div className="border border-line bg-surface px-3 py-2.5">
       <div className="flex items-center gap-2.5">
-        <Dot tone={live ? 'ok' : 'mute'} />
-        <span className="text-[13px] text-text shrink-0">{provider.name}</span>
-        {provider.builtIn && (
-          <Badge tone="neutral" mono>
-            built-in
-          </Badge>
-        )}
-        {provider.phase && (
-          <Badge tone="neutral" mono>
-            phase {provider.phase}
-          </Badge>
-        )}
-        <span className={`font-mono text-[10px] ${live ? 'text-ok' : 'text-mute'}`}>
-          {live ? 'ready' : 'coming soon'}
-        </span>
+        <Dot tone="ok" />
+        <span className="text-[13px] text-text shrink-0">WebLLM</span>
+        <Badge tone="neutral" mono>
+          built-in
+        </Badge>
+        <span className="font-mono text-[10px] text-ok">ready</span>
         <div className="flex-1" />
-        <span
-          className={`font-mono text-[11px] px-2.5 py-1 border ${
-            live ? 'border-accent/60 text-accent bg-accent/5' : 'border-line text-mute/50'
-          }`}
-        >
-          {live ? 'enabled' : 'soon'}
+        <span className="font-mono text-[11px] px-2.5 py-1 border border-accent/60 text-accent bg-accent/5">
+          enabled
         </span>
       </div>
-      <div className="font-mono text-[10px] text-mute mt-1">{provider.desc}</div>
+      <div className="font-mono text-[10px] text-mute mt-1">
+        In-browser inference. Runs on this device's GPU via WebGPU.
+      </div>
     </div>
   );
 }
-
-const GROUP_LABELS: Record<ProviderMeta['group'], string> = {
-  'in-browser': 'in-browser',
-  localhost: 'localhost daemons',
-  byok: 'bring your own key (byok)',
-};
 
 export function SettingsModal({
   open,
@@ -217,26 +160,41 @@ export function SettingsModal({
       {tab === 'providers' && (
         <div className="p-4 space-y-4">
           <p className="text-[12.5px] text-mute leading-relaxed">
-            Each provider exposes models from a different runtime. WebLLM runs today;
-            localhost providers arrive in Phase 2. BYOK keys are stored in IndexedDB on
-            this device — nothing leaves until you send a request.
+            Each provider exposes models from a different runtime. WebLLM runs in this
+            browser; localhost daemons and BYOK endpoints run elsewhere. Keys and URLs
+            are stored in IndexedDB on this device — nothing leaves until you send a
+            request.
           </p>
-          {(['in-browser', 'localhost', 'byok'] as const).map((group) => (
-            <div key={group}>
-              <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
-                {GROUP_LABELS[group]}
-              </div>
-              <div className="space-y-1.5">
-                {PROVIDERS.filter((p) => p.group === group).map((p) =>
-                  p.id === 'openai-compat' ? (
-                    <OpenAICompatConfig key={p.id} />
-                  ) : (
-                    <ProviderRow key={p.id} provider={p} />
-                  ),
-                )}
-              </div>
+          <div>
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
+              in-browser
             </div>
-          ))}
+            <WebLLMRow />
+          </div>
+          <div>
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
+              localhost daemons
+            </div>
+            <div className="space-y-1.5">
+              {getHttpProviders()
+                .filter((p) => !p.spec.usesKey)
+                .map((p) => (
+                  <ProviderConfig key={p.id} provider={p} />
+                ))}
+            </div>
+          </div>
+          <div>
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
+              bring your own key (byok)
+            </div>
+            <div className="space-y-1.5">
+              {getHttpProviders()
+                .filter((p) => p.spec.usesKey)
+                .map((p) => (
+                  <ProviderConfig key={p.id} provider={p} />
+                ))}
+            </div>
+          </div>
         </div>
       )}
 

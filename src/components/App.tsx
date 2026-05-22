@@ -7,8 +7,7 @@ import type {
   ModelParams,
   ChatProvider,
 } from '../providers/types';
-import { WebLLMProvider } from '../providers/webllm/index';
-import { openaiCompatProvider, OPENAI_COMPAT_ID } from '../providers/openai-compat/index';
+import { getProvider, getWebLLMProvider, getHttpProviders } from '../providers/registry';
 import { useSystem } from '../hooks/useSystem';
 import { useThreads } from '../hooks/useThreads';
 import { useChat } from '../hooks/useChat';
@@ -27,7 +26,7 @@ import { ModelPicker } from './providers/ModelPicker';
 import { SettingsModal } from './settings/SettingsModal';
 import { ThreadParams } from './providers/ThreadParams';
 
-const webllmProvider = new WebLLMProvider();
+const webllmProvider = getWebLLMProvider();
 
 type ModalId = 'picker' | 'settings' | 'params' | null;
 
@@ -68,7 +67,7 @@ export default function App() {
 
   useEffect(() => {
     webllmProvider.listModels().then(setModels);
-    openaiCompatProvider.loadConfig();
+    getHttpProviders().forEach((p) => p.loadConfig());
     seedBuiltInTemplates()
       .then(() => listTemplates())
       .then(setTemplates);
@@ -96,10 +95,12 @@ export default function App() {
   const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
 
   // A thread is bound to a provider via thread.providerId. WebLLM needs a model
-  // loaded into its engine; an API thread is ready as soon as it has a modelId.
-  const activeProviderId = activeThread?.providerId || webllmProvider.id;
-  const isApiThread = activeProviderId === OPENAI_COMPAT_ID;
-  const activeProvider: ChatProvider = isApiThread ? openaiCompatProvider : webllmProvider;
+  // loaded into its engine; an HTTP provider is ready as soon as it has a
+  // modelId — so the lifecycle branch is a provider capability, not an id check.
+  const activeProvider: ChatProvider =
+    getProvider(activeThread?.providerId ?? '') ?? webllmProvider;
+  const activeProviderId = activeProvider.id;
+  const isApiThread = !activeProvider.needsModelLoad;
   const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
 
   const { messages, generating, send, regenerate, stop } = useChat(
@@ -196,9 +197,11 @@ export default function App() {
       setPage('chat');
       return;
     }
-    await createThread(webllmProvider.id, loadedModelId ?? '');
+    // Carry the current provider + model into the new thread so "new chat"
+    // continues with whatever the user was just using.
+    await createThread(activeProviderId, activeModelId);
     setPage('chat');
-  }, [createThread, loadedModelId, activeThreadId, messages.length]);
+  }, [createThread, activeProviderId, activeModelId, activeThreadId, messages.length]);
 
   // Cmd/Ctrl + Shift + O — new chat.
   useEffect(() => {
@@ -232,12 +235,12 @@ export default function App() {
     [modelReady, isApiThread, lastModelId, engineStatus, models, send, handleLoad],
   );
 
-  // Selecting a model from an API provider binds the active thread to it —
-  // no download step, so the thread is immediately ready to chat.
+  // Selecting a model from an HTTP provider binds the active thread to that
+  // provider — no download step, so the thread is immediately ready to chat.
   const handleSelectApiModel = useCallback(
-    (modelId: string) => {
+    (providerId: string, modelId: string) => {
       if (activeThreadId) {
-        updateThread(activeThreadId, { providerId: OPENAI_COMPAT_ID, modelId });
+        updateThread(activeThreadId, { providerId, modelId });
       }
       setModal(null);
     },

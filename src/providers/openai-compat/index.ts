@@ -9,8 +9,21 @@ import { ProviderError } from '../../lib/errors';
 import { getKey, setKey, deleteKey } from '../../data/keys';
 import { getSetting, setSetting } from '../../data/settings';
 
-export const OPENAI_COMPAT_ID = 'openai-compat';
-const BASE_URL_SETTING = 'openaiCompatBaseURL';
+// Describes one OpenAI-compatible HTTP endpoint. The same provider class is
+// instantiated once per spec — BYOK cloud, Ollama, LM Studio all speak the
+// same wire protocol and differ only in defaults and guidance.
+export interface HttpProviderSpec {
+  id: string;
+  displayName: string;
+  defaultBaseURL: string;
+  usesKey: boolean;
+  // True when requests leave this device (cloud BYOK); false for localhost
+  // daemons where inference stays local.
+  offDevice: boolean;
+  description: string;
+  // Shown to the user when the endpoint needs CORS configured to be reachable.
+  corsNote?: string;
+}
 
 interface OpenAITextPart {
   type: 'text';
@@ -63,39 +76,58 @@ function parseFamily(modelId: string): string {
 
 // Trailing slash removed so endpoints can be joined directly. The user is
 // expected to supply the API root including the version segment, e.g.
-// https://api.groq.com/openai/v1 or https://openrouter.ai/api/v1.
+// https://api.groq.com/openai/v1 or http://localhost:11434/v1.
 function normalizeBaseURL(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
 export class OpenAICompatibleProvider implements ChatProvider {
-  readonly id = OPENAI_COMPAT_ID;
-  readonly displayName = 'OpenAI-compatible API';
-  readonly authMode = 'byok-local' as const;
+  readonly id: string;
+  readonly displayName: string;
+  readonly authMode: 'none' | 'byok-local';
+  readonly needsModelLoad = false;
   readonly capabilities = {
     streaming: true,
     toolCalls: false,
     vision: false,
   };
+  readonly spec: HttpProviderSpec;
 
-  private baseURL = '';
+  private baseURL: string;
   private apiKey = '';
+
+  constructor(spec: HttpProviderSpec) {
+    this.spec = spec;
+    this.id = spec.id;
+    this.displayName = spec.displayName;
+    this.authMode = spec.usesKey ? 'byok-local' : 'none';
+    this.baseURL = spec.defaultBaseURL;
+  }
+
+  private get baseURLSettingKey(): string {
+    return `provider:${this.id}:baseURL`;
+  }
 
   /** Loads persisted base URL + key from IndexedDB. Call once on startup. */
   async loadConfig(): Promise<void> {
-    this.baseURL = (await getSetting<string>(BASE_URL_SETTING)) ?? '';
-    this.apiKey = (await getKey(OPENAI_COMPAT_ID)) ?? '';
+    const savedURL = await getSetting<string>(this.baseURLSettingKey);
+    this.baseURL = savedURL ?? this.spec.defaultBaseURL;
+    if (this.spec.usesKey) {
+      this.apiKey = (await getKey(this.id)) ?? '';
+    }
   }
 
   /** Persists base URL + key. Key goes to the keys store, never logged. */
   async configure(baseURL: string, apiKey: string): Promise<void> {
     this.baseURL = normalizeBaseURL(baseURL);
-    this.apiKey = apiKey.trim();
-    await setSetting(BASE_URL_SETTING, this.baseURL);
-    if (this.apiKey) {
-      await setKey(OPENAI_COMPAT_ID, this.apiKey);
-    } else {
-      await deleteKey(OPENAI_COMPAT_ID);
+    await setSetting(this.baseURLSettingKey, this.baseURL);
+    if (this.spec.usesKey) {
+      this.apiKey = apiKey.trim();
+      if (this.apiKey) {
+        await setKey(this.id, this.apiKey);
+      } else {
+        await deleteKey(this.id);
+      }
     }
   }
 
@@ -107,6 +139,13 @@ export class OpenAICompatibleProvider implements ChatProvider {
     return this.baseURL.length > 0;
   }
 
+  // A failed browser fetch cannot distinguish "offline" from "CORS-blocked" —
+  // the browser hides the reason — so the message names both possibilities.
+  private unreachableMessage(): string {
+    const base = `Could not reach ${this.baseURL} — the server may be offline or blocking browser requests.`;
+    return this.spec.corsNote ? `${base} ${this.spec.corsNote}` : base;
+  }
+
   async listModels(): Promise<ModelInfo[]> {
     if (!this.baseURL) return [];
     let res: Response;
@@ -115,16 +154,12 @@ export class OpenAICompatibleProvider implements ChatProvider {
         headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
       });
     } catch (err) {
-      throw new ProviderError(
-        OPENAI_COMPAT_ID,
-        `Could not reach ${this.baseURL} — check the base URL and that the endpoint allows browser requests (CORS).`,
-        err,
-      );
+      throw new ProviderError(this.id, this.unreachableMessage(), err);
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       throw new ProviderError(
-        OPENAI_COMPAT_ID,
+        this.id,
         `HTTP ${res.status} from /models${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
       );
     }
@@ -145,7 +180,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
 
   async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
     if (!this.baseURL) {
-      throw new ProviderError(OPENAI_COMPAT_ID, 'No base URL configured');
+      throw new ProviderError(this.id, 'No base URL configured');
     }
 
     const messages = params.messages.map((m) => toOpenAIMessage(m.role, m.content));
@@ -173,17 +208,13 @@ export class OpenAICompatibleProvider implements ChatProvider {
       });
     } catch (err) {
       if (params.signal?.aborted) return;
-      throw new ProviderError(
-        OPENAI_COMPAT_ID,
-        `Request to ${this.baseURL} failed — check the URL and CORS support.`,
-        err,
-      );
+      throw new ProviderError(this.id, this.unreachableMessage(), err);
     }
 
     if (!res.ok || !res.body) {
       const detail = await res.text().catch(() => '');
       throw new ProviderError(
-        OPENAI_COMPAT_ID,
+        this.id,
         `HTTP ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
       );
     }
@@ -237,5 +268,3 @@ export class OpenAICompatibleProvider implements ChatProvider {
     }
   }
 }
-
-export const openaiCompatProvider = new OpenAICompatibleProvider();

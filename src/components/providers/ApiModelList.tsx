@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { ModelInfo } from '../../providers/types';
-import { openaiCompatProvider } from '../../providers/openai-compat/index';
+import type { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
 import { Search, Check } from 'lucide-react';
 
 type LoadState =
@@ -10,9 +10,11 @@ type LoadState =
   | { kind: 'error'; msg: string };
 
 export function ApiModelList({
+  provider,
   apiModelId,
   onSelect,
 }: {
+  provider: OpenAICompatibleProvider;
   apiModelId: string | null;
   onSelect: (modelId: string) => void;
 }) {
@@ -20,13 +22,13 @@ export function ApiModelList({
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    if (!openaiCompatProvider.isConfigured()) {
+    if (!provider.isConfigured()) {
       setState({ kind: 'unconfigured' });
       return;
     }
     let cancelled = false;
     setState({ kind: 'loading' });
-    openaiCompatProvider
+    provider
       .listModels()
       .then((models) => {
         if (!cancelled) setState({ kind: 'loaded', models });
@@ -39,7 +41,7 @@ export function ApiModelList({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [provider]);
 
   const groups = useMemo(() => {
     if (state.kind !== 'loaded') return [];
