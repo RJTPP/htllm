@@ -5,6 +5,9 @@ import microsoftColor from '@lobehub/icons-static-svg/icons/microsoft-color.svg?
 import mistralColor from '@lobehub/icons-static-svg/icons/mistral-color.svg?raw';
 import huggingfaceColor from '@lobehub/icons-static-svg/icons/huggingface-color.svg?raw';
 import deepseekColor from '@lobehub/icons-static-svg/icons/deepseek-color.svg?raw';
+import ai2Color from '@lobehub/icons-static-svg/icons/ai2-color.svg?raw';
+import togetherColor from '@lobehub/icons-static-svg/icons/together-color.svg?raw';
+import stabilityColor from '@lobehub/icons-static-svg/icons/stability-color.svg?raw';
 
 /**
  * Brand key → official lobehub color-logo SVG markup.
@@ -21,6 +24,9 @@ const BRAND_SVG: Record<string, string> = {
   mistral: mistralColor,
   hf: huggingfaceColor,
   deepseek: deepseekColor,
+  ai2: ai2Color, // OLMo
+  together: togetherColor, // RedPajama
+  stability: stabilityColor, // StableLM
 };
 
 export function BrandLogo({ brand, size = 18 }: { brand: string | null; size?: number }) {
