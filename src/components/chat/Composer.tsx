@@ -67,7 +67,6 @@ export function Composer({
   onSend,
   onStop,
   onParams,
-  onOpenPicker,
 }: {
   modelReady: boolean;
   model: string | null;
@@ -79,7 +78,6 @@ export function Composer({
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onParams: () => void;
-  onOpenPicker: () => void;
 }) {
   const [input, setInput] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
@@ -100,10 +98,6 @@ export function Composer({
 
   const send = () => {
     if (!input.trim() || generating) return;
-    if (!modelReady) {
-      onOpenPicker();
-      return;
-    }
     onSend(input.trim(), images.length > 0 ? images : undefined);
     setInput('');
     setImages([]);

@@ -58,6 +58,7 @@ export default function App() {
     timeElapsed: 0,
   });
   const [loadedModelId, setLoadedModelId] = useState<string | null>(null);
+  const [lastModelId, setLastModelId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [page, setPage] = useState<NavPage>('chat');
   const [modal, setModal] = useState<ModalId>(null);
@@ -70,6 +71,9 @@ export default function App() {
       .then(setTemplates);
     getSetting<string>('defaultSystemPrompt').then((v) => {
       if (v != null) setDefaultSystemPromptState(v);
+    });
+    getSetting<string>('lastModelId').then((v) => {
+      if (v != null) setLastModelId(v);
     });
   }, []);
 
@@ -101,6 +105,7 @@ export default function App() {
 
   // Ensure there is always an active thread to type into — created on first
   // run (and after the last thread is deleted), independent of model state.
+  const pendingRef = useRef<{ text: string; images?: import('../lib/image').ChatImage[] } | null>(null);
   const autoThreadRef = useRef(false);
   useEffect(() => {
     if (threadsLoaded && activeThreadId === null && !autoThreadRef.current) {
@@ -127,6 +132,14 @@ export default function App() {
           prev.map((m) => (m.id === modelId ? { ...m, cached: true } : m)),
         );
         setModal(null);
+        setLastModelId(modelId);
+        await setSetting('lastModelId', modelId);
+
+        const pending = pendingRef.current;
+        if (pending) {
+          pendingRef.current = null;
+          send(pending.text, pending.images);
+        }
       } catch (err) {
         setEngineStatus('error');
         setLoadProgress({
@@ -176,6 +189,25 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleCreateThread]);
 
+  const handleSend = useCallback(
+    (text: string, images?: import('../lib/image').ChatImage[]) => {
+      if (modelReady) {
+        send(text, images);
+        return;
+      }
+      if (lastModelId && engineStatus === 'idle') {
+        const cached = models.find((m) => m.id === lastModelId)?.cached;
+        if (cached) {
+          pendingRef.current = { text, images };
+          handleLoad(lastModelId);
+          return;
+        }
+      }
+      setModal('picker');
+    },
+    [modelReady, lastModelId, engineStatus, models, send, handleLoad],
+  );
+
   const handleChangeSystemPrompt = useCallback(
     (value: string) => {
       if (activeThreadId) updateThread(activeThreadId, { systemPrompt: value });
@@ -203,7 +235,7 @@ export default function App() {
           {system && <SystemStats system={system} compact />}
           <div className="ml-auto">
             <ModelSlot
-              model={loadedModelId}
+              model={loadedModelId ?? lastModelId}
               models={models}
               state={engineStatus}
               progress={loadProgress}
@@ -236,7 +268,7 @@ export default function App() {
                   templates={templates}
                   defaultSystemPrompt={defaultSystemPrompt}
                   params={params}
-                  onSend={send}
+                  onSend={handleSend}
                   onStop={stop}
                   onRegenerate={regenerate}
                   onOpenPicker={() => setModal('picker')}
