@@ -1,4 +1,9 @@
-import { WebWorkerMLCEngine, deleteModelAllInfoInCache } from '@mlc-ai/web-llm';
+import {
+  WebWorkerMLCEngine,
+  deleteModelAllInfoInCache,
+  type ChatCompletionMessageParam,
+  type ChatCompletionContentPart,
+} from '@mlc-ai/web-llm';
 import type {
   ChatProvider,
   ChatParams,
@@ -11,14 +16,18 @@ import type {
 import { ProviderError } from '../../lib/errors';
 import { getModelList } from './model-list';
 
-function contentToOpenAI(
+function toOpenAIMessage(
+  role: 'user' | 'assistant' | 'system',
   content: string | ContentPart[],
-): string | Array<{ type: string; text?: string; image_url?: { url: string } }> {
-  if (typeof content === 'string') return content;
-  return content.map((part) => {
-    if (part.type === 'text') return { type: 'text' as const, text: part.text };
-    return { type: 'image_url' as const, image_url: { url: part.image_url.url } };
+): ChatCompletionMessageParam {
+  if (typeof content === 'string') {
+    return { role, content } as ChatCompletionMessageParam;
+  }
+  const parts: ChatCompletionContentPart[] = content.map((part) => {
+    if (part.type === 'text') return { type: 'text', text: part.text };
+    return { type: 'image_url', image_url: { url: part.image_url.url } };
   });
+  return { role: 'user', content: parts } as ChatCompletionMessageParam;
 }
 
 export class WebLLMProvider implements ChatProvider {
@@ -94,10 +103,9 @@ export class WebLLMProvider implements ChatProvider {
       throw new ProviderError('webllm', 'Engine not ready');
     }
 
-    const openaiMessages = params.messages.map((m) => ({
-      role: m.role as 'user' | 'assistant' | 'system',
-      content: contentToOpenAI(m.content),
-    }));
+    const openaiMessages = params.messages.map((m) =>
+      toOpenAIMessage(m.role, m.content),
+    );
 
     const stream = await this.engine.chat.completions.create({
       messages: openaiMessages,
