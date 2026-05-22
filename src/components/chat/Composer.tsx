@@ -237,41 +237,55 @@ export function Composer({
             <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
           )}
           <div className="flex items-center gap-3">
-            {reasoningCapability && (
-              <div className="flex items-center gap-1">
-                <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />
-                {reasoningCapability === 'toggle' ? (
-                  <button
-                    onClick={() => onReasoningChange(reasoningEffort === 'off' ? 'high' : 'off')}
-                    className={`px-1.5 py-0.5 border transition-colors ${
-                      reasoningEffort !== 'off'
-                        ? 'border-accent/60 text-accent bg-accent/10'
-                        : 'border-line text-mute/60 hover:text-mute'
-                    }`}
-                  >
-                    think {reasoningEffort !== 'off' ? 'on' : 'off'}
-                  </button>
-                ) : (
-                  <div className="flex">
-                    {(['off', 'low', 'medium', 'high'] as const).map((level) => (
-                      <button
-                        key={level}
-                        onClick={() => onReasoningChange(level)}
-                        className={`px-1.5 py-0.5 border-y border-r first:border-l first:border-l transition-colors ${
-                          reasoningEffort === level
-                            ? level === 'off'
-                              ? 'border-line text-mute bg-surface'
-                              : 'border-accent/60 text-accent bg-accent/10'
-                            : 'border-line text-mute/50 hover:text-mute'
-                        }`}
-                      >
-                        {level === 'medium' ? 'med' : level}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-1" title={
+              reasoningCapability
+                ? reasoningCapability === 'toggle'
+                  ? 'This model supports thinking on/off'
+                  : 'This model supports reasoning effort levels'
+                : 'Reasoning control — may not apply to this model'
+            }>
+              <Brain size={11} className={
+                reasoningEffort !== 'off'
+                  ? reasoningCapability ? 'text-accent' : 'text-accent/50'
+                  : 'text-mute/40'
+              } />
+              {reasoningCapability === 'toggle' ? (
+                // Detected toggle model — compact on/off
+                <button
+                  onClick={() => onReasoningChange(reasoningEffort === 'off' ? 'high' : 'off')}
+                  className={`px-1.5 py-0.5 border transition-colors ${
+                    reasoningEffort !== 'off'
+                      ? 'border-accent/60 text-accent bg-accent/10'
+                      : 'border-line text-mute/60 hover:text-mute'
+                  }`}
+                >
+                  think {reasoningEffort !== 'off' ? 'on' : 'off'}
+                </button>
+              ) : (
+                // Effort model or undetected — show full selector
+                <div className="flex">
+                  {(['off', 'low', 'medium', 'high'] as const).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => onReasoningChange(level)}
+                      className={`px-1.5 py-0.5 border-y border-r first:border-l transition-colors ${
+                        reasoningEffort === level
+                          ? level === 'off'
+                            ? 'border-line text-mute bg-surface'
+                            : reasoningCapability
+                              ? 'border-accent/60 text-accent bg-accent/10'
+                              : 'border-accent/40 text-accent/60 bg-accent/5'
+                          : reasoningCapability
+                            ? 'border-line text-mute/50 hover:text-mute'
+                            : 'border-line/60 text-mute/30 hover:text-mute/50'
+                      }`}
+                    >
+                      {level === 'medium' ? 'med' : level}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               onClick={onParams}
               disabled={!modelReady}
