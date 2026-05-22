@@ -1,0 +1,1279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>htllm — UI Prototype v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          bg: '#0a0a0a',
+          surface: '#141414',
+          surface2: '#1f1f1f',
+          line: '#262626',
+          lineHi: '#404040',
+          text: '#e5e5e5',
+          mute: '#737373',
+          accent: '#f59e0b',
+          ok: '#22c55e',
+          warn: '#eab308',
+          err: '#ef4444',
+        },
+        fontFamily: {
+          mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          sans: ['Geist', '-apple-system', 'system-ui', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<script src="https://unpkg.com/@babel/standalone@7.24.4/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0a0a; color: #e5e5e5; }
+  body { font-family: 'Geist', system-ui, -apple-system, sans-serif; font-feature-settings: 'cv11', 'ss01'; min-height: 100vh; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #404040; }
+  @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .pulse-dot { animation: pulseDot 1.4s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  .blink { animation: blink 1s step-end infinite; }
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .stripe {
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 7px, rgba(245,158,11,0.08) 7px, rgba(245,158,11,0.08) 14px);
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client"
+  }
+}
+</script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-type="module" data-presets="react">
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { createRoot } from "react-dom/client";
+
+/* ========================================================================
+   htllm — UI Prototype v2
+   Standalone design prototype. Mock data only — no WebGPU, no inference,
+   no persistence. Purpose: refine the full-app UI before implementation.
+   ===================================================================== */
+
+/* ============ mock data ============ */
+
+const MOCK_SYSTEM = {
+  webgpu: true,
+  deviceMemoryGB: 8,
+  cores: 14,
+  gpu: { maxBufferSize: 4 * 1024 ** 3 },
+  storage: { free: 18.4 * 1024 ** 3 },
+  connection: { effectiveType: "4g", downlink: 24 },
+};
+
+const MOCK_MODELS = [
+  { id: "SmolLM2-135M-Instruct-q0f16-MLC", family: "SmolLM 2", vram: 360, quant: "q0", cached: true },
+  { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", family: "SmolLM 2", vram: 376, quant: "q4", cached: false },
+  { id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", family: "Qwen 2.5", vram: 945, quant: "q4", cached: true },
+  { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", family: "Qwen 2.5", vram: 1629, quant: "q4", cached: false },
+  { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", family: "Llama 3.2", vram: 1128, quant: "q4", cached: false },
+  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", family: "Llama 3.2", vram: 2952, quant: "q4", cached: false },
+  { id: "Phi-3.5-mini-instruct-q4f16_1-MLC", family: "Phi 3.5", vram: 3672, quant: "q4", cached: false },
+  { id: "gemma-2-2b-it-q4f16_1-MLC", family: "Gemma 2", vram: 1895, quant: "q4", cached: false },
+  { id: "Mistral-7B-Instruct-v0.3-q4f16_1-MLC", family: "Mistral", vram: 4573, quant: "q4", cached: false },
+  { id: "Llama-3.1-8B-Instruct-q4f16_1-MLC", family: "Llama 3.1", vram: 5295, quant: "q4", cached: false },
+];
+
+const MOCK_TEMPLATES = [
+  { id: "t1", title: "Explain", content: "Explain the following in simple terms:\n\n", isBuiltIn: true },
+  { id: "t2", title: "Summarize", content: "Summarize the following text concisely:\n\n", isBuiltIn: true },
+  { id: "t3", title: "Code Review", content: "Review the following code for bugs and improvements:\n\n```\n\n```", isBuiltIn: true },
+  { id: "t4", title: "Translate", content: "Translate the following text to English:\n\n", isBuiltIn: true },
+  { id: "t5", title: "Daily standup", content: "Draft a standup update from these notes:\n\n", isBuiltIn: false },
+];
+
+const MOCK_THREADS = [
+  { id: "th1", title: "Explain WebGPU vs WebGL", model: "Llama-3.2-1B-Instruct-q4f16_1-MLC", updatedAt: "10:42" },
+  { id: "th2", title: "Rust ownership questions", model: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", updatedAt: "Yesterday" },
+  { id: "th3", title: "Trip packing checklist", model: "SmolLM2-135M-Instruct-q0f16-MLC", updatedAt: "May 19" },
+];
+
+const MOCK_MESSAGES = {
+  th1: [
+    { role: "user", content: "What's the difference between WebGPU and WebGL?" },
+    {
+      role: "assistant",
+      content:
+        "WebGL is a graphics API focused on rendering 2D/3D scenes — it maps closely to OpenGL ES. WebGPU is a newer, lower-level API that exposes modern GPU features: it supports general-purpose compute shaders, not just rendering. That compute capability is what makes WebGPU usable for running LLM inference in the browser.",
+      usage: { prompt: 38, completion: 61, prefill: 412.6, decode: 74.3 },
+    },
+    { role: "user", content: "So WebGL can't do compute at all?" },
+    {
+      role: "assistant",
+      content:
+        "Not directly. WebGL has no compute shader stage. People sometimes fake compute by encoding data into textures and abusing fragment shaders, but it's slow and awkward. WebGPU's dedicated compute pipeline is far more efficient — and required for practical local inference.",
+      usage: { prompt: 112, completion: 52, prefill: 388.1, decode: 71.9 },
+    },
+  ],
+  th2: [
+    { role: "user", content: "Why does Rust move a value instead of copying it?" },
+    {
+      role: "assistant",
+      content:
+        "Rust moves by default so that exactly one owner is responsible for freeing a value. Copying every value would be expensive and ambiguous about ownership. Types that are cheap and safe to duplicate can opt into `Copy` instead.",
+      usage: { prompt: 41, completion: 44, prefill: 351.0, decode: 68.2 },
+    },
+  ],
+  th3: [],
+};
+
+/* ============ utils ============ */
+
+function fmtMB(mb) {
+  if (mb == null) return "—";
+  if (mb < 1024) return `${Math.round(mb)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+function fmtBytes(b) {
+  if (b == null) return "—";
+  const GB = 1024 ** 3;
+  if (b >= GB) return `${(b / GB).toFixed(1)} GB`;
+  return `${(b / 1024 ** 2).toFixed(0)} MB`;
+}
+function shortenId(id) {
+  return id.replace(/-MLC$/, "").replace(/-q\df\d+_\d+/, "");
+}
+function fitFor(vram, ramGB) {
+  const budget = (ramGB || 4) * 1024 * 0.7;
+  const fits = vram <= budget;
+  const tight = !fits && vram <= (ramGB || 4) * 1024;
+  return { fits, tight };
+}
+
+/* ============ atoms ============ */
+
+function Badge({ tone = "neutral", children, mono = true }) {
+  const tones = {
+    neutral: "border-line text-mute",
+    ok: "border-ok/40 text-ok bg-ok/5",
+    warn: "border-warn/40 text-warn bg-warn/5",
+    err: "border-err/40 text-err bg-err/5",
+    accent: "border-accent/40 text-accent bg-accent/5",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] border ${tones[tone]} ${mono ? "font-mono" : ""}`}>
+      {children}
+    </span>
+  );
+}
+
+function Dot({ tone = "mute" }) {
+  const colors = { mute: "bg-mute", ok: "bg-ok", warn: "bg-warn", err: "bg-err", accent: "bg-accent" };
+  return <span className={`w-1.5 h-1.5 rounded-full ${colors[tone]}`} />;
+}
+
+function Modal({ open, onClose, title, subtitle, children, width = "max-w-2xl" }) {
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className={`relative z-10 w-full ${width} max-h-[84vh] flex flex-col bg-bg border border-line`}>
+        <div className="flex items-start justify-between px-4 py-3 border-b border-line">
+          <div>
+            <h2 className="font-mono text-sm text-text">{title}</h2>
+            {subtitle && <div className="font-mono text-[11px] text-mute mt-0.5">{subtitle}</div>}
+          </div>
+          <button onClick={onClose} className="font-mono text-[11px] text-mute hover:text-text border border-line px-2 py-1">
+            esc
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto min-h-0">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ landing ============ */
+
+function Landing({ onEnter }) {
+  return (
+    <div className="min-h-screen grid-bg flex items-center justify-center px-6">
+      <div className="max-w-xl w-full">
+        <div className="font-mono text-3xl mb-3">
+          ht<span className="text-accent">[LLM]</span>
+        </div>
+        <p className="text-mute text-sm leading-relaxed mb-6">
+          Fully client-side WebGPU chat. Models run in your browser — no server, no
+          telemetry, nothing leaves your device. Bring your own models and keys.
+        </p>
+        <button
+          onClick={onEnter}
+          className="font-mono text-[13px] px-6 py-2.5 border border-accent/60 text-accent hover:bg-accent/10 transition-colors"
+        >
+          Open App →
+        </button>
+        <div className="mt-10 grid grid-cols-3 gap-3 font-mono text-[11px]">
+          {[
+            ["Private", "All threads and keys stay in IndexedDB on this device."],
+            ["Local", "Inference runs on your GPU via WebGPU + WebLLM."],
+            ["Open", "Provider-agnostic. Local models now, BYOK APIs next."],
+          ].map(([h, d]) => (
+            <div key={h} className="border border-line p-3 bg-surface/40">
+              <div className="text-accent mb-1">{h}</div>
+              <div className="text-mute leading-relaxed">{d}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 font-mono text-[10px] text-mute/70">
+          Chrome 113+ / Edge 113+ · WebGPU required
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ webgpu block ============ */
+
+function WebGPUBlock() {
+  return (
+    <div className="flex-1 grid-bg flex items-center justify-center p-6">
+      <div className="max-w-md border border-err/40 bg-err/5 p-6">
+        <div className="font-mono text-[10px] text-err uppercase tracking-widest mb-2">runtime unavailable</div>
+        <h2 className="text-lg font-medium mb-2">WebGPU is not available</h2>
+        <p className="text-sm text-mute leading-relaxed">
+          In-browser inference requires WebGPU. Use the latest Chrome or Edge on a
+          desktop with a discrete or integrated GPU. Firefox and Safari support is
+          still partial; mobile is unsupported.
+        </p>
+        <div className="mt-4 font-mono text-[11px] text-mute border-t border-line pt-3">
+          External providers (Ollama, Groq, OpenRouter — coming in Phase 2) will work
+          without WebGPU.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============ system rail ============ */
+
+function SystemRail({ system }) {
+  const ramTone = system.deviceMemoryGB >= 8 ? "ok" : system.deviceMemoryGB >= 4 ? "warn" : "err";
+  const storTone = system.storage.free > 2 * 1024 ** 3 ? "ok" : "warn";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge tone={system.webgpu ? "ok" : "err"}>
+        <Dot tone={system.webgpu ? "ok" : "err"} /> WebGPU {system.webgpu ? "ok" : "absent"}
+      </Badge>
+      <Badge tone={ramTone}>RAM ≥{system.deviceMemoryGB} GB</Badge>
+      <Badge tone="neutral">CPU {system.cores}c</Badge>
+      <Badge tone="neutral">buf {fmtBytes(system.gpu.maxBufferSize)}</Badge>
+      <Badge tone={storTone}>free {fmtBytes(system.storage.free)}</Badge>
+      <Badge tone="neutral">net {system.connection.effectiveType}</Badge>
+    </div>
+  );
+}
+
+/* ============ sidebar ============ */
+
+function Sidebar({ threads, activeId, onSelect, onNew, onDelete, model, engineState, onOpenPicker, onOpenSettings }) {
+  return (
+    <aside className="w-[264px] shrink-0 border-r border-line bg-surface flex flex-col">
+      <div className="px-3 py-3 border-b border-line flex items-center justify-between">
+        <div className="font-mono text-sm tracking-wide">
+          ht<span className="text-accent">[LLM]</span>
+        </div>
+        <button
+          onClick={onOpenSettings}
+          title="Settings"
+          className="font-mono text-[11px] text-mute hover:text-text border border-line px-1.5 py-0.5"
+        >
+          ⚙
+        </button>
+      </div>
+
+      <div className="px-3 py-2.5">
+        <button
+          onClick={onNew}
+          className="w-full font-mono text-[11px] px-2.5 py-2 border border-line text-text bg-bg hover:border-accent/50 hover:text-accent transition-colors"
+        >
+          + new chat
+        </button>
+      </div>
+
+      <div className="px-3 pb-1 font-mono text-[10px] text-mute uppercase tracking-widest">
+        threads · {threads.length}
+      </div>
+      <div className="flex-1 overflow-y-auto px-1.5 py-1 space-y-0.5">
+        {threads.map((t) => (
+          <div
+            key={t.id}
+            onClick={() => onSelect(t.id)}
+            className={`group px-2.5 py-2 cursor-pointer border-l-2 transition-colors ${
+              t.id === activeId ? "border-accent bg-accent/5" : "border-transparent hover:bg-surface2"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className={`text-[12.5px] truncate ${t.id === activeId ? "text-text" : "text-text/90"}`}>
+                  {t.title}
+                </div>
+                <div className="font-mono text-[10px] text-mute mt-0.5 truncate">
+                  {shortenId(t.model)} · {t.updatedAt}
+                </div>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
+                className="opacity-0 group-hover:opacity-100 font-mono text-[11px] text-mute hover:text-err px-1 shrink-0"
+                title="Delete thread"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        ))}
+        {threads.length === 0 && (
+          <div className="px-2.5 py-6 font-mono text-[11px] text-mute text-center">No threads yet</div>
+        )}
+      </div>
+
+      <button
+        onClick={onOpenPicker}
+        className="border-t border-line px-3 py-2.5 text-left hover:bg-surface2 transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <div className="font-mono text-[10px] text-mute uppercase tracking-widest">model</div>
+          <span className="font-mono text-[10px] text-mute">change ↗</span>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <Dot tone={engineState === "ready" ? "ok" : engineState === "loading" ? "accent" : "mute"} />
+          <div className="font-mono text-[12px] text-text truncate">
+            {model ? shortenId(model) : "no model loaded"}
+          </div>
+        </div>
+      </button>
+    </aside>
+  );
+}
+
+/* ============ chat ============ */
+
+function EmptyState({ onOpenPicker, modelReady, model }) {
+  return (
+    <div className="max-w-2xl mx-auto py-12 px-6">
+      <div className="border border-line bg-surface">
+        <div className="px-6 py-5 border-b border-line">
+          <div className="font-mono text-[10px] text-accent uppercase tracking-widest mb-2">readme</div>
+          <h2 className="text-lg font-medium">Local-only chat. No server.</h2>
+          <p className="text-sm text-mute leading-relaxed mt-2">
+            Models run entirely in your browser via WebGPU. Weights download once and
+            are cached — then never leave your device.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 divide-x divide-line font-mono text-[11px]">
+          {[
+            ["1 · pick", "Open the model picker and choose by size."],
+            ["2 · load", "First load downloads weights to cache."],
+            ["3 · chat", "Generation happens on your GPU."],
+          ].map(([h, d]) => (
+            <div key={h} className="px-4 py-3">
+              <div className="text-accent mb-1">{h}</div>
+              <div className="text-mute leading-relaxed">{d}</div>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-4 border-t border-line">
+          {modelReady ? (
+            <div className="font-mono text-[11px] text-ok">✓ {shortenId(model)} loaded — type below to begin.</div>
+          ) : (
+            <button
+              onClick={onOpenPicker}
+              className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10"
+            >
+              choose a model →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageView({ message, model, streaming }) {
+  const isUser = message.role === "user";
+  return (
+    <div className="space-y-1.5">
+      <div className="font-mono text-[10px] uppercase tracking-widest text-mute">
+        {isUser ? "you" : shortenId(model || "model")}
+      </div>
+      <div className={`${isUser ? "text-text" : "text-text font-mono text-[13.5px] leading-relaxed"} whitespace-pre-wrap break-words`}>
+        {message.content}
+        {streaming && <span className="inline-block w-1.5 h-3.5 bg-accent ml-0.5 align-middle blink" />}
+      </div>
+      {message.images && (
+        <div className="flex gap-2 pt-1">
+          {message.images.map((_, i) => (
+            <div key={i} className="w-16 h-16 border border-line bg-surface2 flex items-center justify-center font-mono text-[9px] text-mute">
+              img
+            </div>
+          ))}
+        </div>
+      )}
+      {!streaming && message.usage && (
+        <div className="font-mono text-[10px] text-mute flex flex-wrap gap-x-3 gap-y-0.5 pt-0.5">
+          <span>{message.usage.prompt} prompt</span>
+          <span>{message.usage.completion} completion</span>
+          <span className="text-mute/70">prefill {message.usage.prefill} tok/s</span>
+          <span className="text-mute/70">decode {message.usage.decode} tok/s</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PromptHints({ query, templates, onPick }) {
+  const matches = templates.filter((t) => t.title.toLowerCase().includes(query.toLowerCase()));
+  if (matches.length === 0) return null;
+  return (
+    <div className="absolute bottom-full left-0 right-0 mb-1.5 border border-line bg-surface max-h-52 overflow-y-auto">
+      <div className="px-3 py-1.5 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest">
+        prompt templates
+      </div>
+      {matches.map((t, i) => (
+        <button
+          key={t.id}
+          onClick={() => onPick(t)}
+          className={`w-full text-left px-3 py-2 flex items-center justify-between ${
+            i === 0 ? "bg-accent/5" : "hover:bg-surface2"
+          }`}
+        >
+          <div className="min-w-0">
+            <div className="font-mono text-[12px] text-text">/{t.title}</div>
+            <div className="font-mono text-[10px] text-mute truncate">{t.content.replace(/\n/g, " ").trim()}</div>
+          </div>
+          {t.isBuiltIn && <span className="font-mono text-[9px] text-mute shrink-0 ml-2">built-in</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Composer({ modelReady, model, generating, templates, onSend, onStop, onParams }) {
+  const [input, setInput] = useState("");
+  const [images, setImages] = useState(0);
+  const taRef = useRef(null);
+
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 180) + "px";
+  }, [input]);
+
+  const hintQuery = input.startsWith("/") && input.length < 40 && !input.includes("\n") ? input.slice(1) : null;
+
+  const send = () => {
+    if (!input.trim() || !modelReady || generating) return;
+    onSend(input.trim(), images);
+    setInput("");
+    setImages(0);
+  };
+
+  return (
+    <div className="border-t border-line bg-bg">
+      <div className="max-w-3xl mx-auto px-6 py-3">
+        {images > 0 && (
+          <div className="flex gap-2 mb-2">
+            {Array.from({ length: images }).map((_, i) => (
+              <div key={i} className="relative group">
+                <div className="w-16 h-16 border border-line bg-surface2 flex items-center justify-center font-mono text-[9px] text-mute">
+                  img {i + 1}
+                </div>
+                <button
+                  onClick={() => setImages((n) => n - 1)}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-err text-bg text-[10px] leading-none flex items-center justify-center"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="relative">
+          {hintQuery !== null && (
+            <PromptHints
+              query={hintQuery}
+              templates={templates}
+              onPick={(t) => setInput(t.content)}
+            />
+          )}
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={taRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && hintQuery === null) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              rows={1}
+              disabled={!modelReady}
+              placeholder={
+                modelReady
+                  ? "Type a message — / for templates, Enter to send"
+                  : "Load a model to begin"
+              }
+              className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute disabled:opacity-40"
+              style={{ maxHeight: "180px" }}
+            />
+            {modelReady && (
+              <button
+                onClick={() => setImages((n) => Math.min(n + 1, 3))}
+                disabled={images >= 3}
+                title="Attach image (vision models)"
+                className="font-mono text-[12px] px-3 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30"
+              >
+                img
+              </button>
+            )}
+            {generating ? (
+              <button
+                onClick={onStop}
+                className="font-mono text-[12px] px-3 py-2 border border-err/60 text-err hover:bg-err/10"
+              >
+                stop
+              </button>
+            ) : (
+              <button
+                onClick={send}
+                disabled={!modelReady || !input.trim()}
+                className="font-mono text-[12px] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
+              >
+                send →
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
+          <span>{modelReady ? `model · ${shortenId(model)}` : "no model loaded"}</span>
+          <button onClick={onParams} className="hover:text-text" disabled={!modelReady}>
+            thread parameters →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatPanel({ messages, model, modelReady, generating, templates, onSend, onStop, onOpenPicker, onParams }) {
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages]);
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto grid-bg">
+        {messages.length === 0 ? (
+          <EmptyState onOpenPicker={onOpenPicker} modelReady={modelReady} model={model} />
+        ) : (
+          <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
+            {messages.map((m, i) => (
+              <MessageView
+                key={i}
+                message={m}
+                model={model}
+                streaming={generating && i === messages.length - 1 && m.role === "assistant"}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <Composer
+        modelReady={modelReady}
+        model={model}
+        generating={generating}
+        templates={templates}
+        onSend={onSend}
+        onStop={onStop}
+        onParams={onParams}
+      />
+    </div>
+  );
+}
+
+/* ============ model picker ============ */
+
+function ParamSlider({ label, value, min, max, step, onChange }) {
+  return (
+    <div className="flex items-center gap-3">
+      <label className="font-mono text-[11px] text-mute w-28 shrink-0">{label}</label>
+      <input
+        type="range" min={min} max={max} step={step} value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="flex-1 h-1 accent-accent"
+      />
+      <span className="font-mono text-[11px] text-text w-12 text-right">
+        {step < 1 ? value.toFixed(2) : value}
+      </span>
+    </div>
+  );
+}
+
+function ParamControls({ params, setParams }) {
+  const set = (k) => (v) => setParams((p) => ({ ...p, [k]: v }));
+  return (
+    <div className="space-y-2.5">
+      <ParamSlider label="temperature" value={params.temperature} min={0} max={2} step={0.05} onChange={set("temperature")} />
+      <ParamSlider label="top_p" value={params.topP} min={0} max={1} step={0.05} onChange={set("topP")} />
+      <ParamSlider label="max_tokens" value={params.maxTokens} min={64} max={16384} step={64} onChange={set("maxTokens")} />
+      <ParamSlider label="presence_pen" value={params.presencePenalty} min={-2} max={2} step={0.1} onChange={set("presencePenalty")} />
+      <ParamSlider label="frequency_pen" value={params.frequencyPenalty} min={-2} max={2} step={0.1} onChange={set("frequencyPenalty")} />
+    </div>
+  );
+}
+
+function ModelCard({ model, system, selected, loaded, recommended, onSelect, onLoad, onUnload, onEvict, engineState }) {
+  const { fits, tight } = fitFor(model.vram, system.deviceMemoryGB);
+  return (
+    <div
+      className={`border transition-colors ${
+        selected ? "border-accent/70 bg-accent/5" : "border-line bg-surface hover:border-lineHi"
+      }`}
+    >
+      <button onClick={() => onSelect(model.id)} className="block w-full text-left px-3 py-2.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <div className="font-mono text-[13px] text-text truncate">{shortenId(model.id)}</div>
+          <div className="font-mono text-[11px] text-mute shrink-0">{fmtMB(model.vram)}</div>
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[10px] text-mute uppercase tracking-wider">{model.quant}</span>
+          {recommended && !loaded && <Badge tone="accent">recommended</Badge>}
+          {loaded && (
+            <Badge tone="accent">
+              <span className="pulse-dot inline-block w-1.5 h-1.5 bg-accent rounded-full" />loaded
+            </Badge>
+          )}
+          {model.cached && !loaded && <Badge tone="ok">cached</Badge>}
+          {!fits && !tight && !loaded && <Badge tone="err">too large</Badge>}
+          {tight && !loaded && <Badge tone="warn">tight fit</Badge>}
+        </div>
+      </button>
+      {selected && (
+        <div className="border-t border-line px-3 py-2 flex items-center gap-2 bg-bg/40">
+          {!loaded ? (
+            <button
+              onClick={() => onLoad(model.id)}
+              disabled={engineState === "loading"}
+              className="font-mono text-[11px] px-2.5 py-1 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-40"
+            >
+              {engineState === "loading" ? "loading…" : model.cached ? "load (cached)" : "download & load"}
+            </button>
+          ) : (
+            <button
+              onClick={onUnload}
+              className="font-mono text-[11px] px-2.5 py-1 border border-line text-mute hover:text-text hover:bg-surface2"
+            >
+              unload
+            </button>
+          )}
+          {model.cached && (
+            <button
+              onClick={() => onEvict(model.id)}
+              className="font-mono text-[11px] px-2.5 py-1 border border-line text-mute hover:text-err hover:border-err/40"
+            >
+              evict
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusPanel({ engineState, progress }) {
+  if (engineState === "idle") return null;
+  const isLoading = engineState === "loading";
+  const isError = engineState === "error";
+  const pct = Math.round(progress.value * 100);
+  return (
+    <div className={`border-l-2 ${isError ? "border-err" : isLoading ? "border-accent" : "border-ok"} bg-surface px-3 py-2.5`}>
+      <div className="flex items-center justify-between mb-1">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-mute">
+          {isLoading ? "loading" : isError ? "error" : "ready"}
+        </div>
+        {isLoading && <div className="font-mono text-[11px] text-accent">{pct}%</div>}
+      </div>
+      <div className={`font-mono text-[11px] ${isError ? "text-err" : "text-text"} leading-snug break-words`}>
+        {progress.text}
+      </div>
+      {isLoading && (
+        <div className="mt-2 h-1 bg-bg border border-line overflow-hidden">
+          <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModelPicker({ open, onClose, system, loadedModel, engineState, progress, defaultParams, setDefaultParams, onLoad, onUnload, onEvict, onAddCustom }) {
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [hideTooLarge, setHideTooLarge] = useState(true);
+  const [showParams, setShowParams] = useState(false);
+
+  const filtered = useMemo(() => {
+    let list = MOCK_MODELS;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((m) => m.id.toLowerCase().includes(q) || m.family.toLowerCase().includes(q));
+    }
+    if (hideTooLarge) {
+      list = list.filter((m) => {
+        const { fits, tight } = fitFor(m.vram, system.deviceMemoryGB);
+        return fits || tight || m.cached || m.id === loadedModel;
+      });
+    }
+    return list;
+  }, [search, hideTooLarge, system, loadedModel]);
+
+  const recommendedId = useMemo(() => {
+    const r = MOCK_MODELS.find((m) => fitFor(m.vram, system.deviceMemoryGB).fits);
+    return r ? r.id : null;
+  }, [system]);
+
+  const families = useMemo(() => {
+    const map = new Map();
+    filtered.forEach((m) => {
+      if (!map.has(m.family)) map.set(m.family, []);
+      map.get(m.family).push(m);
+    });
+    return [...map.entries()];
+  }, [filtered]);
+
+  return (
+    <Modal open={open} onClose={onClose} title="Models" subtitle={`${filtered.length} of ${MOCK_MODELS.length} · grouped by family, smallest first`}>
+      <div className="px-4 py-3 border-b border-line space-y-3 sticky top-0 bg-bg z-10">
+        <input
+          type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search models…"
+          className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[13px] font-mono"
+        />
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 font-mono text-[11px] text-mute cursor-pointer">
+            <input type="checkbox" checked={hideTooLarge} onChange={(e) => setHideTooLarge(e.target.checked)} className="accent-accent" />
+            hide models too large for this device
+          </label>
+          <button onClick={onAddCustom} className="font-mono text-[11px] text-mute hover:text-accent border border-line px-2 py-1">
+            + custom model
+          </button>
+        </div>
+        <StatusPanel engineState={engineState} progress={progress} />
+      </div>
+
+      <div className="p-4 space-y-4">
+        {families.map(([fam, models]) => (
+          <div key={fam}>
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-1.5">{fam}</div>
+            <div className="space-y-1">
+              {models.map((m) => (
+                <ModelCard
+                  key={m.id}
+                  model={m}
+                  system={system}
+                  selected={selected === m.id}
+                  loaded={loadedModel === m.id}
+                  recommended={recommendedId === m.id}
+                  engineState={engineState}
+                  onSelect={setSelected}
+                  onLoad={onLoad}
+                  onUnload={onUnload}
+                  onEvict={onEvict}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+        {families.length === 0 && (
+          <div className="font-mono text-[12px] text-mute text-center py-10">No models match your search.</div>
+        )}
+      </div>
+
+      <div className="border-t border-line">
+        <button
+          onClick={() => setShowParams((s) => !s)}
+          className="w-full flex items-center justify-between px-4 py-2.5 font-mono text-[11px] text-mute hover:text-text"
+        >
+          <span>default generation parameters</span>
+          <span>{showParams ? "−" : "+"}</span>
+        </button>
+        {showParams && (
+          <div className="px-4 pb-4">
+            <ParamControls params={defaultParams} setParams={setDefaultParams} />
+            <div className="font-mono text-[10px] text-mute mt-2.5">
+              Applied to new threads. Per-thread overrides live in thread parameters.
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* ============ thread params popover ============ */
+
+function ThreadParams({ open, onClose, params, setParams, defaults, onReset }) {
+  const overridden = JSON.stringify(params) !== JSON.stringify(defaults);
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Thread parameters"
+      subtitle="Overrides for this conversation only"
+      width="max-w-md"
+    >
+      <div className="p-4 space-y-3">
+        <ParamControls params={params} setParams={setParams} />
+        <div className="flex items-center justify-between border-t border-line pt-3">
+          <span className="font-mono text-[10px] text-mute">
+            {overridden ? "overriding global defaults" : "matching global defaults"}
+          </span>
+          <button
+            onClick={onReset}
+            disabled={!overridden}
+            className="font-mono text-[11px] px-2.5 py-1 border border-line text-mute hover:text-text disabled:opacity-30"
+          >
+            reset to defaults
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ============ settings ============ */
+
+function SettingsModal({ open, onClose, templates, setTemplates }) {
+  const [tab, setTab] = useState("data");
+  const [draft, setDraft] = useState({ title: "", content: "" });
+
+  const addTemplate = () => {
+    if (!draft.title.trim()) return;
+    setTemplates((t) => [...t, { id: "u" + Date.now(), title: draft.title.trim(), content: draft.content, isBuiltIn: false }]);
+    setDraft({ title: "", content: "" });
+  };
+
+  const tabs = [
+    ["data", "Data"],
+    ["templates", "Prompt templates"],
+    ["about", "About"],
+  ];
+
+  return (
+    <Modal open={open} onClose={onClose} title="Settings">
+      <div className="flex border-b border-line">
+        {tabs.map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`font-mono text-[11px] px-4 py-2.5 border-r border-line ${
+              tab === id ? "text-accent bg-accent/5" : "text-mute hover:text-text"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "data" && (
+        <div className="p-4 space-y-4">
+          <div>
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">export</div>
+            <p className="text-[12px] text-mute leading-relaxed mb-2">
+              Download all threads, messages, settings and templates as a JSON file.
+              API keys are never included.
+            </p>
+            <button className="font-mono text-[11px] px-3 py-1.5 border border-line text-text hover:border-accent/50 hover:text-accent">
+              export all data ↓
+            </button>
+          </div>
+          <div className="border-t border-line pt-4">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">import</div>
+            <p className="text-[12px] text-mute leading-relaxed mb-2">
+              Restore from a JSON export. This <span className="text-warn">replaces</span> all
+              current data — export first if unsure.
+            </p>
+            <button className="font-mono text-[11px] px-3 py-1.5 border border-line text-text hover:border-accent/50 hover:text-accent">
+              choose file ↑
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === "templates" && (
+        <div className="p-4 space-y-4">
+          <div className="space-y-1">
+            {templates.map((t) => (
+              <div key={t.id} className="group flex items-center gap-2 border border-line bg-surface px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono text-[12px] text-text">/{t.title}</div>
+                  <div className="font-mono text-[10px] text-mute truncate">{t.content.replace(/\n/g, " ").trim()}</div>
+                </div>
+                {t.isBuiltIn ? (
+                  <span className="font-mono text-[9px] text-mute shrink-0">built-in</span>
+                ) : (
+                  <button
+                    onClick={() => setTemplates((arr) => arr.filter((x) => x.id !== t.id))}
+                    className="opacity-0 group-hover:opacity-100 font-mono text-[11px] text-mute hover:text-err shrink-0"
+                  >
+                    delete
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-line pt-4 space-y-2">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest">new template</div>
+            <input
+              value={draft.title}
+              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+              placeholder="Title (used as /trigger)"
+              className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[12px] font-mono"
+            />
+            <textarea
+              value={draft.content}
+              onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
+              placeholder="Template content inserted into the composer…"
+              rows={3}
+              className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[12px] resize-none"
+            />
+            <button
+              onClick={addTemplate}
+              className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10"
+            >
+              + add template
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === "about" && (
+        <div className="p-4 space-y-3 text-[12px] text-mute leading-relaxed">
+          <div className="font-mono text-sm text-text">ht[LLM]</div>
+          <p>
+            A fully client-side WebGPU chat app. No server, no telemetry. Threads,
+            messages, settings and API keys live only in this browser's IndexedDB.
+          </p>
+          <div className="font-mono text-[11px] border-t border-line pt-3 space-y-1">
+            <div><span className="text-mute">runtime</span> · WebLLM · WebGPU</div>
+            <div><span className="text-mute">storage</span> · IndexedDB (local only)</div>
+            <div><span className="text-mute">providers</span> · WebLLM now · Ollama / Groq / OpenRouter next</div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ============ custom model ============ */
+
+function CustomModelModal({ open, onClose }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Add custom model" subtitle="MLC-compiled models only" width="max-w-lg">
+      <div className="p-4 space-y-3">
+        <p className="text-[12px] text-mute leading-relaxed">
+          WebLLM can run any model compiled to MLC format. Paste the HuggingFace repo
+          URL of the MLC weights and the matching model-library URL. Arbitrary
+          HuggingFace models (raw safetensors) are not supported — they must be
+          compiled with MLC-LLM first.
+        </p>
+        <div className="space-y-1">
+          <label className="font-mono text-[10px] text-mute uppercase tracking-widest">model weights URL</label>
+          <input
+            placeholder="https://huggingface.co/mlc-ai/…-MLC"
+            className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[12px] font-mono"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="font-mono text-[10px] text-mute uppercase tracking-widest">model library URL</label>
+          <input
+            placeholder="https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/…"
+            className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[12px] font-mono"
+          />
+        </div>
+        <div className="flex items-center gap-2 border-t border-line pt-3">
+          <button className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10">
+            add to catalog
+          </button>
+          <span className="font-mono text-[10px] text-mute">Phase 2 · secondary priority</span>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ============ prototype stage switcher ============ */
+
+function StageBar({ stage, setStage }) {
+  const stages = [
+    ["landing", "Landing"],
+    ["app", "App"],
+    ["noGPU", "No WebGPU"],
+  ];
+  return (
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 border border-line bg-surface px-1.5 py-1.5 stripe">
+      <span className="font-mono text-[9px] text-mute uppercase tracking-widest px-1.5">prototype</span>
+      {stages.map(([id, label]) => (
+        <button
+          key={id}
+          onClick={() => setStage(id)}
+          className={`font-mono text-[10px] px-2 py-1 border ${
+            stage === id ? "border-accent/60 text-accent bg-accent/10" : "border-line text-mute hover:text-text"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ============ app ============ */
+
+const DEFAULT_PARAMS = { temperature: 1.0, topP: 1.0, maxTokens: 4000, presencePenalty: 0, frequencyPenalty: 0 };
+
+function App() {
+  const [stage, setStage] = useState("landing");
+
+  const [threads, setThreads] = useState(MOCK_THREADS);
+  const [messagesByThread, setMessagesByThread] = useState(MOCK_MESSAGES);
+  const [activeThread, setActiveThread] = useState("th1");
+  const [templates, setTemplates] = useState(MOCK_TEMPLATES);
+
+  const [engineState, setEngineState] = useState("ready");
+  const [loadedModel, setLoadedModel] = useState("Llama-3.2-1B-Instruct-q4f16_1-MLC");
+  const [progress, setProgress] = useState({ value: 1, text: "Llama-3.2-1B-Instruct loaded" });
+
+  const [defaultParams, setDefaultParams] = useState(DEFAULT_PARAMS);
+  const [threadParams, setThreadParams] = useState(DEFAULT_PARAMS);
+
+  const [modal, setModal] = useState(null); // picker | settings | params | custom
+  const [generating, setGenerating] = useState(false);
+
+  const messages = messagesByThread[activeThread] || [];
+  const modelReady = engineState === "ready" && !!loadedModel;
+
+  const loadModel = (id) => {
+    setEngineState("loading");
+    let v = 0;
+    setProgress({ value: 0, text: "Initializing engine…" });
+    const timer = setInterval(() => {
+      v += 0.16 + Math.random() * 0.12;
+      if (v >= 1) {
+        clearInterval(timer);
+        setProgress({ value: 1, text: shortenId(id) + " loaded" });
+        setEngineState("ready");
+        setLoadedModel(id);
+      } else {
+        setProgress({ value: v, text: `Fetching weights · ${shortenId(id)}` });
+      }
+    }, 320);
+  };
+
+  const unloadModel = () => {
+    setEngineState("idle");
+    setLoadedModel(null);
+    setProgress({ value: 0, text: "" });
+  };
+
+  const evictModel = (id) => {
+    const m = MOCK_MODELS.find((x) => x.id === id);
+    if (m) m.cached = false;
+    if (id === loadedModel) unloadModel();
+    setThreads((t) => [...t]);
+  };
+
+  const newThread = () => {
+    const id = "th" + Date.now();
+    setThreads((t) => [{ id, title: "New thread", model: loadedModel || "", updatedAt: "now" }, ...t]);
+    setMessagesByThread((m) => ({ ...m, [id]: [] }));
+    setActiveThread(id);
+  };
+
+  const deleteThread = (id) => {
+    setThreads((t) => t.filter((x) => x.id !== id));
+    if (activeThread === id) {
+      const rest = threads.filter((x) => x.id !== id);
+      setActiveThread(rest[0] ? rest[0].id : null);
+    }
+  };
+
+  const send = (text, imageCount) => {
+    const userMsg = { role: "user", content: text };
+    if (imageCount > 0) userMsg.images = Array.from({ length: imageCount });
+    const reply =
+      "This is a mock streamed response for the UI prototype. The real app generates tokens on your GPU via WebLLM; here we just echo a fixed paragraph so the chat layout, streaming cursor and throughput readout can be reviewed.";
+    setMessagesByThread((m) => ({
+      ...m,
+      [activeThread]: [...(m[activeThread] || []), userMsg, { role: "assistant", content: "" }],
+    }));
+    setGenerating(true);
+
+    let shown = 0;
+    const timer = setInterval(() => {
+      shown += 4;
+      const done = shown >= reply.length;
+      setMessagesByThread((m) => {
+        const arr = [...(m[activeThread] || [])];
+        arr[arr.length - 1] = {
+          role: "assistant",
+          content: reply.slice(0, shown),
+          usage: done ? { prompt: 44, completion: 58, prefill: 401.2, decode: 73.5 } : undefined,
+        };
+        return { ...m, [activeThread]: arr };
+      });
+      if (done) {
+        clearInterval(timer);
+        setGenerating(false);
+        setThreads((t) =>
+          t.map((x) =>
+            x.id === activeThread && x.title === "New thread"
+              ? { ...x, title: text.slice(0, 40) }
+              : x,
+          ),
+        );
+      }
+    }, 60);
+  };
+
+  /* ---- render ---- */
+
+  if (stage === "landing") {
+    return (
+      <React.Fragment>
+        <Landing onEnter={() => setStage("app")} />
+        <StageBar stage={stage} setStage={setStage} />
+      </React.Fragment>
+    );
+  }
+
+  const noGPU = stage === "noGPU";
+  const system = { ...MOCK_SYSTEM, webgpu: !noGPU };
+
+  return (
+    <React.Fragment>
+      <div className="h-screen flex flex-col overflow-hidden">
+        <header className="border-b border-line bg-bg px-4 py-2 flex items-center justify-between gap-4">
+          <SystemRail system={system} />
+          <div className="font-mono text-[10px] text-mute hidden md:block">
+            {noGPU ? "inference unavailable" : modelReady ? shortenId(loadedModel) : "no model"}
+          </div>
+        </header>
+
+        {noGPU ? (
+          <WebGPUBlock />
+        ) : (
+          <div className="flex-1 flex min-h-0">
+            <Sidebar
+              threads={threads}
+              activeId={activeThread}
+              onSelect={setActiveThread}
+              onNew={newThread}
+              onDelete={deleteThread}
+              model={loadedModel}
+              engineState={engineState}
+              onOpenPicker={() => setModal("picker")}
+              onOpenSettings={() => setModal("settings")}
+            />
+            <main className="flex-1 min-w-0">
+              {activeThread ? (
+                <ChatPanel
+                  messages={messages}
+                  model={loadedModel}
+                  modelReady={modelReady}
+                  generating={generating}
+                  templates={templates}
+                  onSend={send}
+                  onStop={() => setGenerating(false)}
+                  onOpenPicker={() => setModal("picker")}
+                  onParams={() => setModal("params")}
+                />
+              ) : (
+                <div className="h-full grid-bg flex items-center justify-center">
+                  <button
+                    onClick={newThread}
+                    className="font-mono text-[12px] px-4 py-2 border border-accent/60 text-accent hover:bg-accent/10"
+                  >
+                    + new chat
+                  </button>
+                </div>
+              )}
+            </main>
+          </div>
+        )}
+      </div>
+
+      <ModelPicker
+        open={modal === "picker"}
+        onClose={() => setModal(null)}
+        system={system}
+        loadedModel={loadedModel}
+        engineState={engineState}
+        progress={progress}
+        defaultParams={defaultParams}
+        setDefaultParams={setDefaultParams}
+        onLoad={loadModel}
+        onUnload={unloadModel}
+        onEvict={evictModel}
+        onAddCustom={() => setModal("custom")}
+      />
+      <SettingsModal
+        open={modal === "settings"}
+        onClose={() => setModal(null)}
+        templates={templates}
+        setTemplates={setTemplates}
+      />
+      <ThreadParams
+        open={modal === "params"}
+        onClose={() => setModal(null)}
+        params={threadParams}
+        setParams={setThreadParams}
+        defaults={defaultParams}
+        onReset={() => setThreadParams(defaultParams)}
+      />
+      <CustomModelModal open={modal === "custom"} onClose={() => setModal("picker")} />
+
+      <StageBar stage={stage} setStage={setStage} />
+    </React.Fragment>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
