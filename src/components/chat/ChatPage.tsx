@@ -92,6 +92,7 @@ export function ChatPage({
         onSend={onSend}
         onStop={onStop}
         onParams={onParams}
+        onOpenPicker={onOpenPicker}
       />
     </div>
   );

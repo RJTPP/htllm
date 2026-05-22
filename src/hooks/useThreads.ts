@@ -11,6 +11,7 @@ import { deleteMessagesForThread } from '../data/messages';
 export function useThreads() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [threadsLoaded, setThreadsLoaded] = useState(false);
 
   useEffect(() => {
     listThreads().then((t) => {
@@ -18,6 +19,7 @@ export function useThreads() {
       if (t.length > 0 && !activeThreadId) {
         setActiveThreadId(t[0]!.id);
       }
+      setThreadsLoaded(true);
     });
   }, []);
 
@@ -83,6 +85,7 @@ export function useThreads() {
   return {
     threads,
     activeThreadId,
+    threadsLoaded,
     createThread: create,
     selectThread: select,
     deleteThread: remove,

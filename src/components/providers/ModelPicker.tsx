@@ -105,7 +105,17 @@ export function ModelPicker({
         }),
       );
     }
-    return [...list].sort((a, b) => minVramOf(a) - minVramOf(b));
+    // Loaded model first, then downloaded (cached) models, then the rest —
+    // each tier ordered by VRAM ascending.
+    const rank = (g: GroupedModel) =>
+      g.variants.some((v) => v.id === loadedModelId)
+        ? 0
+        : g.variants.some((v) => v.cached)
+          ? 1
+          : 2;
+    return [...list].sort(
+      (a, b) => rank(a) - rank(b) || minVramOf(a) - minVramOf(b),
+    );
   }, [grouped, search, family, hideTooLarge, mem, loadedModelId]);
 
   const subtitle = `${filtered.length} chat models · runs in-browser via WebLLM`;

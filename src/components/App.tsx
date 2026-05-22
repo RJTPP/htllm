@@ -34,6 +34,7 @@ export default function App() {
   const {
     threads,
     activeThreadId,
+    threadsLoaded,
     createThread,
     selectThread,
     deleteThread,
@@ -98,16 +99,17 @@ export default function App() {
 
   const modelReady = engineStatus === 'ready';
 
-  // Once a model is ready, ensure there is an active thread to chat in.
+  // Ensure there is always an active thread to type into — created on first
+  // run (and after the last thread is deleted), independent of model state.
   const autoThreadRef = useRef(false);
   useEffect(() => {
-    if (modelReady && activeThreadId === null && !autoThreadRef.current) {
+    if (threadsLoaded && activeThreadId === null && !autoThreadRef.current) {
       autoThreadRef.current = true;
       createThread(provider.id, loadedModelId ?? '').finally(() => {
         autoThreadRef.current = false;
       });
     }
-  }, [modelReady, activeThreadId, loadedModelId, createThread]);
+  }, [threadsLoaded, activeThreadId, loadedModelId, createThread]);
 
   const handleLoad = useCallback(
     async (modelId: string) => {
@@ -161,6 +163,18 @@ export default function App() {
     await createThread(provider.id, loadedModelId ?? '');
     setPage('chat');
   }, [createThread, loadedModelId]);
+
+  // Cmd/Ctrl + Shift + O — new chat.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyO') {
+        e.preventDefault();
+        handleCreateThread();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleCreateThread]);
 
   const handleChangeSystemPrompt = useCallback(
     (value: string) => {

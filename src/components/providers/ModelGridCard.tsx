@@ -75,18 +75,19 @@ export function ModelGridCard({
                 key={v.id}
                 className="flex items-center gap-1.5 px-3 py-2 border-t border-line/50 first:border-t-0 bg-bg/30"
               >
-                <span className="font-mono text-[10px] text-mute uppercase w-12 shrink-0">
+                <span
+                  className={`font-mono text-[10px] uppercase w-12 shrink-0 ${loaded ? 'text-accent' : 'text-mute'}`}
+                >
                   {v.quantization}
                 </span>
-                <span className="font-mono text-[10px] text-mute w-12 shrink-0">
+                <span
+                  className={`font-mono text-[10px] w-16 shrink-0 ${
+                    !vf.fits && !vf.tight ? 'text-err' : vf.tight ? 'text-warn' : 'text-mute'
+                  }`}
+                >
                   {fmtMB(v.vramRequiredMB)}
                 </span>
-                <div className="flex-1 min-w-0 flex gap-1 overflow-hidden">
-                  {loaded && <Badge tone="accent">loaded</Badge>}
-                  {v.cached && !loaded && <Badge tone="ok">cached</Badge>}
-                  {!vf.fits && !vf.tight && !loaded && <Badge tone="err">too large</Badge>}
-                  {vf.tight && !loaded && <Badge tone="warn">tight</Badge>}
-                </div>
+                <div className="flex-1" />
                 <div className="flex items-center gap-1 shrink-0">
                   {loaded ? (
                     <button
