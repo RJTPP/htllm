@@ -3,15 +3,19 @@ import type { ModelInfo } from '../providers/types';
 /** Maps a model family name (e.g. "Llama 3.2") to a brand-logo key. */
 const BRAND_BY_PREFIX: [string, string][] = [
   ['Llama', 'meta'],
+  ['TinyLlama', 'meta'], // Llama-architecture community model
   ['Qwen', 'qwen'],
   ['Gemma', 'google'],
   ['Phi', 'microsoft'],
+  ['WizardMath', 'microsoft'], // Microsoft WizardLM team
   ['Mistral', 'mistral'],
+  ['Ministral', 'mistral'], // Mistral AI
   ['SmolLM', 'hf'],
-  ['DeepSeek', 'deepseek'],
   ['Hermes', 'hf'],
-  ['Snowflake', 'snowflake'],
-  ['BGE', 'bge'],
+  ['DeepSeek', 'deepseek'],
+  ['OLMo', 'ai2'], // Allen Institute for AI
+  ['RedPajama', 'together'], // Together AI
+  ['StableLM', 'stability'], // Stability AI
 ];
 
 /** Family ordering for the model picker's family filter. */
