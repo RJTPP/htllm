@@ -197,9 +197,11 @@ export default function App() {
       setPage('chat');
       return;
     }
-    await createThread(webllmProvider.id, loadedModelId ?? '');
+    // Carry the current provider + model into the new thread so "new chat"
+    // continues with whatever the user was just using.
+    await createThread(activeProviderId, activeModelId);
     setPage('chat');
-  }, [createThread, loadedModelId, activeThreadId, messages.length]);
+  }, [createThread, activeProviderId, activeModelId, activeThreadId, messages.length]);
 
   // Cmd/Ctrl + Shift + O — new chat.
   useEffect(() => {
