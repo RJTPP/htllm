@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { openaiCompatProvider } from '../../providers/openai-compat/index';
 import { Dot } from '../ui/Dot';
-import { Eye, EyeOff } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 
 const PRESETS: [string, string][] = [
   ['Groq', 'https://api.groq.com/openai/v1'],
@@ -20,6 +21,7 @@ export function OpenAICompatConfig() {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     openaiCompatProvider.loadConfig().then(() => {
@@ -40,6 +42,21 @@ export function OpenAICompatConfig() {
     } catch (err) {
       setStatus({ kind: 'err', msg: err instanceof Error ? err.message : String(err) });
     }
+  };
+
+  // A key triggers the warning dialog first; a keyless endpoint (e.g. a local
+  // server) has nothing sensitive to confirm, so it saves directly.
+  const onSaveClick = () => {
+    if (apiKey.trim()) {
+      setConfirmOpen(true);
+    } else {
+      saveAndTest();
+    }
+  };
+
+  const confirmSave = () => {
+    setConfirmOpen(false);
+    saveAndTest();
   };
 
   const inputCls =
@@ -115,7 +132,7 @@ export function OpenAICompatConfig() {
 
       <div className="flex items-center gap-3">
         <button
-          onClick={saveAndTest}
+          onClick={onSaveClick}
           disabled={!configured || status.kind === 'testing'}
           className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30 disabled:cursor-not-allowed"
         >
@@ -130,6 +147,67 @@ export function OpenAICompatConfig() {
           <span className="font-mono text-[10px] text-err break-all">{status.msg}</span>
         )}
       </div>
+
+      <Modal
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Before you save this key"
+        width="max-w-lg"
+      >
+        <div className="p-4 space-y-3.5 text-[12.5px] text-mute leading-relaxed">
+          <div className="flex items-center gap-2 text-warn">
+            <TriangleAlert size={15} />
+            <span className="font-mono text-[11px] uppercase tracking-widest">
+              read this first
+            </span>
+          </div>
+          <div>
+            <div className="text-text text-[12.5px] font-semibold mb-0.5">
+              How it works
+            </div>
+            Requests go straight from this browser to the endpoint you entered.
+            There is no htllm server in between — htllm never sees your key or your
+            messages.
+          </div>
+          <div>
+            <div className="text-text text-[12.5px] font-semibold mb-0.5">
+              Where the key is stored
+            </div>
+            The key is saved only in this browser's IndexedDB, in plain text. It is
+            not encrypted, not synced, and never sent anywhere except as the
+            Authorization header to your configured base URL. Anyone with access to
+            this browser profile can read it.
+          </div>
+          <div>
+            <div className="text-text text-[12.5px] font-semibold mb-0.5">
+              Use a low-privilege key
+            </div>
+            Prefer a key scoped to just this use, with a spending limit. Do not paste
+            a key that controls billing, other projects, or sensitive resources.
+          </div>
+          <div>
+            <div className="text-text text-[12.5px] font-semibold mb-0.5">
+              At your own risk
+            </div>
+            You are responsible for the key and any usage or charges it incurs on the
+            provider's side.
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              onClick={() => setConfirmOpen(false)}
+              className="font-mono text-[11px] px-3 py-1.5 border border-line text-mute hover:text-text"
+            >
+              cancel
+            </button>
+            <button
+              onClick={confirmSave}
+              className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent bg-accent/5 hover:bg-accent/15"
+            >
+              I understand — save key
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
