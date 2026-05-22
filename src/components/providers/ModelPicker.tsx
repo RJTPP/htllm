@@ -61,6 +61,7 @@ export function ModelPicker({
   defaultProviderId,
   apiModelId,
   onSelectApiModel,
+  onConfigureProvider,
 }: {
   open: boolean;
   onClose: () => void;
@@ -77,6 +78,7 @@ export function ModelPicker({
   defaultProviderId: string;
   apiModelId: string | null;
   onSelectApiModel: (providerId: string, modelId: string) => void;
+  onConfigureProvider: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [family, setFamily] = useState<string | null>(null);
@@ -168,6 +170,7 @@ export function ModelPicker({
           provider={httpProviders.find((p) => p.id === tab) ?? httpProviders[0]!}
           apiModelId={apiModelId}
           onSelect={(modelId) => onSelectApiModel(tab, modelId)}
+          onConfigure={onConfigureProvider}
         />
       ) : (
         <>

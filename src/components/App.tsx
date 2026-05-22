@@ -35,7 +35,7 @@ import { ChatPage } from './chat/ChatPage';
 import { KnowledgeStub } from './knowledge/KnowledgeStub';
 import { StorageStub } from './storage/StorageStub';
 import { ModelPicker } from './providers/ModelPicker';
-import { SettingsModal } from './settings/SettingsModal';
+import { SettingsModal, type SettingsTab } from './settings/SettingsModal';
 import { ThreadParams } from './providers/ThreadParams';
 import { CommandPalette, type Command } from './command/CommandPalette';
 import { searchMessages } from '../data/messages';
@@ -81,6 +81,7 @@ export default function App() {
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
   const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('templates');
 
   useEffect(() => {
     webllmProvider.listModels().then(setModels);
@@ -418,6 +419,13 @@ export default function App() {
     [activeThreadId, updateThread],
   );
 
+  // Jump from an unconfigured provider in the model picker straight to its
+  // settings — closes the picker and opens Settings on the Providers tab.
+  const handleConfigureProvider = useCallback(() => {
+    setSettingsTab('providers');
+    setModal('settings');
+  }, []);
+
   const handleChangeSystemPrompt = useCallback(
     (value: string) => {
       if (activeThreadId) updateThread(activeThreadId, { systemPrompt: value });
@@ -559,6 +567,7 @@ export default function App() {
         defaultProviderId={activeProviderId}
         apiModelId={isApiThread ? activeThread?.modelId ?? null : null}
         onSelectApiModel={handleSelectApiModel}
+        onConfigureProvider={handleConfigureProvider}
       />
 
       <SettingsModal
@@ -574,6 +583,8 @@ export default function App() {
         setCodeTheme={handleSetCodeTheme}
         titleMode={titleMode}
         setTitleMode={setTitleMode}
+        tab={settingsTab}
+        onTabChange={setSettingsTab}
       />
 
       <ThreadParams
