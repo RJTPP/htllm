@@ -4,6 +4,7 @@ import type {
   ChatChunk,
   ModelInfo,
   ContentPart,
+  UsageStats,
 } from '../types';
 import { ProviderError } from '../../lib/errors';
 import { detectReasoning } from '../../lib/reasoning';
@@ -202,6 +203,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
       reasoningParams.enable_thinking = false;
     }
 
+    const startedAt = performance.now();
     let res: Response;
     try {
       res = await fetch(`${this.baseURL}/chat/completions`, {
@@ -240,6 +242,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let firstTokenAt: number | null = null;
 
     try {
       while (true) {
@@ -285,15 +288,31 @@ export class OpenAICompatibleProvider implements ChatProvider {
             chunk.reasoning = reasoning;
           }
 
+          // Mark the first token for client-side timing measurement.
+          if (firstTokenAt === null && (delta?.content || reasoning)) {
+            firstTokenAt = performance.now();
+          }
+
           const finishReason = choice?.finish_reason;
           if (finishReason === 'stop' || finishReason === 'length') {
             chunk.finishReason = finishReason;
           }
           if (json.usage) {
-            chunk.usage = {
+            const completionTokens = json.usage.completion_tokens ?? 0;
+            const usage: UsageStats = {
               promptTokens: json.usage.prompt_tokens ?? 0,
-              completionTokens: json.usage.completion_tokens ?? 0,
+              completionTokens,
             };
+            // The API doesn't report speed — measure it client-side.
+            if (firstTokenAt !== null) {
+              usage.timeToFirstTokenMs = firstTokenAt - startedAt;
+              const decodeMs = performance.now() - firstTokenAt;
+              if (decodeMs > 0 && completionTokens > 0) {
+                usage.decodeTokensPerSecond =
+                  completionTokens / (decodeMs / 1000);
+              }
+            }
+            chunk.usage = usage;
           }
           yield chunk;
         }

@@ -59,6 +59,8 @@ export interface UsageStats {
   completionTokens: number;
   prefillTokensPerSecond?: number;
   decodeTokensPerSecond?: number;
+  /** Time to first token, in ms — measured client-side for API providers. */
+  timeToFirstTokenMs?: number;
 }
 
 export interface TextPart {

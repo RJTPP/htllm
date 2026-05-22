@@ -23,6 +23,14 @@ function UsageInline({ usage }: { usage: UsageStats }) {
     <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[10px] text-mute border-t border-line/60 pt-1.5">
       <span>{usage.promptTokens} prompt tok</span>
       <span>{usage.completionTokens} completion tok</span>
+      {usage.timeToFirstTokenMs != null && (
+        <span className="text-mute/70">
+          ttft{' '}
+          {usage.timeToFirstTokenMs >= 1000
+            ? `${(usage.timeToFirstTokenMs / 1000).toFixed(2)}s`
+            : `${Math.round(usage.timeToFirstTokenMs)}ms`}
+        </span>
+      )}
       {usage.prefillTokensPerSecond != null && (
         <span className="text-mute/70">prefill {usage.prefillTokensPerSecond.toFixed(1)} tok/s</span>
       )}
