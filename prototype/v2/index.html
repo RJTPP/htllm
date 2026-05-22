@@ -1808,115 +1808,174 @@ function DocRow({ d }) {
   );
 }
 
-function KnowledgePage({ loadedEmbed, embedState, onOpenEmbedPicker }) {
+function KnowledgeSearch({ corpora, ready }) {
+  const [scope, setScope] = useState("all");
   const [query, setQuery] = useState("");
-  const [activeCorpus, setActiveCorpus] = useState(MOCK_CORPORA[0]?.id);
+  return (
+    <div className="border border-line bg-surface">
+      <div className="px-3 py-3 border-b border-line space-y-3">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-mute"><Icon name="search" size={16} /></span>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} disabled={!ready}
+            placeholder={ready ? "Ask across your documents…" : "Load an embedding model to enable search"}
+            className="w-full bg-bg border border-line focus:border-accent/60 focus:outline-none pl-10 pr-3 py-2.5 text-[14px] disabled:opacity-40" />
+        </div>
+        <div className="flex items-center gap-2 font-mono text-[10px] text-mute flex-wrap">
+          <span className="uppercase tracking-widest">scope</span>
+          <button onClick={() => setScope("all")}
+            className={`px-2 py-1 border whitespace-nowrap ${scope === "all" ? "border-accent/60 bg-accent/5 text-accent" : "border-line text-mute hover:text-text"}`}>
+            All compatible corpora
+          </button>
+          {corpora.map((c) => (
+            <button key={c.id} onClick={() => setScope(c.id)}
+              className={`px-2 py-1 border whitespace-nowrap ${scope === c.id ? "border-accent/60 bg-accent/5 text-accent" : "border-line text-mute hover:text-text"}`}>
+              {c.name} <span className="text-mute/70">· {c.docCount} docs</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="p-3">
+        {!ready ? (
+          <div className="font-mono text-[11px] text-mute text-center py-12">Load an embedding model to enable search.</div>
+        ) : query.trim() ? (
+          <div className="space-y-2">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest">
+              {MOCK_SEARCH_RESULTS.length} matches · {scope === "all" ? "all corpora" : corpora.find((c) => c.id === scope)?.name}
+            </div>
+            {MOCK_SEARCH_RESULTS.map((r, i) => <ResultRow key={i} r={r} />)}
+          </div>
+        ) : (
+          <div className="font-mono text-[11px] text-mute text-center py-12">
+            Type a question — retrieval pulls the most relevant chunks across the selected scope.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KnowledgeDocuments({ corpora, docs }) {
+  const [activeCorpus, setActiveCorpus] = useState(corpora[0]?.id);
+  const corpusDocs = docs.filter((d) => d.corpus === activeCorpus);
+  const corpus = corpora.find((c) => c.id === activeCorpus);
+  const [selectedDoc, setSelectedDoc] = useState(corpusDocs[0]?.id || null);
+  useEffect(() => { setSelectedDoc(docs.filter((d) => d.corpus === activeCorpus)[0]?.id || null); }, [activeCorpus]);
+  const doc = corpusDocs.find((d) => d.id === selectedDoc);
+
+  return (
+    <div className="flex border border-line bg-surface min-h-[440px]">
+      {/* col 1: corpora */}
+      <div className="w-[180px] border-r border-line flex flex-col">
+        <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
+          <span>corpora · {corpora.length}</span>
+          <button className="text-mute hover:text-accent" title="New corpus"><Icon name="plus" size={12} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {corpora.map((c) => (
+            <button key={c.id} onClick={() => setActiveCorpus(c.id)}
+              className={`w-full text-left px-3 py-2 border-l-2 ${activeCorpus === c.id ? "border-accent bg-accent/5" : "border-transparent hover:bg-surface2"}`}>
+              <div className="text-[12.5px] text-text truncate">{c.name}</div>
+              <div className="font-mono text-[10px] text-mute mt-0.5">{c.docCount} docs · {c.chunkCount} chunks</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* col 2: documents */}
+      <div className="w-[260px] border-r border-line flex flex-col">
+        <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
+          <span>documents · {corpusDocs.length}</span>
+          <button className="text-mute hover:text-accent" title="Add documents"><Icon name="plus" size={12} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-1">
+          {corpusDocs.length > 0 ? corpusDocs.map((d) => (
+            <button key={d.id} onClick={() => setSelectedDoc(d.id)}
+              className={`w-full text-left px-2 py-1.5 ${selectedDoc === d.id ? "bg-surface2" : "hover:bg-surface2/50"}`}>
+              <div className="flex items-center gap-1.5">
+                <Icon name="doc" size={12} />
+                <span className="text-[12px] text-text truncate">{d.name}</span>
+              </div>
+              <div className="font-mono text-[10px] text-mute mt-0.5">{d.kind.toUpperCase()} · {d.chunks} chunks · {fmtBytes(d.size)}</div>
+            </button>
+          )) : (
+            <div className="px-3 py-6 font-mono text-[10px] text-mute text-center">empty</div>
+          )}
+        </div>
+      </div>
+
+      {/* col 3: document preview */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest">document preview</div>
+        <div className="flex-1 overflow-y-auto p-3">
+          {doc ? (
+            <div className="border border-line p-3 bg-bg/40">
+              <div className="flex items-center gap-2 mb-2">
+                <Icon name="doc" size={14} />
+                <span className="text-[12.5px] text-text">{doc.name}</span>
+              </div>
+              <div className="font-mono text-[10px] text-mute space-y-0.5">
+                <div>{doc.kind.toUpperCase()} · {fmtBytes(doc.size)} · added {doc.added}</div>
+                <div>{doc.chunks} chunks · {(doc.chunks * (corpus?.dim ?? 384) * 4 / 1024).toFixed(0)} KB vectors</div>
+              </div>
+              <div className="mt-3 space-y-1">
+                {Array.from({ length: Math.min(doc.chunks, 4) }).map((_, i) => (
+                  <div key={i} className="font-mono text-[10.5px] text-text/70 border border-line/60 p-2 bg-surface/40">
+                    <div className="text-mute mb-0.5">chunk #{i + 1}</div>
+                    <div className="leading-relaxed">{["A compute pipeline is created with GPUDevice.createComputePipeline()…", "Buffers are allocated with createBuffer(); usage flags must include STORAGE…", "Storage textures and storage buffers are bound via bind groups…", "WebGPU adapters expose limits; maxBufferSize gates the largest single allocation…"][i]}</div>
+                  </div>
+                ))}
+                {doc.chunks > 4 && <div className="font-mono text-[10px] text-mute text-center py-1">+{doc.chunks - 4} more chunks</div>}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button className="font-mono text-[10px] px-2 py-0.5 border border-line text-mute hover:text-text">open source</button>
+                <button className="font-mono text-[10px] px-2 py-0.5 border border-line text-mute hover:text-err hover:border-err/40">remove</button>
+              </div>
+            </div>
+          ) : (
+            <div className="border border-line border-dashed px-4 py-10 text-center bg-surface/40">
+              <Icon name="doc" size={22} />
+              <div className="mt-2 text-[13px] text-text">No documents in this corpus</div>
+              <div className="mt-1 font-mono text-[10px] text-mute">drop .txt / .pdf / .md files to add</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KnowledgePage({ loadedEmbed, embedState, onOpenEmbedPicker }) {
+  const [mode, setMode] = useState("search");
   const ready = embedState === "ready" && !!loadedEmbed;
   const mismatchCorpora = MOCK_CORPORA.filter((c) => loadedEmbed && c.embeddingModel !== loadedEmbed).length;
 
-  const corpusDocs = MOCK_DOCS.filter((d) => d.corpus === activeCorpus);
-  const corpus = MOCK_CORPORA.find((c) => c.id === activeCorpus);
-  const [selectedDoc, setSelectedDoc] = useState(corpusDocs[0]?.id || null);
-  useEffect(() => { setSelectedDoc(MOCK_DOCS.filter((d) => d.corpus === activeCorpus)[0]?.id || null); }, [activeCorpus]);
-  const doc = corpusDocs.find((d) => d.id === selectedDoc);
+  const tab = (id, icon, label) => (
+    <button onClick={() => setMode(id)}
+      className={`flex items-center gap-1.5 px-3 py-1.5 border text-[12px] transition-colors ${mode === id ? "border-accent/60 bg-accent/10 text-text" : "border-line text-mute hover:text-text"}`}>
+      <Icon name={icon} size={14} /> {label}
+    </button>
+  );
 
   return (
     <div className="flex-1 overflow-y-auto grid-bg">
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="mb-1 font-mono text-[10px] text-accent uppercase tracking-widest">knowledge · phase 3</div>
-        <h1 className="text-xl font-medium mb-1">Search your documents</h1>
+        <h1 className="text-xl font-medium mb-1">Your documents</h1>
         <p className="text-sm text-mute leading-relaxed mb-5 max-w-2xl">
-          Semantic search across everything you've added. Results retrieve the most
-          relevant chunks — which can be pulled into any chat as context (RAG).
+          Semantic search across everything you've added, plus per-file inspection.
+          Retrieved chunks can be pulled into any chat as context (RAG).
         </p>
 
         <EmbeddingBar loadedEmbed={loadedEmbed} embedState={embedState} onOpenPicker={onOpenEmbedPicker} mismatchCorpora={mismatchCorpora} />
 
-        <div className="flex border border-line bg-surface min-h-[440px]">
-          {/* col 1: corpora */}
-          <div className="w-[180px] border-r border-line flex flex-col">
-            <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
-              <span>corpora · {MOCK_CORPORA.length}</span>
-              <button className="text-mute hover:text-accent" title="New corpus"><Icon name="plus" size={12} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {MOCK_CORPORA.map((c) => (
-                <button key={c.id} onClick={() => setActiveCorpus(c.id)}
-                  className={`w-full text-left px-3 py-2 border-l-2 ${activeCorpus === c.id ? "border-accent bg-accent/5" : "border-transparent hover:bg-surface2"}`}>
-                  <div className="text-[12.5px] text-text truncate">{c.name}</div>
-                  <div className="font-mono text-[10px] text-mute mt-0.5">{c.docCount} docs · {c.chunkCount} chunks</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* col 2: documents */}
-          <div className="w-[260px] border-r border-line flex flex-col">
-            <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
-              <span>documents · {corpusDocs.length}</span>
-              <button className="text-mute hover:text-accent" title="Add documents"><Icon name="plus" size={12} /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-1">
-              {corpusDocs.length > 0 ? corpusDocs.map((d) => (
-                <button key={d.id} onClick={() => setSelectedDoc(d.id)}
-                  className={`w-full text-left px-2 py-1.5 ${selectedDoc === d.id ? "bg-surface2" : "hover:bg-surface2/50"}`}>
-                  <div className="flex items-center gap-1.5">
-                    <Icon name="doc" size={12} />
-                    <span className="text-[12px] text-text truncate">{d.name}</span>
-                  </div>
-                  <div className="font-mono text-[10px] text-mute mt-0.5">{d.kind.toUpperCase()} · {d.chunks} chunks · {fmtBytes(d.size)}</div>
-                </button>
-              )) : (
-                <div className="px-3 py-6 font-mono text-[10px] text-mute text-center">empty</div>
-              )}
-            </div>
-          </div>
-
-          {/* col 3: search + chunks */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="px-3 py-2 border-b border-line">
-              <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-mute"><Icon name="search" size={14} /></span>
-                <input value={query} onChange={(e) => setQuery(e.target.value)} disabled={!ready}
-                  placeholder={ready ? `Search ${corpus?.name ?? "corpus"}…` : "Load embedding model to enable search"}
-                  className="w-full bg-bg border border-line focus:border-accent/60 focus:outline-none pl-8 pr-3 py-1.5 text-[12.5px] disabled:opacity-40" />
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {query.trim() && ready ? (
-                <>
-                  <div className="font-mono text-[10px] text-mute uppercase tracking-widest">{MOCK_SEARCH_RESULTS.length} matches in {corpus?.name}</div>
-                  {MOCK_SEARCH_RESULTS.map((r, i) => <ResultRow key={i} r={r} />)}
-                </>
-              ) : doc ? (
-                <>
-                  <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-1">document preview</div>
-                  <div className="border border-line p-3 bg-bg/40">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Icon name="doc" size={14} />
-                      <span className="text-[12.5px] text-text">{doc.name}</span>
-                    </div>
-                    <div className="font-mono text-[10px] text-mute space-y-0.5">
-                      <div>{doc.kind.toUpperCase()} · {fmtBytes(doc.size)} · added {doc.added}</div>
-                      <div>{doc.chunks} chunks · {(doc.chunks * (corpus?.dim ?? 384) * 4 / 1024).toFixed(0)} KB vectors</div>
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      {Array.from({ length: Math.min(doc.chunks, 4) }).map((_, i) => (
-                        <div key={i} className="font-mono text-[10.5px] text-text/70 border border-line/60 p-2 bg-surface/40">
-                          <div className="text-mute mb-0.5">chunk #{i + 1}</div>
-                          <div className="leading-relaxed">{["A compute pipeline is created with GPUDevice.createComputePipeline()…", "Buffers are allocated with createBuffer(); usage flags must include STORAGE…", "Storage textures and storage buffers are bound via bind groups…", "WebGPU adapters expose limits; maxBufferSize gates the largest single allocation…"][i]}</div>
-                        </div>
-                      ))}
-                      {doc.chunks > 4 && <div className="font-mono text-[10px] text-mute text-center py-1">+{doc.chunks - 4} more chunks</div>}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="font-mono text-[11px] text-mute text-center py-12">select a document or type a query</div>
-              )}
-            </div>
-          </div>
+        <div className="flex gap-1.5 mb-4">
+          {tab("search", "search", "Global search")}
+          {tab("documents", "doc", "Documents")}
         </div>
+
+        {mode === "search"
+          ? <KnowledgeSearch corpora={MOCK_CORPORA} ready={ready} />
+          : <KnowledgeDocuments corpora={MOCK_CORPORA} docs={MOCK_DOCS} />}
       </div>
     </div>
   );
