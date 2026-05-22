@@ -92,8 +92,16 @@ export interface Thread {
   modelId: string;
   modelParams?: ModelParams;
   systemPrompt?: string;
+  /** Folder this thread belongs to; undefined means ungrouped. */
+  folderId?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: number;
 }
 
 export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high';
