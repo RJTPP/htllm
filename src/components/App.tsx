@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ModelInfo, LoadProgress, EngineStatus, PromptTemplate } from '../providers/types';
 import { WebLLMProvider } from '../providers/webllm/index';
 import { useSystem } from '../hooks/useSystem';
@@ -65,6 +65,18 @@ export default function App() {
   );
 
   const modelReady = engineStatus === 'ready';
+
+  // Once a model is ready, ensure there is an active thread to chat in.
+  // The ref guards against double-creation from the async createThread window.
+  const autoThreadRef = useRef(false);
+  useEffect(() => {
+    if (modelReady && activeThreadId === null && !autoThreadRef.current) {
+      autoThreadRef.current = true;
+      createThread(provider.id, loadedModelId ?? '').finally(() => {
+        autoThreadRef.current = false;
+      });
+    }
+  }, [modelReady, activeThreadId, loadedModelId, createThread]);
 
   const handleLoad = useCallback(
     async (modelId: string) => {
