@@ -239,7 +239,16 @@ export class OpenAICompatibleProvider implements ChatProvider {
           if (data === '[DONE]') return;
 
           let json: {
-            choices?: { delta?: { content?: string }; finish_reason?: string }[];
+            choices?: {
+              delta?: {
+                content?: string;
+                // DeepSeek API, OpenRouter reasoning models
+                reasoning_content?: string;
+                // OpenAI native reasoning (o1/o3/o4)
+                reasoning?: string;
+              };
+              finish_reason?: string;
+            }[];
             usage?: { prompt_tokens?: number; completion_tokens?: number };
           };
           try {
@@ -249,7 +258,15 @@ export class OpenAICompatibleProvider implements ChatProvider {
           }
 
           const choice = json.choices?.[0];
-          const chunk: ChatChunk = { delta: choice?.delta?.content ?? '' };
+          const delta = choice?.delta;
+          const chunk: ChatChunk = { delta: delta?.content ?? '' };
+
+          // Structured reasoning from API (separate from content).
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+          if (reasoning) {
+            chunk.reasoning = reasoning;
+          }
+
           const finishReason = choice?.finish_reason;
           if (finishReason === 'stop' || finishReason === 'length') {
             chunk.finishReason = finishReason;

@@ -38,6 +38,8 @@ export interface ChatParams {
 
 export interface ChatChunk {
   delta: string;
+  /** Reasoning/thinking delta from structured API fields (not in-content tags). */
+  reasoning?: string;
   finishReason?: 'stop' | 'length' | 'error';
   usage?: UsageStats;
 }
@@ -69,6 +71,8 @@ export interface Message {
   content: string | ContentPart[];
   createdAt: number;
   usage?: UsageStats;
+  /** Structured reasoning/thinking content from API providers. */
+  reasoning?: string;
 }
 
 export interface Thread {

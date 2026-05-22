@@ -8,6 +8,7 @@ import type {
 } from '../providers/types';
 import type { ChatImage } from '../lib/image';
 import { addMessage, getMessages, updateMessage, deleteMessage, deleteMessagesAfter } from '../data/messages';
+import { stripThinking } from '../lib/thinking';
 
 export function useChat(
   provider: ChatProvider,
@@ -49,10 +50,33 @@ export function useChat(
       abortRef.current = controller;
 
       let fullContent = '';
+      let fullReasoning = '';
       let finalUsage: UsageStats | undefined;
 
       try {
         const trimmed = params.historyMsgs > 0 ? history.slice(-params.historyMsgs) : history;
+
+        // Strip reasoning from assistant messages in history so the model
+        // doesn't see its own chain-of-thought. Handles both:
+        // - In-content <think>...</think> tags (Qwen3, DeepSeek-R1 local)
+        // - Structured `reasoning` field (API providers)
+        const cleaned = trimmed.map((m) => {
+          if (m.role !== 'assistant') return m;
+          let result = m;
+          // Remove structured reasoning field.
+          if (result.reasoning) {
+            result = { ...result, reasoning: undefined };
+          }
+          // Strip in-content <think> tags.
+          if (typeof result.content === 'string') {
+            const stripped = stripThinking(result.content);
+            if (stripped !== result.content) {
+              result = result === m ? { ...result, content: stripped } : { ...result, content: stripped };
+            }
+          }
+          return result;
+        });
+
         const sysMsg: Message | null = systemPrompt.trim()
           ? {
               id: '__system',
@@ -62,7 +86,7 @@ export function useChat(
               createdAt: 0,
             }
           : null;
-        const sendMessages = sysMsg ? [sysMsg, ...trimmed] : trimmed;
+        const sendMessages = sysMsg ? [sysMsg, ...cleaned] : cleaned;
 
         for await (const chunk of provider.chat({
           messages: sendMessages,
@@ -75,14 +99,17 @@ export function useChat(
           signal: controller.signal,
         })) {
           fullContent += chunk.delta;
+          if (chunk.reasoning) fullReasoning += chunk.reasoning;
           if (chunk.usage) finalUsage = chunk.usage;
           const currentContent = fullContent;
+          const currentReasoning = fullReasoning;
           const currentUsage = finalUsage;
           setMessages((prev) => {
             const copy = [...prev];
             copy[copy.length - 1] = {
               ...assistantMsg,
               content: currentContent,
+              reasoning: currentReasoning || undefined,
               usage: currentUsage,
             };
             return copy;
@@ -91,12 +118,14 @@ export function useChat(
 
         await updateMessage(assistantMsg.id, {
           content: fullContent,
+          reasoning: fullReasoning || undefined,
           usage: finalUsage,
         });
       } catch (err) {
         if (controller.signal.aborted) {
           await updateMessage(assistantMsg.id, {
             content: fullContent,
+            reasoning: fullReasoning || undefined,
             usage: finalUsage,
           });
         } else {
