@@ -1,24 +1,29 @@
 import { useState, useEffect } from 'react';
-import type { Thread } from '../../providers/types';
-import { Pencil, Trash2 } from 'lucide-react';
+import type { Thread, Folder } from '../../providers/types';
+import { Pencil, Trash2, FolderInput } from 'lucide-react';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
 
 export function ThreadItem({
   thread,
+  folders,
   active,
   onSelect,
   onDelete,
   onRename,
+  onMove,
 }: {
   thread: Thread;
+  folders: Folder[];
   active: boolean;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, title: string) => void;
+  onMove: (id: string, folderId: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(thread.title);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const title = thread.title || 'New thread';
 
@@ -32,6 +37,14 @@ export function ThreadItem({
     const t = setTimeout(() => setConfirmDelete(false), 3000);
     return () => clearTimeout(t);
   }, [confirmDelete]);
+
+  // Anchor the move-to-folder menu to the button. Fixed positioning keeps it
+  // out of the sidebar's overflow-clipped scroll container.
+  const openMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenuPos({ x: r.right, y: r.bottom + 2 });
+  };
 
   return (
     <div
@@ -76,6 +89,13 @@ export function ThreadItem({
         {!editing && (
           <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
             <button
+              onClick={openMenu}
+              className="p-1 text-mute hover:text-text"
+              title="Move to folder"
+            >
+              <FolderInput size={13} />
+            </button>
+            <button
               onClick={(e) => {
                 e.stopPropagation();
                 setDraft(thread.title);
@@ -111,6 +131,56 @@ export function ThreadItem({
           </div>
         )}
       </div>
+
+      {menuPos && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuPos(null);
+            }}
+          />
+          <div
+            className="fixed z-50 min-w-[160px] bg-surface border border-line py-1 shadow-lg"
+            style={{ left: menuPos.x, top: menuPos.y, transform: 'translateX(-100%)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-2.5 py-1 font-mono text-[9px] uppercase tracking-widest text-mute/60">
+              move to folder
+            </div>
+            {thread.folderId && (
+              <button
+                onClick={() => {
+                  onMove(thread.id, null);
+                  setMenuPos(null);
+                }}
+                className="w-full text-left px-2.5 py-1 text-[12px] text-mute hover:text-text hover:bg-surface2"
+              >
+                Ungrouped
+              </button>
+            )}
+            {folders.map((f) => (
+              <button
+                key={f.id}
+                disabled={f.id === thread.folderId}
+                onClick={() => {
+                  onMove(thread.id, f.id);
+                  setMenuPos(null);
+                }}
+                className="w-full text-left px-2.5 py-1 text-[12px] truncate hover:bg-surface2 disabled:text-accent disabled:cursor-default"
+              >
+                {f.name}
+              </button>
+            ))}
+            {folders.length === 0 && (
+              <div className="px-2.5 py-1 text-[11px] text-mute/60">
+                No folders — create one in the sidebar
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

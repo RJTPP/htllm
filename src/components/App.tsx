@@ -11,6 +11,7 @@ import type {
 import { getProvider, getWebLLMProvider, getHttpProviders } from '../providers/registry';
 import { useSystem } from '../hooks/useSystem';
 import { useThreads } from '../hooks/useThreads';
+import { useFolders } from '../hooks/useFolders';
 import { useChat } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
@@ -53,6 +54,7 @@ export default function App() {
     updateThreadTimestamp,
     updateThread,
   } = useThreads();
+  const { folders, createFolder, renameFolder, deleteFolder } = useFolders();
 
   const activeThread = useMemo(
     () => threads.find((t) => t.id === activeThreadId) ?? null,
@@ -413,6 +415,26 @@ export default function App() {
     [activeThreadId, params, updateThread],
   );
 
+  const handleMoveThread = useCallback(
+    (threadId: string, folderId: string | null) => {
+      updateThread(threadId, { folderId: folderId ?? undefined });
+    },
+    [updateThread],
+  );
+
+  // Deleting a folder un-assigns its threads (they become ungrouped) rather
+  // than deleting them, then removes the folder itself.
+  const handleDeleteFolder = useCallback(
+    async (folderId: string) => {
+      const inFolder = threads.filter((t) => t.folderId === folderId);
+      for (const t of inFolder) {
+        await updateThread(t.id, { folderId: undefined });
+      }
+      await deleteFolder(folderId);
+    },
+    [threads, updateThread, deleteFolder],
+  );
+
   return (
     <div className="h-screen flex overflow-hidden bg-bg text-text font-sans">
       <NavRail page={page} setPage={setPage} onOpenSettings={() => setModal('settings')} />
@@ -449,11 +471,16 @@ export default function App() {
               <>
                 <Sidebar
                   threads={threads}
+                  folders={folders}
                   activeId={activeThreadId}
                   onSelect={selectThread}
                   onNew={handleCreateThread}
                   onDelete={deleteThread}
                   onRename={updateThreadTitle}
+                  onMoveThread={handleMoveThread}
+                  onCreateFolder={createFolder}
+                  onRenameFolder={renameFolder}
+                  onDeleteFolder={handleDeleteFolder}
                 />
                 <ChatPage
                   thread={activeThread}

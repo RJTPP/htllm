@@ -7,6 +7,8 @@ interface ExportData {
   messages: unknown[];
   settings: unknown[];
   promptTemplates: unknown[];
+  /** Added later — absent in older exports, which import as no folders. */
+  folders?: unknown[];
 }
 
 export async function exportAllData(): Promise<string> {
@@ -18,6 +20,7 @@ export async function exportAllData(): Promise<string> {
     messages: await db.getAll('messages'),
     settings: await db.getAll('settings'),
     promptTemplates: await db.getAll('promptTemplates'),
+    folders: await db.getAll('folders'),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -30,7 +33,7 @@ export async function importAllData(json: string): Promise<void> {
 
   const db = await getDb();
 
-  const stores = ['threads', 'messages', 'settings', 'promptTemplates'] as const;
+  const stores = ['threads', 'messages', 'settings', 'promptTemplates', 'folders'] as const;
   for (const storeName of stores) {
     const tx = db.transaction(storeName, 'readwrite');
     await tx.store.clear();
