@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Message, ModelParams, ContentPart } from '../providers/types';
+import type { Message, ModelParams, ContentPart, UsageStats } from '../providers/types';
 import type { ChatImage } from '../lib/image';
 import type { WebLLMProvider } from '../providers/webllm/index';
 import {
@@ -75,6 +75,7 @@ export function useChat(
       try {
         const allMessages = [...messages, userMsg];
         let fullContent = '';
+        let finalUsage: UsageStats | undefined;
 
         for await (const chunk of provider.chat({
           messages: allMessages,
@@ -87,8 +88,9 @@ export function useChat(
           signal: controller.signal,
         })) {
           fullContent += chunk.delta;
+          if (chunk.usage) finalUsage = chunk.usage;
           const currentContent = fullContent;
-          const currentUsage = chunk.usage;
+          const currentUsage = finalUsage;
 
           setMessages((prev) => {
             const copy = [...prev];
@@ -103,7 +105,7 @@ export function useChat(
 
         await updateMessage(assistantMsg.id, {
           content: fullContent,
-          usage: messages[messages.length - 1]?.usage,
+          usage: finalUsage,
         });
       } catch (err) {
         if (!controller.signal.aborted) {
