@@ -64,8 +64,9 @@ experience before any new surface area.
 | Per-thread parameter UI (data layer exists; UI only edits globals) | ◐ gap |
 | Navigation shell (Chat live; Knowledge/Storage stubs) | ✦ ☐ |
 | Chat rename | ✦ ☐ |
-| System prompt edit (per-thread) | ✦ ☐ |
+| System prompt edit — per-thread, with a configurable global default in Settings | ✦ ☐ |
 | Regenerate response | ✦ ☐ |
+| First-run landing — landing shown once; returning visitors redirect `/` → `/app` via a `localStorage` flag set on app entry | ✦ ☐ |
 
 ### Phase 2 — External providers + chat quality
 
@@ -77,6 +78,10 @@ experience before any new surface area.
 | Markdown rendering + code block syntax highlighting | ✦ ☐ (D3) |
 | Prompt-template management UI (create / edit / delete) | ◐ data layer exists; no UI |
 | Storage manager — basic (model cache list, IDB usage, clear data) | ✦ ☐ |
+| Global conversation search — full-text over all threads/messages | ✦ ☐ |
+| Chat folders / thread organization | ✦ ☐ |
+| Edit any user message + regenerate from that point | ✦ ☐ (extends Phase 1 regenerate) |
+| Keyboard-first navigation — shortcuts + command palette | ✦ ☐ |
 
 ### Phase 3 — Knowledge / RAG
 
@@ -88,6 +93,8 @@ experience before any new surface area.
 | Vector store + similarity retrieval | ✦ ☐ |
 | Knowledge page — global semantic search surface | ✦ ☐ |
 | File / document manager (full Storage page) | ✦ ☐ |
+| Conversation branching / tree view — pairs with edit-from-mid-conversation | ✦ ☐ |
+| Persistent memory — user-facts store injected into context | ✦ ☐ |
 
 ### Phase 4 — Agentic
 
@@ -104,6 +111,7 @@ experience before any new surface area.
 | Artifact preview — sandboxed HTML/code render pane | ✦ ☐ |
 | Embedding vector-map visualization (2D projection) | ✦ ☐ |
 | Voice input, i18n, virtual scrolling | ☐ |
+| Light mode / theming — color tokens via CSS variables | ✦ ☐ |
 | Service worker offline caching | ☐ |
 | Thinking-mode handling (`<think>` tags) | ☐ |
 

@@ -293,6 +293,7 @@ function Icon({ name, size = 18 }) {
   if (name === "send") return <svg {...p}><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
   if (name === "plus") return <svg {...p}><path d="M12 5v14M5 12h14" /></svg>;
   if (name === "trash") return <svg {...p}><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13h10l1-13" /></svg>;
+  if (name === "pencil") return <svg {...p}><path d="M12 20h9" /><path d="M16.4 3.6a2 2 0 1 1 2.8 2.8L7.5 18.1 3 19.5l1.4-4.5Z" /></svg>;
   if (name === "doc") return <svg {...p}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" /><path d="M14 3v5h5" /></svg>;
   if (name === "user") return <svg {...p}><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>;
   return null;
@@ -548,17 +549,17 @@ function ThreadItem({ thread, active, onSelect, onDelete, onRename }) {
           <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setDraft(thread.title); setEditing(true); }}
-              className="font-mono text-[10px] text-mute hover:text-text px-1"
+              className="p-1 text-mute hover:text-text"
               title="Rename"
             >
-              edit
+              <Icon name="pencil" size={13} />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(thread.id); }}
-              className="font-mono text-[11px] text-mute hover:text-err px-1"
+              className="p-1 text-mute hover:text-err"
               title="Delete"
             >
-              ×
+              <Icon name="trash" size={13} />
             </button>
           </div>
         )}
@@ -1137,7 +1138,7 @@ function ThreadParams({ open, onClose, params, setParams, defaults, onReset }) {
 
 /* ============ settings ============ */
 
-function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, setDefaultParams }) {
+function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, setDefaultParams, defaultSysPrompt, setDefaultSysPrompt }) {
   const [tab, setTab] = useState("templates");
   const [draft, setDraft] = useState({ title: "", content: "" });
 
@@ -1147,7 +1148,7 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
     setDraft({ title: "", content: "" });
   };
 
-  const tabs = [["templates", "Prompt templates"], ["params", "Default parameters"], ["about", "About"]];
+  const tabs = [["templates", "Prompt templates"], ["params", "Defaults"], ["about", "About"]];
 
   return (
     <Modal open={open} onClose={onClose} title="Settings">
@@ -1190,10 +1191,22 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
       )}
 
       {tab === "params" && (
-        <div className="p-4 space-y-3">
-          <div className="font-mono text-[10px] text-mute uppercase tracking-widest">global default parameters</div>
-          <ParamControls params={defaultParams} setParams={setDefaultParams} />
-          <div className="font-mono text-[10px] text-mute border-t border-line pt-3">New threads inherit these. Each thread can override them independently.</div>
+        <div className="p-4 space-y-4">
+          <div>
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-1.5">default system prompt</div>
+            <textarea
+              value={defaultSysPrompt}
+              onChange={(e) => setDefaultSysPrompt(e.target.value)}
+              rows={3}
+              className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[12.5px] text-text resize-none"
+            />
+            <div className="font-mono text-[10px] text-mute mt-1">Applied to new threads. Each thread's system prompt can then be edited independently.</div>
+          </div>
+          <div className="border-t border-line pt-4">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">default generation parameters</div>
+            <ParamControls params={defaultParams} setParams={setDefaultParams} />
+            <div className="font-mono text-[10px] text-mute mt-2">New threads inherit these. Each thread can override them independently.</div>
+          </div>
         </div>
       )}
 
@@ -1451,6 +1464,7 @@ function App() {
 
   const [defaultParams, setDefaultParams] = useState(DEFAULT_PARAMS);
   const [threadParams, setThreadParams] = useState(DEFAULT_PARAMS);
+  const [defaultSysPrompt, setDefaultSysPrompt] = useState(DEFAULT_SYS_PROMPT);
 
   const [modal, setModal] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -1484,7 +1498,7 @@ function App() {
 
   const newThread = () => {
     const id = "th" + Date.now();
-    setThreads((t) => [{ id, title: "New thread", model: loadedModel || "", updatedAt: "now", systemPrompt: DEFAULT_SYS_PROMPT }, ...t]);
+    setThreads((t) => [{ id, title: "New thread", model: loadedModel || "", updatedAt: "now", systemPrompt: defaultSysPrompt }, ...t]);
     setMessagesByThread((m) => ({ ...m, [id]: [] }));
     setActiveThread(id);
     setPage("chat");
@@ -1606,6 +1620,7 @@ function App() {
         open={modal === "settings"} onClose={() => setModal(null)}
         templates={templates} setTemplates={setTemplates}
         defaultParams={defaultParams} setDefaultParams={setDefaultParams}
+        defaultSysPrompt={defaultSysPrompt} setDefaultSysPrompt={setDefaultSysPrompt}
       />
       <ThreadParams
         open={modal === "params"} onClose={() => setModal(null)}
