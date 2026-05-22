@@ -13,7 +13,13 @@ import { useThreads } from '../hooks/useThreads';
 import { useChat } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
-import { getSetting, setSetting, DEFAULT_SYSTEM_PROMPT } from '../data/settings';
+import {
+  getSetting,
+  setSetting,
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_CODE_THEME,
+} from '../data/settings';
+import { setCodeTheme } from '../lib/highlight';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
 import { ModelSlot } from './system/ModelSlot';
@@ -64,6 +70,7 @@ export default function App() {
   const [page, setPage] = useState<NavPage>('chat');
   const [modal, setModal] = useState<ModalId>(null);
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
+  const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
 
   useEffect(() => {
     webllmProvider.listModels().then(setModels);
@@ -77,11 +84,23 @@ export default function App() {
     getSetting<string>('lastModelId').then((v) => {
       if (v != null) setLastModelId(v);
     });
+    getSetting<string>('codeTheme').then((v) => {
+      if (v != null) {
+        setCodeThemeState(v);
+        setCodeTheme(v);
+      }
+    });
   }, []);
 
   const setDefaultSystemPrompt = useCallback(async (value: string) => {
     setDefaultSystemPromptState(value);
     await setSetting('defaultSystemPrompt', value);
+  }, []);
+
+  const handleSetCodeTheme = useCallback(async (value: string) => {
+    setCodeThemeState(value);
+    setCodeTheme(value);
+    await setSetting('codeTheme', value);
   }, []);
 
   const handleAutoTitle = useCallback(
@@ -360,6 +379,8 @@ export default function App() {
         setGlobalDefaults={setGlobalDefaults}
         defaultSystemPrompt={defaultSystemPrompt}
         setDefaultSystemPrompt={setDefaultSystemPrompt}
+        codeTheme={codeTheme}
+        setCodeTheme={handleSetCodeTheme}
       />
 
       <ThreadParams

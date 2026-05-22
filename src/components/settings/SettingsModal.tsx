@@ -9,6 +9,17 @@ import { ParamControls } from '../providers/ParamControls';
 import { ImportExport } from './ImportExport';
 import { ProviderConfig } from './ProviderConfig';
 import { getHttpProviders } from '../../providers/registry';
+import { CODE_THEMES } from '../../lib/highlight';
+import { MessageBody } from '../chat/MessageBody';
+
+const THEME_PREVIEW_SAMPLE = [
+  '```typescript',
+  'function greet(name: string): string {',
+  '  const msg = `Hello, ${name}!`;',
+  '  return msg; // a friendly greeting',
+  '}',
+  '```',
+].join('\n');
 
 type SettingsTab = 'templates' | 'providers' | 'params' | 'about';
 
@@ -50,6 +61,8 @@ export function SettingsModal({
   setGlobalDefaults,
   defaultSystemPrompt,
   setDefaultSystemPrompt,
+  codeTheme,
+  setCodeTheme,
 }: {
   open: boolean;
   onClose: () => void;
@@ -59,6 +72,8 @@ export function SettingsModal({
   setGlobalDefaults: (patch: Partial<ModelParams>) => void;
   defaultSystemPrompt: string;
   setDefaultSystemPrompt: (value: string) => void;
+  codeTheme: string;
+  setCodeTheme: (value: string) => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>('templates');
   const [draft, setDraft] = useState({ title: '', content: '' });
@@ -222,6 +237,28 @@ export function SettingsModal({
             <ParamControls params={globalDefaults} onChange={setGlobalDefaults} />
             <div className="font-mono text-[10px] text-mute mt-2">
               New threads inherit these. Each thread can override them independently.
+            </div>
+          </div>
+          <div className="border-t border-line pt-4">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-1.5">
+              code block theme
+            </div>
+            <select
+              value={codeTheme}
+              onChange={(e) => setCodeTheme(e.target.value)}
+              className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[12.5px] text-text font-mono"
+            >
+              {CODE_THEMES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 px-3 py-1 border border-line bg-bg">
+              <MessageBody content={THEME_PREVIEW_SAMPLE} />
+            </div>
+            <div className="font-mono text-[10px] text-mute mt-2">
+              Syntax highlighting theme for code blocks in chat.
             </div>
           </div>
         </div>

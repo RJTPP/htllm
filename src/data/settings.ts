@@ -14,6 +14,9 @@ export const DEFAULT_MODEL_PARAMS: ModelParams = {
 export const DEFAULT_SYSTEM_PROMPT =
   "You are a helpful, concise assistant running locally in the user's browser.";
 
+/** Shiki theme used for code blocks. Persisted under the 'codeTheme' setting. */
+export const DEFAULT_CODE_THEME = 'vesper';
+
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDb();
   const entry = await db.get('settings', key);
