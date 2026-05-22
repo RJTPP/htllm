@@ -783,26 +783,26 @@ function Landing({ onEnter }) {
         style={{ background: "radial-gradient(ellipse at center, transparent 25%, rgba(10,10,10,0.92) 100%)" }}
       />
 
-      <div className="relative max-w-lg w-full">
-        <div className="reveal font-mono font-bold leading-none mb-5 text-6xl sm:text-7xl select-none">
+      <div className="relative max-w-2xl w-full">
+        <div className="reveal font-mono font-bold leading-none mb-6 text-7xl sm:text-8xl select-none">
           <span className={booted ? "inline-block wm-glitch" : "inline-block"}>
             ht<span className="text-mute/70 font-medium">&lt;</span><span className="text-accent">llm</span><span className="text-mute/70 font-medium">&gt;</span>
           </span>
         </div>
 
-        <p className="reveal reveal-1 text-mute text-sm leading-relaxed mb-6 max-w-md">
+        <p className="reveal reveal-1 text-mute text-base leading-relaxed mb-7 max-w-xl">
           Fully client-side WebGPU chat. Models run in your browser — no server,
           no telemetry, nothing leaves your device. Bring your own models and keys.
         </p>
 
-        <div className="reveal reveal-2 border border-line bg-bg/75 backdrop-blur-sm mb-6 max-w-md">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-line">
-            <span className="w-2 h-2 rounded-full bg-err/50" />
-            <span className="w-2 h-2 rounded-full bg-warn/50" />
-            <span className="w-2 h-2 rounded-full bg-ok/50" />
-            <span className="ml-1.5 font-mono text-[10px] text-mute/70 uppercase tracking-widest">system probe</span>
+        <div className="reveal reveal-2 border border-line bg-bg/75 backdrop-blur-sm mb-7 max-w-xl">
+          <div className="flex items-center gap-1.5 px-3.5 py-2 border-b border-line">
+            <span className="w-2.5 h-2.5 rounded-full bg-err/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-warn/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-ok/50" />
+            <span className="ml-1.5 font-mono text-[11px] text-mute/70 uppercase tracking-widest">system probe</span>
           </div>
-          <div className="px-3 py-2.5 font-mono text-[11px] space-y-1">
+          <div className="px-3.5 py-3 font-mono text-[13px] space-y-1.5">
             {shown.map(([label, value, status], i) => {
               const active = i === step && !booted;
               if (active) {
@@ -834,25 +834,25 @@ function Landing({ onEnter }) {
         >
           <button
             onClick={onEnter}
-            className="font-mono text-[13px] px-6 py-2.5 bg-accent text-bg font-medium hover:bg-accent/90 transition-colors"
+            className="font-mono text-sm px-7 py-3 bg-accent text-bg font-medium hover:bg-accent/90 transition-colors"
           >
-            open ht&lt;llm&gt; →
+            start →
           </button>
 
-          <div className="grid grid-cols-3 gap-2 mt-7 font-mono text-[10px] max-w-md">
+          <div className="grid grid-cols-3 gap-2.5 mt-8 font-mono text-[11px] max-w-xl">
             {[
               ["private", "threads · keys · docs stay in IndexedDB"],
               ["local", "inference on your GPU via WebLLM"],
               ["open", "provider-agnostic — local now, BYOK next"],
             ].map(([h, d]) => (
-              <div key={h} className="border border-line bg-bg/60 backdrop-blur-sm p-2.5">
-                <div className="text-accent uppercase tracking-widest mb-1">{h}</div>
+              <div key={h} className="border border-line bg-bg/60 backdrop-blur-sm p-3">
+                <div className="text-accent uppercase tracking-widest mb-1.5">{h}</div>
                 <div className="text-mute leading-relaxed">{d}</div>
               </div>
             ))}
           </div>
 
-          <div className="mt-7 font-mono text-[10px] text-mute/60">
+          <div className="mt-8 font-mono text-[11px] text-mute/60">
             Chrome 113+ / Edge 113+ · WebGPU required
           </div>
         </div>
@@ -1503,6 +1503,8 @@ function ParamControls({ params, setParams }) {
   const set = (k) => (v) => setParams((p) => ({ ...p, [k]: v }));
   return (
     <div className="space-y-2.5">
+      <ParamSlider label="context_window" value={params.contextWindow} min={1024} max={32768} step={512} onChange={set("contextWindow")} />
+      <ParamSlider label="history_msgs" value={params.historyMsgs} min={1} max={32} step={1} onChange={set("historyMsgs")} />
       <ParamSlider label="temperature" value={params.temperature} min={0} max={2} step={0.05} onChange={set("temperature")} />
       <ParamSlider label="top_p" value={params.topP} min={0} max={1} step={0.05} onChange={set("topP")} />
       <ParamSlider label="max_tokens" value={params.maxTokens} min={64} max={16384} step={64} onChange={set("maxTokens")} />
@@ -1795,6 +1797,7 @@ function ThreadParams({ open, onClose, params, setParams, defaults, onReset }) {
 /* ============ settings ============ */
 
 function ProviderRow({ p, state, onUpdate }) {
+  const [expanded, setExpanded] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const tone = state.status === "ready" || state.status === "detected" ? "ok"
              : state.status === "no-key" ? "warn"
@@ -1804,59 +1807,64 @@ function ProviderRow({ p, state, onUpdate }) {
     ready: "ready", detected: "detected", "not-detected": "not detected",
     "no-key": "needs key", error: "error",
   }[state.status] || state.status;
+  const statusColor = { ok: "text-ok", warn: "text-warn", err: "text-err", neutral: "text-mute" }[tone];
+  const hasConfig = p.urlEditable || p.kind === "local-host" || p.needsKey;
 
   return (
     <div className="border border-line bg-surface">
-      <div className="flex items-center gap-3 px-3 py-2.5">
-        <div className="w-8 h-8 border border-line bg-bg flex items-center justify-center text-mute shrink-0">
-          {p.kind === "local" && <Icon name="chat" size={16} />}
-          {p.kind === "local-host" && <Icon name="server" size={16} />}
-          {p.kind === "byok" && <Icon name="key" size={16} />}
+      <div
+        onClick={hasConfig ? () => setExpanded((e) => !e) : undefined}
+        className={`px-3 py-2.5 ${hasConfig ? "cursor-pointer hover:bg-surface2" : ""}`}
+      >
+        <div className="flex items-center gap-2.5">
+          <Dot tone={tone} />
+          <span className="text-[13px] text-text shrink-0">{p.name}</span>
+          {p.builtIn && <Badge tone="neutral" mono>built-in</Badge>}
+          {p.phase && <Badge tone="neutral" mono>phase {p.phase}</Badge>}
+          <span className={`font-mono text-[10px] ${statusColor}`}>{statusText}</span>
+          <div className="flex-1" />
+          <button
+            onClick={(e) => { e.stopPropagation(); onUpdate({ enabled: !state.enabled }); }}
+            className={`font-mono text-[11px] px-2.5 py-1 border whitespace-nowrap ${state.enabled ? "border-accent/60 text-accent bg-accent/5" : "border-line text-mute"} hover:text-text`}
+          >
+            {state.enabled ? "enabled" : "enable"}
+          </button>
+          {hasConfig && <span className="text-mute shrink-0"><Chevron open={expanded} /></span>}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] text-text">{p.name}</span>
-            {p.builtIn && <Badge tone="neutral" mono>built-in</Badge>}
-            {p.phase && <Badge tone="neutral" mono>phase {p.phase}</Badge>}
-            <Badge tone={tone}><Dot tone={tone} /> {statusText}</Badge>
-          </div>
-          <div className="font-mono text-[10px] text-mute mt-0.5">{p.desc}</div>
-        </div>
-        <button
-          onClick={() => onUpdate({ enabled: !state.enabled })}
-          className={`font-mono text-[11px] px-2.5 py-1 border whitespace-nowrap ${state.enabled ? "border-accent/60 text-accent bg-accent/5" : "border-line text-mute"} hover:text-text`}
-        >
-          {state.enabled ? "enabled" : "enable"}
-        </button>
+        <div className="font-mono text-[10px] text-mute mt-1">{p.desc}</div>
       </div>
 
-      {(p.urlEditable || p.kind === "local-host") && (
-        <div className="border-t border-line px-3 py-2 flex items-center gap-2">
-          <span className="font-mono text-[10px] text-mute uppercase tracking-widest w-12 shrink-0">url</span>
-          <input
-            value={state.url || ""}
-            onChange={(e) => onUpdate({ url: e.target.value })}
-            placeholder={p.url || "https://api.example.com/v1"}
-            className="flex-1 bg-bg border border-line focus:border-accent/60 focus:outline-none px-2.5 py-1 text-[11.5px] font-mono"
-          />
-          <button className="font-mono text-[10px] px-2 py-1 border border-line text-mute hover:text-text">test</button>
-        </div>
-      )}
+      {hasConfig && expanded && (
+        <div className="border-t border-line px-3 py-2.5 space-y-2">
+          {(p.urlEditable || p.kind === "local-host") && (
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-mute uppercase tracking-widest w-9 shrink-0">url</span>
+              <input
+                value={state.url || ""}
+                onChange={(e) => onUpdate({ url: e.target.value })}
+                placeholder={p.url || "https://api.example.com/v1"}
+                className="flex-1 bg-bg border border-line focus:border-accent/60 focus:outline-none px-2.5 py-1 text-[11.5px] font-mono"
+              />
+              <button className="font-mono text-[10px] px-2 py-1 border border-line text-mute hover:text-text">test</button>
+            </div>
+          )}
 
-      {p.needsKey && (
-        <div className="border-t border-line px-3 py-2 flex items-center gap-2">
-          <span className="font-mono text-[10px] text-mute uppercase tracking-widest w-12 shrink-0">key</span>
-          <input
-            type={showKey ? "text" : "password"}
-            value={state.key || ""}
-            onChange={(e) => onUpdate({ key: e.target.value, status: e.target.value ? "ready" : "no-key" })}
-            placeholder="sk-…"
-            className="flex-1 bg-bg border border-line focus:border-accent/60 focus:outline-none px-2.5 py-1 text-[11.5px] font-mono"
-          />
-          <button onClick={() => setShowKey((s) => !s)} className="text-mute hover:text-text p-1" title={showKey ? "Hide" : "Show"}>
-            <Icon name={showKey ? "eyeoff" : "eye"} size={14} />
-          </button>
-          <button className="font-mono text-[10px] px-2 py-1 border border-line text-mute hover:text-text">test</button>
+          {p.needsKey && (
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-mute uppercase tracking-widest w-9 shrink-0">key</span>
+              <input
+                type={showKey ? "text" : "password"}
+                value={state.key || ""}
+                onChange={(e) => onUpdate({ key: e.target.value, status: e.target.value ? "ready" : "no-key" })}
+                placeholder="sk-…"
+                className="flex-1 bg-bg border border-line focus:border-accent/60 focus:outline-none px-2.5 py-1 text-[11.5px] font-mono"
+              />
+              <button onClick={() => setShowKey((s) => !s)} className="text-mute hover:text-text p-1" title={showKey ? "Hide" : "Show"}>
+                <Icon name={showKey ? "eyeoff" : "eye"} size={14} />
+              </button>
+              <button className="font-mono text-[10px] px-2 py-1 border border-line text-mute hover:text-text">test</button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1867,6 +1875,8 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
                          defaultSysPrompt, setDefaultSysPrompt, providerStates, setProviderStates }) {
   const [tab, setTab] = useState("templates");
   const [draft, setDraft] = useState({ title: "", content: "" });
+  const [resetArmed, setResetArmed] = useState(false);
+  const [resetText, setResetText] = useState("");
 
   const addTemplate = () => {
     if (!draft.title.trim()) return;
@@ -1880,7 +1890,7 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
   const tabs = [
     ["templates", "Prompt templates"],
     ["providers", "Providers"],
-    ["params", "Defaults"],
+    ["params", "Chat defaults"],
     ["about", "About"],
   ];
 
@@ -1927,9 +1937,8 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
       {tab === "providers" && (
         <div className="p-4 space-y-4">
           <p className="text-[12.5px] text-mute leading-relaxed">
-            Providers expose models from different runtimes. <span className="text-text">WebLLM</span> runs in this browser.
-            Localhost providers (Ollama, LM Studio) need a running daemon. BYOK providers store keys
-            in IndexedDB on this device only.
+            Each provider exposes models from a different runtime. BYOK keys are stored
+            in IndexedDB on this device — nothing leaves until you send a request.
           </p>
 
           <div>
@@ -1948,7 +1957,6 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
                 <ProviderRow key={p.id} p={p} state={providerStates[p.id]} onUpdate={(patch) => updateProvider(p.id, patch)} />
               ))}
             </div>
-            <div className="mt-2 font-mono text-[10px] text-mute">Auto-detected at startup; status updates as you toggle "enabled".</div>
           </div>
 
           <div>
@@ -1958,7 +1966,6 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
                 <ProviderRow key={p.id} p={p} state={providerStates[p.id]} onUpdate={(patch) => updateProvider(p.id, patch)} />
               ))}
             </div>
-            <div className="mt-2 font-mono text-[10px] text-mute">Keys are stored in IndexedDB. Nothing leaves this device until you make a request.</div>
           </div>
         </div>
       )}
@@ -1992,6 +1999,51 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
             <div><span className="text-mute">storage</span> · IndexedDB (local only)</div>
             <div><span className="text-mute">providers</span> · WebLLM now · Ollama / LM Studio / OpenAI-compatible next</div>
             <div><span className="text-mute">planned</span> · Functions (P4) · Agents (P4) · Artifact preview (P5) · Vector-map (P5)</div>
+          </div>
+
+          <div className="border border-err/40 bg-err/5 p-3">
+            <div className="font-mono text-[10px] text-err uppercase tracking-widest mb-1.5">danger zone</div>
+            <p className="text-[12px] text-mute leading-relaxed">
+              Reset everything permanently deletes all conversations, prompt templates,
+              documents, embedding vectors, cached model weights, API keys and settings
+              from this browser. This cannot be undone — export your data first if you
+              want a backup.
+            </p>
+            {!resetArmed ? (
+              <button
+                onClick={() => setResetArmed(true)}
+                className="mt-2.5 font-mono text-[11px] px-3 py-1.5 border border-err/50 text-err hover:bg-err/10"
+              >
+                Reset everything
+              </button>
+            ) : (
+              <div className="mt-2.5 space-y-2">
+                <div className="font-mono text-[10px] text-mute">
+                  Type <span className="text-err">reset</span> to confirm.
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    value={resetText}
+                    onChange={(e) => setResetText(e.target.value)}
+                    placeholder="reset"
+                    className="flex-1 bg-bg border border-line focus:border-err/60 focus:outline-none px-2.5 py-1 text-[12px] font-mono"
+                  />
+                  <button
+                    disabled={resetText !== "reset"}
+                    className="font-mono text-[11px] px-3 py-1.5 border border-err/60 text-err bg-err/10 hover:bg-err/20 disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    wipe everything →
+                  </button>
+                  <button
+                    onClick={() => { setResetArmed(false); setResetText(""); }}
+                    className="font-mono text-[11px] px-3 py-1.5 border border-line text-mute hover:text-text"
+                  >
+                    cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2661,7 +2713,7 @@ function StageBar({ stage, setStage }) {
 
 /* ============ app ============ */
 
-const DEFAULT_PARAMS = { temperature: 1.0, topP: 1.0, maxTokens: 4000, presencePenalty: 0, frequencyPenalty: 0 };
+const DEFAULT_PARAMS = { contextWindow: 4096, historyMsgs: 12, temperature: 1.0, topP: 1.0, maxTokens: 4000, presencePenalty: 0, frequencyPenalty: 0 };
 
 function App() {
   const [stage, setStage] = useState("landing");
