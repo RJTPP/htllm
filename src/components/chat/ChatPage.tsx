@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import type { Thread, Message, ModelInfo, PromptTemplate } from '../../providers/types';
+import { useRef, useEffect, useMemo } from 'react';
+import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { SystemPromptBar } from './SystemPromptBar';
 import { MessageView } from './MessageView';
@@ -15,6 +15,7 @@ export function ChatPage({
   generating,
   templates,
   defaultSystemPrompt,
+  params,
   onSend,
   onStop,
   onRegenerate,
@@ -30,6 +31,7 @@ export function ChatPage({
   generating: boolean;
   templates: PromptTemplate[];
   defaultSystemPrompt: string;
+  params: ModelParams;
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onRegenerate: () => void;
@@ -46,6 +48,14 @@ export function ChatPage({
   }, [messages]);
 
   const visionOk = !!models.find((m) => m.id === loadedModelId)?.vision;
+
+  const contextUsed = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const u = messages[i]?.usage;
+      if (u) return u.promptTokens + u.completionTokens;
+    }
+    return 0;
+  }, [messages]);
 
   const handleRegenerate = () => {
     if (!modelReady) {
@@ -97,6 +107,8 @@ export function ChatPage({
         visionOk={visionOk}
         generating={generating}
         templates={templates}
+        contextUsed={contextUsed}
+        contextTotal={params.contextWindow}
         onSend={onSend}
         onStop={onStop}
         onParams={onParams}

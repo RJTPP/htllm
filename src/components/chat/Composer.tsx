@@ -8,12 +8,62 @@ import { PromptHints } from './PromptHints';
 
 const MAX_IMAGES = 3;
 
+function ContextRing({
+  used,
+  total,
+}: {
+  used: number;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.min(used / total, 1) : 0;
+  const r = 6;
+  const sw = 2.5;
+  const size = (r + sw) * 2;
+  const center = size / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - pct);
+  const color = pct > 0.9 ? '#ef4444' : pct > 0.7 ? '#eab308' : '#f59e0b';
+  const label = `${(used / 1000).toFixed(1)}k / ${(total / 1000).toFixed(1)}k (${Math.round(pct * 100)}%)`;
+
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`Context: ${label}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+        <circle
+          cx={center}
+          cy={center}
+          r={r}
+          fill="none"
+          stroke="#404040"
+          strokeWidth={sw}
+        />
+        {pct > 0 && (
+          <circle
+            cx={center}
+            cy={center}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={sw}
+            strokeDasharray={circ}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        )}
+      </svg>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 export function Composer({
   modelReady,
   model,
   visionOk,
   generating,
   templates,
+  contextUsed,
+  contextTotal,
   onSend,
   onStop,
   onParams,
@@ -24,6 +74,8 @@ export function Composer({
   visionOk: boolean;
   generating: boolean;
   templates: PromptTemplate[];
+  contextUsed: number;
+  contextTotal: number;
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onParams: () => void;
@@ -179,7 +231,11 @@ export function Composer({
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
-          <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
+          {contextTotal > 0 ? (
+            <ContextRing used={contextUsed} total={contextTotal} />
+          ) : (
+            <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
+          )}
           <button
             onClick={onParams}
             disabled={!modelReady}
