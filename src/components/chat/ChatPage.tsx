@@ -16,6 +16,7 @@ export function ChatPage({
   templates,
   defaultSystemPrompt,
   params,
+  visionOk,
   reasoningCapability,
   onReasoningChange,
   onSend,
@@ -35,6 +36,7 @@ export function ChatPage({
   templates: PromptTemplate[];
   defaultSystemPrompt: string;
   params: ModelParams;
+  visionOk: boolean;
   reasoningCapability?: ReasoningCapability;
   onReasoningChange: (effort: ReasoningEffort) => void;
   onSend: (text: string, images?: ChatImage[]) => void;
@@ -52,8 +54,6 @@ export function ChatPage({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  const visionOk = !!models.find((m) => m.id === loadedModelId)?.vision;
 
   const contextUsed = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {

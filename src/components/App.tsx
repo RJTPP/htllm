@@ -143,6 +143,12 @@ export default function App() {
     [activeModelId],
   );
 
+  // Vision capability: API providers support image_url parts natively, so use
+  // the provider capability. WebLLM models vary — look up the loaded model.
+  const visionOk = isApiThread
+    ? activeProvider.capabilities.vision
+    : !!models.find((m) => m.id === activeModelId)?.vision;
+
   // Ensure there is always an active thread to type into — created on first
   // run (and after the last thread is deleted), independent of model state.
   const pendingRef = useRef<{ text: string; images?: import('../lib/image').ChatImage[] } | null>(null);
@@ -354,6 +360,7 @@ export default function App() {
                   templates={templates}
                   defaultSystemPrompt={defaultSystemPrompt}
                   params={params}
+                  visionOk={visionOk}
                   reasoningCapability={activeReasoningCapability}
                   onReasoningChange={handleReasoningChange}
                   onSend={handleSend}
