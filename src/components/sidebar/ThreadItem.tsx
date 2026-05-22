@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Thread } from '../../providers/types';
-import { Icon } from '../ui/Icon';
+import { Pencil, Trash2 } from 'lucide-react';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
 
 export function ThreadItem({
@@ -84,7 +84,7 @@ export function ThreadItem({
               className="p-1 text-mute hover:text-text"
               title="Rename"
             >
-              <Icon name="pencil" size={13} />
+              <Pencil size={13} />
             </button>
             {confirmDelete ? (
               <button
@@ -105,7 +105,7 @@ export function ThreadItem({
                 className="p-1 text-mute hover:text-err"
                 title="Delete thread"
               >
-                <Icon name="trash" size={13} />
+                <Trash2 size={13} />
               </button>
             )}
           </div>

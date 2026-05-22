@@ -9,7 +9,7 @@ import type {
 import { groupByModel, familyRank, brandForFamily, type GroupedModel } from '../../lib/model-meta';
 import { fitFor } from '../../lib/fit';
 import { Modal } from '../ui/Modal';
-import { Icon } from '../ui/Icon';
+import { Search } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { StatusPanel } from './StatusPanel';
 import { ParamControls } from './ParamControls';
@@ -105,8 +105,6 @@ export function ModelPicker({
         }),
       );
     }
-    // Loaded model first, then downloaded (cached) models, then the rest —
-    // each tier ordered by VRAM ascending.
     const rank = (g: GroupedModel) =>
       g.variants.some((v) => v.id === loadedModelId)
         ? 0
@@ -131,7 +129,7 @@ export function ModelPicker({
       <div className="px-4 pt-3 border-b border-line space-y-3 sticky top-0 bg-bg z-10">
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-mute">
-            <Icon name="search" size={15} />
+            <Search size={15} />
           </span>
           <input
             type="text"

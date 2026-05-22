@@ -3,7 +3,7 @@ import type { PromptTemplate } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
-import { Icon } from '../ui/Icon';
+import { Image, ArrowRight } from 'lucide-react';
 import { PromptHints } from './PromptHints';
 
 const MAX_IMAGES = 3;
@@ -48,7 +48,6 @@ export function Composer({
 
   const send = () => {
     if (!input.trim() || generating) return;
-    // No model yet — keep the draft and open the picker instead of sending.
     if (!modelReady) {
       onOpenPicker();
       return;
@@ -149,7 +148,7 @@ export function Composer({
                   }
                   className="px-2.5 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  <Icon name="image" size={16} />
+                  <Image size={16} />
                 </button>
                 <input
                   ref={fileRef}
@@ -174,7 +173,7 @@ export function Composer({
                 disabled={!input.trim()}
                 className="flex items-center gap-1 font-mono text-[12px] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
               >
-                send <Icon name="send" size={14} />
+                send <ArrowRight size={14} />
               </button>
             )}
           </div>

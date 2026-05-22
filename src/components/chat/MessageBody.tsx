@@ -1,6 +1,6 @@
 import { useState, useMemo, type ReactNode } from 'react';
 import { highlightCode } from '../../lib/highlight';
-import { Icon } from '../ui/Icon';
+import { Check, Copy } from 'lucide-react';
 
 function renderInline(text: string): ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
@@ -48,11 +48,11 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
         >
           {copied ? (
             <>
-              <Icon name="check" size={11} /> copied
+              <Check size={11} /> copied
             </>
           ) : (
             <>
-              <Icon name="copy" size={11} /> copy
+              <Copy size={11} /> copy
             </>
           )}
         </button>
