@@ -90,7 +90,10 @@ export class OpenAICompatibleProvider implements ChatProvider {
   readonly capabilities = {
     streaming: true,
     toolCalls: false,
-    vision: false,
+    // Always true for API providers — the OpenAI message format supports
+    // image_url parts natively. If a model can't handle images, the API
+    // returns an error which we already display. No reason to gatekeep.
+    vision: true,
   };
   readonly spec: HttpProviderSpec;
 
@@ -175,7 +178,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
         vramRequiredMB: 0,
         quantization: '',
         cached: true,
-        vision: false,
+        vision: true,
         reasoning: detectReasoning(m.id),
       }));
   }
