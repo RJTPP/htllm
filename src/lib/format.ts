@@ -13,7 +13,7 @@ export function fmtBytes(b: number | null | undefined): string {
 }
 
 export function shortenModelId(id: string): string {
-  return id.replace(/-MLC$/, '').replace(/-q\df\d+_\d+/, '');
+  return id.replace(/-MLC$/, '').replace(/-q\df\d+(?:_\d+)?/, '');
 }
 
 export function fmtRelativeTime(ts: number): string {

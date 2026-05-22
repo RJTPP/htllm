@@ -35,20 +35,14 @@ function parseQuantization(modelId: string): string {
 }
 
 function parseDisplayName(modelId: string): string {
-  return modelId.replace(/-MLC$/, '').replace(/-q\df\d+_\d+/, '');
-}
-
-function isChatModel(modelId: string): boolean {
-  const id = modelId.toLowerCase();
-  return (
-    (id.includes('instruct') || id.includes('chat') || id.includes('hermes')) &&
-    !id.includes('embed')
-  );
+  return modelId.replace(/-MLC$/, '').replace(/-q\df\d+(?:_\d+)?/, '');
 }
 
 export async function getModelList(): Promise<ModelInfo[]> {
   const list = prebuiltAppConfig.model_list ?? [];
-  const chatModels = list.filter((m) => isChatModel(m.model_id));
+  // Include every LLM/VLM; exclude only embedding models. Name-based filtering
+  // missed models without an "-Instruct" suffix (e.g. the Qwen3 series).
+  const chatModels = list.filter((m) => m.model_type !== ModelType.embedding);
 
   chatModels.sort((a, b) => (a.vram_required_MB ?? 99999) - (b.vram_required_MB ?? 99999));
 
