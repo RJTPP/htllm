@@ -19,6 +19,7 @@ export function ChatPage({
   onSend,
   onStop,
   onRegenerate,
+  onEditAndResend,
   onOpenPicker,
   onParams,
   onChangeSystemPrompt,
@@ -35,6 +36,7 @@ export function ChatPage({
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onRegenerate: () => void;
+  onEditAndResend: (messageId: string, newText: string) => void;
   onOpenPicker: () => void;
   onParams: () => void;
   onChangeSystemPrompt: (value: string) => void;
@@ -95,7 +97,9 @@ export function ChatPage({
                 models={models}
                 streaming={generating && i === messages.length - 1 && m.role === 'assistant'}
                 isLast={i === messages.length - 1}
+                generating={generating}
                 onRegenerate={handleRegenerate}
+                onEditAndResend={onEditAndResend}
               />
             ))}
           </div>
