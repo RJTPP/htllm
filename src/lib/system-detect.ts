@@ -12,7 +12,8 @@ export async function detectSystem(): Promise<SystemInfo> {
 
   if (info.webgpu) {
     try {
-      const adapter = await navigator.gpu.requestAdapter();
+      const gpu = (navigator as unknown as { gpu: GPU }).gpu;
+      const adapter = await gpu.requestAdapter();
       if (adapter) {
         info.gpu = {
           info: String(adapter.info ?? ''),

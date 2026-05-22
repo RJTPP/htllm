@@ -48,10 +48,8 @@ export function useThreads() {
       await deleteThreadFromDb(id);
       setThreads((prev) => prev.filter((t) => t.id !== id));
       if (activeThreadId === id) {
-        setActiveThreadId((prev) => {
-          const remaining = threads.filter((t) => t.id !== id);
-          return remaining[0]?.id ?? null;
-        });
+        const remaining = threads.filter((t) => t.id !== id);
+        setActiveThreadId(remaining[0]?.id ?? null);
       }
     },
     [activeThreadId, threads],
