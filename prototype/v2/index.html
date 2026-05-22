@@ -629,7 +629,7 @@ function Landing({ onEnter }) {
   return (
     <div className="min-h-screen grid-bg flex items-center justify-center px-6">
       <div className="max-w-xl w-full">
-        <div className="reveal font-mono text-3xl mb-3">ht<span className="text-accent">[LLM]</span></div>
+        <div className="reveal font-mono text-3xl mb-3">ht<span className="text-accent">&lt;llm&gt;</span></div>
         <p className="reveal reveal-1 text-mute text-sm leading-relaxed mb-6">
           Fully client-side WebGPU chat. Models run in your browser — no server, no
           telemetry, nothing leaves your device. Bring your own models and keys.
@@ -692,7 +692,7 @@ function NavRail({ page, setPage, onOpenSettings }) {
   ];
   return (
     <nav className="reveal w-[68px] shrink-0 border-r border-line bg-bg flex flex-col items-center py-3">
-      <div className="font-mono text-[11px] text-accent mb-4">ht</div>
+      <div className="font-mono font-medium text-[10px] text-text mb-4">ht<span className="text-accent">&lt;llm&gt;</span></div>
       <div className="flex-1 flex flex-col gap-1 w-full px-2 overflow-y-auto">
         {live.map(([id, icon, label]) => (
           <button
@@ -948,6 +948,17 @@ function MessageView({ message, modelId, streaming, isLast, onRegenerate }) {
         {isUser ? (
           <div className="inline-block max-w-full bg-surface2 border border-line rounded-lg rounded-tl-sm px-3 py-2">
             <MessageBody content={message.content} />
+            {message.docs && message.docs.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {message.docs.map((d, i) => (
+                  <div key={i} className="flex items-center gap-1.5 border border-line bg-bg/40 px-2 py-1">
+                    <Icon name="doc" size={11} />
+                    <span className="text-[11px] text-text truncate flex-1 min-w-0">{d.name}</span>
+                    <span className="font-mono text-[9px] text-mute shrink-0">{fmtBytes(d.size)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="pr-2">
@@ -1108,8 +1119,18 @@ function PromptHints({ query, templates, onPick }) {
 function Composer({ modelReady, model, generating, templates, onSend, onStop, onParams, onClearContext }) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState(0);
+  const [docs, setDocs] = useState([]);
   const taRef = useRef(null);
   const visionOk = isVisionModel(model);
+
+  const addDoc = () => {
+    const samples = [
+      { name: "architecture.pdf", kind: "pdf", size: 1.8 * 1024 ** 2 },
+      { name: "meeting-notes.txt", kind: "txt", size: 38 * 1024 },
+      { name: "api-reference.md", kind: "md", size: 210 * 1024 },
+    ];
+    setDocs((d) => (d.length < 3 ? [...d, samples[d.length % samples.length]] : d));
+  };
 
   useEffect(() => {
     const ta = taRef.current;
@@ -1122,13 +1143,36 @@ function Composer({ modelReady, model, generating, templates, onSend, onStop, on
 
   const send = () => {
     if (!input.trim() || !modelReady || generating) return;
-    onSend(input.trim(), images);
-    setInput(""); setImages(0);
+    onSend(input.trim(), images, docs);
+    setInput(""); setImages(0); setDocs([]);
   };
 
   return (
     <div className="border-t border-line bg-bg">
       <div className="max-w-3xl mx-auto px-6 py-3">
+        {docs.length > 0 && (
+          <div className="space-y-1 mb-2">
+            {docs.map((d, i) => {
+              const inline = d.size < 128 * 1024;
+              return (
+                <div key={i} className="flex items-center gap-2 border border-line bg-surface2 px-2.5 py-1.5">
+                  <Icon name="doc" size={14} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] text-text truncate">{d.name}</div>
+                    <div className="font-mono text-[10px] text-mute">{d.kind.toUpperCase()} · {fmtBytes(d.size)}</div>
+                  </div>
+                  {inline
+                    ? <Badge tone="ok">inline</Badge>
+                    : <Badge tone="warn">large · chunked</Badge>}
+                  <button title="Save to Knowledge as a persistent corpus document" className="font-mono text-[10px] text-mute hover:text-accent whitespace-nowrap">→ Knowledge</button>
+                  <button onClick={() => setDocs((arr) => arr.filter((_, j) => j !== i))} className="text-mute hover:text-err shrink-0">
+                    <Icon name="trash" size={13} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {images > 0 && (
           <div className="flex gap-2 mb-2">
             {Array.from({ length: images }).map((_, i) => (
@@ -1154,6 +1198,13 @@ function Composer({ modelReady, model, generating, templates, onSend, onStop, on
               className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute disabled:opacity-40"
               style={{ maxHeight: "180px" }}
             />
+            {modelReady && (
+              <button onClick={addDoc} disabled={docs.length >= 3}
+                title="Attach a document (.txt / .pdf / .md) as context for this message"
+                className="px-2.5 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed">
+                <Icon name="doc" size={16} />
+              </button>
+            )}
             {modelReady && (
               <button onClick={() => setImages((n) => Math.min(n + 1, 3))}
                 disabled={!visionOk || images >= 3}
@@ -1723,7 +1774,7 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
 
       {tab === "about" && (
         <div className="p-4 space-y-3 text-[12px] text-mute leading-relaxed">
-          <div className="font-mono text-sm text-text">ht[LLM]</div>
+          <div className="font-mono text-sm text-text">ht<span className="text-accent">&lt;llm&gt;</span></div>
           <p>A fully client-side WebGPU chat app. No server, no telemetry. Threads, messages, documents, settings and API keys live only in this browser's IndexedDB.</p>
           <div className="font-mono text-[11px] border-t border-line pt-3 space-y-1">
             <div><span className="text-mute">runtime</span> · WebLLM · WebGPU</div>
@@ -2483,9 +2534,10 @@ function App() {
   const clearContext = () =>
     setMessagesByThread((m) => ({ ...m, [activeThread]: [...(m[activeThread] || []), { divider: true }] }));
 
-  const send = (text, imageCount) => {
+  const send = (text, imageCount, docs) => {
     const userMsg = { role: "user", content: text, at: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) };
     if (imageCount > 0) userMsg.images = imageCount;
+    if (docs && docs.length) userMsg.docs = docs;
     const reply =
       "This is a mock streamed response for the UI prototype. Real generation runs on your GPU via WebLLM. Here's a sample code block so the rendering can be reviewed:\n\n```js\nconst engine = await CreateMLCEngine(modelId);\nconst reply = await engine.chat.completions.create({ messages });\n```\n\nThe **hybrid** message style, avatars, timestamps and collapsible stats are all visible here.";
     setMessagesByThread((m) => ({ ...m, [activeThread]: [...(m[activeThread] || []), userMsg, { role: "assistant", content: "", at: userMsg.at }] }));
