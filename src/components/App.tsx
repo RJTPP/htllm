@@ -5,8 +5,10 @@ import type {
   EngineStatus,
   PromptTemplate,
   ModelParams,
+  ChatProvider,
 } from '../providers/types';
 import { WebLLMProvider } from '../providers/webllm/index';
+import { openaiCompatProvider, OPENAI_COMPAT_ID } from '../providers/openai-compat/index';
 import { useSystem } from '../hooks/useSystem';
 import { useThreads } from '../hooks/useThreads';
 import { useChat } from '../hooks/useChat';
@@ -25,7 +27,7 @@ import { ModelPicker } from './providers/ModelPicker';
 import { SettingsModal } from './settings/SettingsModal';
 import { ThreadParams } from './providers/ThreadParams';
 
-const provider = new WebLLMProvider();
+const webllmProvider = new WebLLMProvider();
 
 type ModalId = 'picker' | 'settings' | 'params' | null;
 
@@ -65,7 +67,8 @@ export default function App() {
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
 
   useEffect(() => {
-    provider.listModels().then(setModels);
+    webllmProvider.listModels().then(setModels);
+    openaiCompatProvider.loadConfig();
     seedBuiltInTemplates()
       .then(() => listTemplates())
       .then(setTemplates);
@@ -92,8 +95,16 @@ export default function App() {
 
   const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
 
+  // A thread is bound to a provider via thread.providerId. WebLLM needs a model
+  // loaded into its engine; an API thread is ready as soon as it has a modelId.
+  const activeProviderId = activeThread?.providerId || webllmProvider.id;
+  const isApiThread = activeProviderId === OPENAI_COMPAT_ID;
+  const activeProvider: ChatProvider = isApiThread ? openaiCompatProvider : webllmProvider;
+  const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
+
   const { messages, generating, send, regenerate, stop } = useChat(
-    provider,
+    activeProvider,
+    activeModelId,
     activeThreadId,
     params,
     systemPrompt,
@@ -101,7 +112,9 @@ export default function App() {
     handleAutoTitle,
   );
 
-  const modelReady = engineStatus === 'ready';
+  const modelReady = isApiThread
+    ? !!activeThread?.modelId
+    : engineStatus === 'ready';
 
   // Ensure there is always an active thread to type into — created on first
   // run (and after the last thread is deleted), independent of model state.
@@ -110,7 +123,7 @@ export default function App() {
   useEffect(() => {
     if (threadsLoaded && activeThreadId === null && !autoThreadRef.current) {
       autoThreadRef.current = true;
-      createThread(provider.id, loadedModelId ?? '').finally(() => {
+      createThread(webllmProvider.id, loadedModelId ?? '').finally(() => {
         autoThreadRef.current = false;
       });
     }
@@ -128,7 +141,7 @@ export default function App() {
       setEngineStatus('loading');
       setLoadProgress({ progress: 0, text: 'Initializing engine…', timeElapsed: 0 });
       try {
-        await provider.loadModel(
+        await webllmProvider.loadModel(
           modelId,
           (report) => setLoadProgress(report),
           globalDefaults.contextWindow,
@@ -141,6 +154,11 @@ export default function App() {
         setModal(null);
         setLastModelId(modelId);
         await setSetting('lastModelId', modelId);
+        // Loading a WebLLM model binds the active thread to WebLLM — handles the
+        // case where the thread was previously pointed at an API provider.
+        if (activeThreadId) {
+          updateThread(activeThreadId, { providerId: webllmProvider.id, modelId });
+        }
       } catch (err) {
         setEngineStatus('error');
         setLoadProgress({
@@ -150,11 +168,11 @@ export default function App() {
         });
       }
     },
-    [globalDefaults.contextWindow],
+    [globalDefaults.contextWindow, activeThreadId, updateThread],
   );
 
   const handleUnload = useCallback(async () => {
-    await provider.unload();
+    await webllmProvider.unload();
     setLoadedModelId(null);
     setEngineStatus('idle');
     setLoadProgress({ progress: 0, text: '', timeElapsed: 0 });
@@ -165,7 +183,7 @@ export default function App() {
       if (modelId === loadedModelId) {
         await handleUnload();
       }
-      await provider.evictModel(modelId);
+      await webllmProvider.evictModel(modelId);
       setModels((prev) =>
         prev.map((m) => (m.id === modelId ? { ...m, cached: false } : m)),
       );
@@ -178,7 +196,7 @@ export default function App() {
       setPage('chat');
       return;
     }
-    await createThread(provider.id, loadedModelId ?? '');
+    await createThread(webllmProvider.id, loadedModelId ?? '');
     setPage('chat');
   }, [createThread, loadedModelId, activeThreadId, messages.length]);
 
@@ -200,7 +218,8 @@ export default function App() {
         send(text, images);
         return;
       }
-      if (lastModelId && engineStatus === 'idle') {
+      // Deferred auto-load only applies to WebLLM; API threads have no load step.
+      if (!isApiThread && lastModelId && engineStatus === 'idle') {
         const cached = models.find((m) => m.id === lastModelId)?.cached;
         if (cached) {
           pendingRef.current = { text, images };
@@ -210,7 +229,19 @@ export default function App() {
       }
       setModal('picker');
     },
-    [modelReady, lastModelId, engineStatus, models, send, handleLoad],
+    [modelReady, isApiThread, lastModelId, engineStatus, models, send, handleLoad],
+  );
+
+  // Selecting a model from an API provider binds the active thread to it —
+  // no download step, so the thread is immediately ready to chat.
+  const handleSelectApiModel = useCallback(
+    (modelId: string) => {
+      if (activeThreadId) {
+        updateThread(activeThreadId, { providerId: OPENAI_COMPAT_ID, modelId });
+      }
+      setModal(null);
+    },
+    [activeThreadId, updateThread],
   );
 
   const handleChangeSystemPrompt = useCallback(
@@ -240,9 +271,19 @@ export default function App() {
           {system && <SystemStats system={system} compact />}
           <div className="ml-auto">
             <ModelSlot
-              model={loadedModelId ?? lastModelId}
+              model={
+                isApiThread
+                  ? activeThread?.modelId || null
+                  : loadedModelId ?? lastModelId
+              }
               models={models}
-              state={engineStatus}
+              state={
+                isApiThread
+                  ? activeThread?.modelId
+                    ? 'ready'
+                    : 'idle'
+                  : engineStatus
+              }
               progress={loadProgress}
               onClick={() => setModal('picker')}
             />
@@ -267,7 +308,7 @@ export default function App() {
                   thread={activeThread}
                   messages={messages}
                   models={models}
-                  loadedModelId={loadedModelId}
+                  loadedModelId={activeModelId || null}
                   modelReady={modelReady}
                   generating={generating}
                   templates={templates}
@@ -301,6 +342,9 @@ export default function App() {
         onUnload={handleUnload}
         onEvict={handleEvict}
         onParamsChange={setGlobalDefaults}
+        defaultProviderId={activeProviderId}
+        apiModelId={isApiThread ? activeThread?.modelId ?? null : null}
+        onSelectApiModel={handleSelectApiModel}
       />
 
       <SettingsModal

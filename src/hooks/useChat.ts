@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Message, ModelParams, ContentPart, UsageStats } from '../providers/types';
+import type {
+  Message,
+  ModelParams,
+  ContentPart,
+  UsageStats,
+  ChatProvider,
+} from '../providers/types';
 import type { ChatImage } from '../lib/image';
-import type { WebLLMProvider } from '../providers/webllm/index';
 import { addMessage, getMessages, updateMessage, deleteMessage } from '../data/messages';
 
 export function useChat(
-  provider: WebLLMProvider,
+  provider: ChatProvider,
+  modelId: string,
   threadId: string | null,
   params: ModelParams,
   systemPrompt: string,
@@ -60,7 +66,7 @@ export function useChat(
 
         for await (const chunk of provider.chat({
           messages: sendMessages,
-          modelId: provider.getLoadedModelId() ?? '',
+          modelId,
           temperature: params.temperature,
           topP: params.topP,
           maxTokens: params.maxTokens,
@@ -108,7 +114,7 @@ export function useChat(
         onThreadUpdate?.(threadId);
       }
     },
-    [threadId, params, systemPrompt, provider, onThreadUpdate],
+    [threadId, modelId, params, systemPrompt, provider, onThreadUpdate],
   );
 
   const send = useCallback(
