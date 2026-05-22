@@ -33,7 +33,7 @@ export function PromptHints({
           <div className="min-w-0">
             <div className="font-mono text-[12px] text-text">/{t.title}</div>
             <div className="font-mono text-[10px] text-mute truncate">
-              {t.content.replace(/\n/g, ' ').trim()}
+              {t.description?.trim() || t.content.replace(/\n/g, ' ').trim()}
             </div>
           </div>
           {t.isBuiltIn && (
