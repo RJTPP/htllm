@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
 import { Dot } from '../ui/Dot';
 import { Modal } from '../ui/Modal';
+import { ProviderLogo } from '../ui/ProviderLogo';
 import { Eye, EyeOff, TriangleAlert } from 'lucide-react';
 
 const BYOK_PRESETS: [string, string][] = [
@@ -67,6 +68,7 @@ export function ProviderConfig({ provider }: { provider: OpenAICompatibleProvide
     <div className="border border-line bg-surface px-3 py-2.5 space-y-3">
       <div className="flex items-center gap-2.5 flex-wrap">
         <Dot tone={configured ? 'ok' : 'mute'} />
+        <ProviderLogo providerId={spec.id} size={15} />
         <span className="text-[13px] text-text shrink-0">{spec.displayName}</span>
         <span className="font-mono text-[9px] border border-line text-mute px-1.5 py-0.5">
           {spec.usesKey ? 'byok' : 'localhost'}

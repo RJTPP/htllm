@@ -6,6 +6,7 @@ import { Modal } from '../ui/Modal';
 import { Badge } from '../ui/Badge';
 import { Dot } from '../ui/Dot';
 import { ParamControls } from '../providers/ParamControls';
+import { ProviderLogo } from '../ui/ProviderLogo';
 import { ImportExport } from './ImportExport';
 import { ProviderConfig } from './ProviderConfig';
 import { getHttpProviders } from '../../providers/registry';
@@ -35,6 +36,7 @@ function WebLLMRow() {
     <div className="border border-line bg-surface px-3 py-2.5">
       <div className="flex items-center gap-2.5">
         <Dot tone="ok" />
+        <ProviderLogo providerId="webllm" size={15} />
         <span className="text-[13px] text-text shrink-0">WebLLM</span>
         <Badge tone="neutral" mono>
           built-in
