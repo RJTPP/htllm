@@ -7,7 +7,12 @@ export const DEFAULT_MODEL_PARAMS: ModelParams = {
   maxTokens: 4000,
   presencePenalty: 0,
   frequencyPenalty: 0,
+  contextWindow: 4096,
+  historyMsgs: 12,
 };
+
+export const DEFAULT_SYSTEM_PROMPT =
+  "You are a helpful, concise assistant running locally in the user's browser.";
 
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDb();

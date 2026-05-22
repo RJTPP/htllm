@@ -2,28 +2,33 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import type { PromptTemplate } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
+import { shortenModelId } from '../../lib/format';
+import { Icon } from '../ui/Icon';
 import { PromptHints } from './PromptHints';
 
 const MAX_IMAGES = 3;
 
 export function Composer({
   modelReady,
-  visionSupported,
+  model,
+  visionOk,
   generating,
   templates,
   onSend,
   onStop,
+  onParams,
 }: {
   modelReady: boolean;
-  visionSupported: boolean;
+  model: string | null;
+  visionOk: boolean;
   generating: boolean;
   templates: PromptTemplate[];
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
+  onParams: () => void;
 }) {
   const [input, setInput] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
-  const [showHints, setShowHints] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -34,61 +39,45 @@ export function Composer({
     ta.style.height = Math.min(ta.scrollHeight, 180) + 'px';
   }, [input]);
 
-  const promptQuery = input.startsWith('/') && input.length < 40 ? input.slice(1) : null;
+  const hintQuery =
+    input.startsWith('/') && input.length < 40 && !input.includes('\n')
+      ? input.slice(1)
+      : null;
 
-  useEffect(() => {
-    setShowHints(promptQuery !== null);
-  }, [promptQuery]);
-
-  const handleSend = useCallback(() => {
+  const send = () => {
     if (!input.trim() || !modelReady || generating) return;
     onSend(input.trim(), images.length > 0 ? images : undefined);
     setInput('');
     setImages([]);
-  }, [input, images, modelReady, generating, onSend]);
+  };
 
-  const handleKey = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (showHints) return;
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (files) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!file) continue;
+          const img = await compressImage(file);
+          setImages((prev) => (prev.length < MAX_IMAGES ? [...prev, img] : prev));
+        }
       }
+      e.target.value = '';
     },
-    [handleSend, showHints],
+    [],
   );
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent) => {
-      if (!visionSupported || images.length >= MAX_IMAGES) return;
+      if (!visionOk || images.length >= MAX_IMAGES) return;
       const img = await compressFromDataTransfer(e.clipboardData.items);
       if (img) {
         e.preventDefault();
         setImages((prev) => [...prev, img]);
       }
     },
-    [visionSupported, images.length],
+    [visionOk, images.length],
   );
-
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files) return;
-      for (let i = 0; i < files.length && images.length + i < MAX_IMAGES; i++) {
-        const file = files[i];
-        if (file) {
-          const img = await compressImage(file);
-          setImages((prev) => [...prev, img]);
-        }
-      }
-      e.target.value = '';
-    },
-    [images.length],
-  );
-
-  const removeImage = useCallback((index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-  }, []);
 
   return (
     <div className="border-t border-line bg-bg">
@@ -103,8 +92,8 @@ export function Composer({
                   className="w-16 h-16 object-cover border border-line"
                 />
                 <button
-                  onClick={() => removeImage(i)}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-err text-bg text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100"
+                  onClick={() => setImages((arr) => arr.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-bg border border-err text-err text-[10px] leading-none flex items-center justify-center hover:bg-err hover:text-bg"
                 >
                   ×
                 </button>
@@ -113,15 +102,11 @@ export function Composer({
           </div>
         )}
         <div className="relative">
-          {showHints && promptQuery !== null && (
+          {hintQuery !== null && (
             <PromptHints
-              query={promptQuery}
+              query={hintQuery}
               templates={templates}
-              onSelect={(content) => {
-                setInput(content);
-                setShowHints(false);
-              }}
-              onDismiss={() => setShowHints(false)}
+              onPick={(t) => setInput(t.content)}
             />
           )}
           <div className="flex items-end gap-2">
@@ -129,27 +114,36 @@ export function Composer({
               ref={taRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKey}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && hintQuery === null) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
               onPaste={handlePaste}
+              rows={1}
+              disabled={!modelReady}
               placeholder={
                 modelReady
-                  ? 'Type a message — Enter to send, Shift+Enter for newline'
+                  ? 'Type a message — / for templates, Enter to send'
                   : 'Load a model to begin'
               }
-              disabled={!modelReady}
-              rows={1}
-              className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute font-sans disabled:opacity-40"
+              className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute disabled:opacity-40"
               style={{ maxHeight: '180px' }}
             />
-            {visionSupported && modelReady && (
+            {modelReady && (
               <>
                 <button
                   onClick={() => fileRef.current?.click()}
-                  disabled={images.length >= MAX_IMAGES}
-                  className="font-mono text-[12px] px-3 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Attach image"
+                  disabled={!visionOk || images.length >= MAX_IMAGES}
+                  title={
+                    visionOk
+                      ? 'Attach image'
+                      : 'Current model has no vision support — load a vision model to attach images'
+                  }
+                  className="px-2.5 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  img
+                  <Icon name="image" size={16} />
                 </button>
                 <input
                   ref={fileRef}
@@ -170,14 +164,20 @@ export function Composer({
               </button>
             ) : (
               <button
-                onClick={handleSend}
+                onClick={send}
                 disabled={!modelReady || !input.trim()}
-                className="font-mono text-[12px] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="flex items-center gap-1 font-mono text-[12px] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
               >
-                send →
+                send <Icon name="send" size={14} />
               </button>
             )}
           </div>
+        </div>
+        <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
+          <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
+          <button onClick={onParams} className="hover:text-text" disabled={!modelReady}>
+            thread parameters →
+          </button>
         </div>
       </div>
     </div>

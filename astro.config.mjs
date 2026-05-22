@@ -6,7 +6,7 @@ export default defineConfig({
   output: 'static',
   integrations: [
     react(),
-    tailwind(),
+    tailwind({ applyBaseStyles: false }),
   ],
   vite: {
     worker: {

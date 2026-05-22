@@ -22,6 +22,11 @@ export async function updateMessage(id: string, patch: Partial<Message>): Promis
   await db.put('messages', { ...existing, ...patch, id });
 }
 
+export async function deleteMessage(id: string): Promise<void> {
+  const db = await getDb();
+  await db.delete('messages', id);
+}
+
 export async function deleteMessagesForThread(threadId: string): Promise<void> {
   const db = await getDb();
   const tx = db.transaction('messages', 'readwrite');

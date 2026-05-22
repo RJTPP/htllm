@@ -2,40 +2,115 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Message, ModelParams, ContentPart, UsageStats } from '../providers/types';
 import type { ChatImage } from '../lib/image';
 import type { WebLLMProvider } from '../providers/webllm/index';
-import {
-  addMessage,
-  getMessages,
-  updateMessage,
-} from '../data/messages';
+import { addMessage, getMessages, updateMessage, deleteMessage } from '../data/messages';
 
 export function useChat(
   provider: WebLLMProvider,
   threadId: string | null,
   params: ModelParams,
+  systemPrompt: string,
   onThreadUpdate?: (threadId: string) => void,
   onAutoTitle?: (threadId: string, firstMessage: string) => void,
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [generating, setGenerating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
-  const messageCountRef = useRef(0);
 
   useEffect(() => {
     if (!threadId) {
       setMessages([]);
       return;
     }
-    getMessages(threadId).then((msgs) => {
-      setMessages(msgs);
-      messageCountRef.current = msgs.length;
-    });
+    getMessages(threadId).then(setMessages);
   }, [threadId]);
+
+  // Streams an assistant reply for the given visible history. The history is
+  // the user-visible message list to answer (no assistant placeholder yet).
+  const runGeneration = useCallback(
+    async (history: Message[]) => {
+      if (!threadId) return;
+
+      const assistantMsg = await addMessage({
+        threadId,
+        role: 'assistant',
+        content: '',
+        createdAt: Date.now(),
+      });
+      setMessages((prev) => [...prev, assistantMsg]);
+      setGenerating(true);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const trimmed = history.slice(-params.historyMsgs);
+        const sysMsg: Message | null = systemPrompt.trim()
+          ? {
+              id: '__system',
+              threadId,
+              role: 'system',
+              content: systemPrompt,
+              createdAt: 0,
+            }
+          : null;
+        const sendMessages = sysMsg ? [sysMsg, ...trimmed] : trimmed;
+
+        let fullContent = '';
+        let finalUsage: UsageStats | undefined;
+
+        for await (const chunk of provider.chat({
+          messages: sendMessages,
+          modelId: provider.getLoadedModelId() ?? '',
+          temperature: params.temperature,
+          topP: params.topP,
+          maxTokens: params.maxTokens,
+          presencePenalty: params.presencePenalty,
+          frequencyPenalty: params.frequencyPenalty,
+          signal: controller.signal,
+        })) {
+          fullContent += chunk.delta;
+          if (chunk.usage) finalUsage = chunk.usage;
+          const currentContent = fullContent;
+          const currentUsage = finalUsage;
+          setMessages((prev) => {
+            const copy = [...prev];
+            copy[copy.length - 1] = {
+              ...assistantMsg,
+              content: currentContent,
+              usage: currentUsage,
+            };
+            return copy;
+          });
+        }
+
+        await updateMessage(assistantMsg.id, {
+          content: fullContent,
+          usage: finalUsage,
+        });
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          const errorContent = `[error] ${err instanceof Error ? err.message : String(err)}`;
+          setMessages((prev) => {
+            const copy = [...prev];
+            copy[copy.length - 1] = { ...assistantMsg, content: errorContent };
+            return copy;
+          });
+          await updateMessage(assistantMsg.id, { content: errorContent });
+        }
+      } finally {
+        setGenerating(false);
+        abortRef.current = null;
+        onThreadUpdate?.(threadId);
+      }
+    },
+    [threadId, params, systemPrompt, provider, onThreadUpdate],
+  );
 
   const send = useCallback(
     async (text: string, images?: ChatImage[]) => {
       if (!threadId || generating) return;
 
-      const isFirstMessage = messageCountRef.current === 0;
+      const isFirstMessage = messages.length === 0;
 
       let userContent: string | ContentPart[];
       if (images && images.length > 0) {
@@ -57,87 +132,32 @@ export function useChat(
         content: userContent,
         createdAt: Date.now(),
       });
+      setMessages((prev) => [...prev, userMsg]);
 
-      const assistantMsg = await addMessage({
-        threadId,
-        role: 'assistant',
-        content: '',
-        createdAt: Date.now(),
-      });
+      await runGeneration([...messages, userMsg]);
 
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
-      messageCountRef.current += 2;
-      setGenerating(true);
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-
-      try {
-        const allMessages = [...messages, userMsg];
-        let fullContent = '';
-        let finalUsage: UsageStats | undefined;
-
-        for await (const chunk of provider.chat({
-          messages: allMessages,
-          modelId: provider.getLoadedModelId() ?? '',
-          temperature: params.temperature,
-          topP: params.topP,
-          maxTokens: params.maxTokens,
-          presencePenalty: params.presencePenalty,
-          frequencyPenalty: params.frequencyPenalty,
-          signal: controller.signal,
-        })) {
-          fullContent += chunk.delta;
-          if (chunk.usage) finalUsage = chunk.usage;
-          const currentContent = fullContent;
-          const currentUsage = finalUsage;
-
-          setMessages((prev) => {
-            const copy = [...prev];
-            copy[copy.length - 1] = {
-              ...assistantMsg,
-              content: currentContent,
-              usage: currentUsage,
-            };
-            return copy;
-          });
-        }
-
-        await updateMessage(assistantMsg.id, {
-          content: fullContent,
-          usage: finalUsage,
-        });
-      } catch (err) {
-        if (!controller.signal.aborted) {
-          const errorContent = `[error] ${err instanceof Error ? err.message : String(err)}`;
-          setMessages((prev) => {
-            const copy = [...prev];
-            copy[copy.length - 1] = {
-              ...assistantMsg,
-              content: errorContent,
-            };
-            return copy;
-          });
-          await updateMessage(assistantMsg.id, { content: errorContent });
-        }
-      } finally {
-        setGenerating(false);
-        abortRef.current = null;
-        onThreadUpdate?.(threadId);
-
-        if (isFirstMessage) {
-          onAutoTitle?.(threadId, text);
-        }
+      if (isFirstMessage) {
+        onAutoTitle?.(threadId, text);
       }
     },
-    [threadId, generating, messages, provider, params, onThreadUpdate, onAutoTitle],
+    [threadId, generating, messages, runGeneration, onAutoTitle],
   );
 
+  const regenerate = useCallback(async () => {
+    if (!threadId || generating) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
+
+    await deleteMessage(last.id);
+    const trimmed = messages.slice(0, -1);
+    setMessages(trimmed);
+
+    await runGeneration(trimmed);
+  }, [threadId, generating, messages, runGeneration]);
+
   const stop = useCallback(() => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
+    abortRef.current?.abort();
   }, []);
 
-  return { messages, generating, send, stop };
+  return { messages, generating, send, regenerate, stop };
 }

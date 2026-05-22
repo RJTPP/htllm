@@ -1,19 +1,16 @@
 import type { EngineStatus, LoadProgress } from '../../providers/types';
-import { shortenModelId } from '../../lib/format';
 
 export function StatusPanel({
-  status,
+  engineState,
   progress,
-  loadedModelId,
 }: {
-  status: EngineStatus;
+  engineState: EngineStatus;
   progress: LoadProgress;
-  loadedModelId: string | null;
 }) {
-  if (status === 'idle') return null;
+  if (engineState === 'idle') return null;
 
-  const isLoading = status === 'loading';
-  const isError = status === 'error';
+  const isLoading = engineState === 'loading';
+  const isError = engineState === 'error';
   const pct = Math.round((progress.progress ?? 0) * 100);
 
   return (
@@ -24,21 +21,16 @@ export function StatusPanel({
         <div className="font-mono text-[10px] uppercase tracking-widest text-mute">
           {isLoading ? 'loading' : isError ? 'error' : 'ready'}
         </div>
-        {isLoading && (
-          <div className="font-mono text-[11px] text-accent">{pct}%</div>
-        )}
+        {isLoading && <div className="font-mono text-[11px] text-accent">{pct}%</div>}
       </div>
       <div
-        className={`font-mono text-[11px] ${isError ? 'text-err' : 'text-text'} break-words leading-snug`}
+        className={`font-mono text-[11px] ${isError ? 'text-err' : 'text-text'} leading-snug break-words`}
       >
-        {progress.text || shortenModelId(loadedModelId ?? '')}
+        {progress.text}
       </div>
       {isLoading && (
         <div className="mt-2 h-1 bg-bg border border-line overflow-hidden">
-          <div
-            className="h-full bg-accent transition-all"
-            style={{ width: `${pct}%` }}
-          />
+          <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
         </div>
       )}
     </div>
