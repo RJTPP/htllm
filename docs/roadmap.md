@@ -147,7 +147,7 @@ experience before any new surface area.
 | Embedding vector-map visualization (2D projection) | ✦ ☐ |
 | Voice input, i18n, virtual scrolling | ☐ |
 | Light mode / theming — color tokens via CSS variables | ✦ ☐ |
-| Service worker offline caching | ☐ |
+| Installable PWA — web app manifest + service worker for an offline app shell (model weights already persist via the Cache API) | ✦ ☐ |
 | Thinking-mode handling (`<think>` tags) | ☐ |
 
 ---
