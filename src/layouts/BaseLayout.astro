@@ -10,10 +10,14 @@ const { title } = Astro.props;
 // Production CSP is strict (matches SDD section 15.5). The Vite dev server
 // requires 'unsafe-inline'/'unsafe-eval' for HMR and the React refresh
 // preamble, so the dev policy is relaxed for scripts and websockets only.
+// connect-src allows any HTTPS host plus localhost so BYOK / localhost
+// providers can reach user-configured endpoints. script-src 'self' (no
+// inline/eval in prod) remains the boundary that protects IndexedDB keys.
+const connectSrc = "connect-src 'self' https: http://localhost:* http://127.0.0.1:*";
 const prodCsp =
-  "default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://huggingface.co https://*.huggingface.co https://esm.run; img-src 'self' data: blob:; worker-src 'self' blob:";
+  `default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; ${connectSrc}; img-src 'self' data: blob:; worker-src 'self' blob:`;
 const devCsp =
-  "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ws: https://huggingface.co https://*.huggingface.co https://esm.run; img-src 'self' data: blob:; worker-src 'self' blob:";
+  `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; ${connectSrc} ws:; img-src 'self' data: blob:; worker-src 'self' blob:`;
 const csp = import.meta.env.DEV ? devCsp : prodCsp;
 ---
 

@@ -7,6 +7,7 @@ import { Badge } from '../ui/Badge';
 import { Dot } from '../ui/Dot';
 import { ParamControls } from '../providers/ParamControls';
 import { ImportExport } from './ImportExport';
+import { OpenAICompatConfig } from './OpenAICompatConfig';
 
 type SettingsTab = 'templates' | 'providers' | 'params' | 'about';
 
@@ -217,8 +218,8 @@ export function SettingsModal({
         <div className="p-4 space-y-4">
           <p className="text-[12.5px] text-mute leading-relaxed">
             Each provider exposes models from a different runtime. WebLLM runs today;
-            localhost and BYOK providers arrive in Phase 2. BYOK keys will be stored in
-            IndexedDB on this device — nothing leaves until you send a request.
+            localhost providers arrive in Phase 2. BYOK keys are stored in IndexedDB on
+            this device — nothing leaves until you send a request.
           </p>
           {(['in-browser', 'localhost', 'byok'] as const).map((group) => (
             <div key={group}>
@@ -226,9 +227,13 @@ export function SettingsModal({
                 {GROUP_LABELS[group]}
               </div>
               <div className="space-y-1.5">
-                {PROVIDERS.filter((p) => p.group === group).map((p) => (
-                  <ProviderRow key={p.id} provider={p} />
-                ))}
+                {PROVIDERS.filter((p) => p.group === group).map((p) =>
+                  p.id === 'openai-compat' ? (
+                    <OpenAICompatConfig key={p.id} />
+                  ) : (
+                    <ProviderRow key={p.id} provider={p} />
+                  ),
+                )}
               </div>
             </div>
           ))}
