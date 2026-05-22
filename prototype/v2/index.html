@@ -89,17 +89,61 @@ const MOCK_SYSTEM = {
   connection: { effectiveType: "4g", downlink: 24 },
 };
 
+const FAMILY_ORDER = ["Llama", "Qwen", "Gemma", "Phi", "Mistral", "SmolLM", "DeepSeek"];
+
+const BRAND = {
+  Llama: "meta", Qwen: "qwen", Gemma: "google", Phi: "microsoft",
+  Mistral: "mistral", SmolLM: "hf", DeepSeek: "deepseek",
+};
+
+// One entry per model; quantization options live as variants.
 const MOCK_MODELS = [
-  { id: "SmolLM2-135M-Instruct-q0f16-MLC", family: "SmolLM 2", vram: 360, quant: "q0", cached: true },
-  { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", family: "SmolLM 2", vram: 376, quant: "q4", cached: false },
-  { id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", family: "Qwen 2.5", vram: 945, quant: "q4", cached: true },
-  { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", family: "Qwen 2.5", vram: 1629, quant: "q4", cached: false },
-  { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", family: "Llama 3.2", vram: 1128, quant: "q4", cached: false },
-  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", family: "Llama 3.2", vram: 2952, quant: "q4", cached: false },
-  { id: "Phi-3.5-mini-instruct-q4f16_1-MLC", family: "Phi 3.5", vram: 3672, quant: "q4", cached: false },
-  { id: "gemma-2-2b-it-q4f16_1-MLC", family: "Gemma 2", vram: 1895, quant: "q4", cached: false },
-  { id: "Mistral-7B-Instruct-v0.3-q4f16_1-MLC", family: "Mistral", vram: 4573, quant: "q4", cached: false },
-  { id: "Llama-3.1-8B-Instruct-q4f16_1-MLC", family: "Llama 3.1", vram: 5295, quant: "q4", cached: false },
+  { name: "SmolLM2 135M Instruct", family: "SmolLM", variants: [
+    { id: "SmolLM2-135M-Instruct-q0f16-MLC", quant: "q0f16", vram: 360, cached: true },
+    { id: "SmolLM2-135M-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 720, cached: false },
+  ]},
+  { name: "SmolLM2 360M Instruct", family: "SmolLM", variants: [
+    { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 376, cached: false },
+    { id: "SmolLM2-360M-Instruct-q4f32_1-MLC", quant: "q4f32", vram: 580, cached: false },
+  ]},
+  { name: "Qwen2.5 0.5B Instruct", family: "Qwen", variants: [
+    { id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 945, cached: true },
+    { id: "Qwen2.5-0.5B-Instruct-q4f32_1-MLC", quant: "q4f32", vram: 1066, cached: false },
+  ]},
+  { name: "Qwen2.5 1.5B Instruct", family: "Qwen", variants: [
+    { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 1629, cached: false },
+  ]},
+  { name: "Qwen2.5 3B Instruct", family: "Qwen", variants: [
+    { id: "Qwen2.5-3B-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 2504, cached: false },
+  ]},
+  { name: "Llama 3.2 1B Instruct", family: "Llama", variants: [
+    { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 1128, cached: false },
+    { id: "Llama-3.2-1B-Instruct-q4f32_1-MLC", quant: "q4f32", vram: 1426, cached: false },
+  ]},
+  { name: "Llama 3.2 3B Instruct", family: "Llama", variants: [
+    { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 2952, cached: false },
+  ]},
+  { name: "Llama 3.1 8B Instruct", family: "Llama", variants: [
+    { id: "Llama-3.1-8B-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 5295, cached: false },
+  ]},
+  { name: "Phi 3.5 mini Instruct", family: "Phi", variants: [
+    { id: "Phi-3.5-mini-instruct-q4f16_1-MLC", quant: "q4f16", vram: 3672, cached: false },
+  ]},
+  { name: "Gemma 2 2B it", family: "Gemma", variants: [
+    { id: "gemma-2-2b-it-q4f16_1-MLC", quant: "q4f16", vram: 1895, cached: false },
+  ]},
+  { name: "Gemma 2 9B it", family: "Gemma", variants: [
+    { id: "gemma-2-9b-it-q4f16_1-MLC", quant: "q4f16", vram: 5757, cached: false },
+  ]},
+  { name: "Mistral 7B Instruct v0.3", family: "Mistral", variants: [
+    { id: "Mistral-7B-Instruct-v0.3-q4f16_1-MLC", quant: "q4f16", vram: 4573, cached: false },
+  ]},
+  { name: "DeepSeek R1 Distill Qwen 7B", family: "DeepSeek", variants: [
+    { id: "DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC", quant: "q4f16", vram: 5107, cached: false },
+  ]},
+  { name: "DeepSeek R1 Distill Llama 8B", family: "DeepSeek", variants: [
+    { id: "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC", quant: "q4f16", vram: 5320, cached: false },
+  ]},
 ];
 
 const MOCK_TEMPLATES = [
@@ -658,58 +702,167 @@ function ParamControls({ params, setParams }) {
   );
 }
 
-function ModelCard({ model, system, selected, loaded, recommended, onSelect, onLoad, onUnload, onEvict, engineState }) {
-  const { fits, tight } = fitFor(model.vram, system.deviceMemoryGB);
+function BrandLogo({ brand, size = 18 }) {
+  const p = { width: size, height: size, viewBox: "0 0 24 24" };
+  if (brand === "meta") {
+    return (
+      <svg {...p}>
+        <path
+          d="M12 12C9 7.5 6.4 6.6 4.8 7.4 2.6 8.5 2.4 12.4 4 14.8c1.4 2.1 3.6 2 5-.2 1.1-1.7 2-3.4 3-5.2-1 2 .2 4.6 1.6 6.4 1.7 2.2 4.3 2 5.6-.4 1.4-2.7.9-6.5-1.4-7.6C20.3 6.3 17.2 7.3 12 12Z"
+          fill="#0866FF"
+        />
+      </svg>
+    );
+  }
+  if (brand === "microsoft") {
+    return (
+      <svg {...p}>
+        <rect x="3" y="3" width="8.4" height="8.4" fill="#F25022" />
+        <rect x="12.6" y="3" width="8.4" height="8.4" fill="#7FBA00" />
+        <rect x="3" y="12.6" width="8.4" height="8.4" fill="#00A4EF" />
+        <rect x="12.6" y="12.6" width="8.4" height="8.4" fill="#FFB900" />
+      </svg>
+    );
+  }
+  if (brand === "google") {
+    return (
+      <svg {...p} fill="none">
+        <path d="M12 4A8 8 0 0 1 20 12" stroke="#4285F4" strokeWidth="4" />
+        <path d="M20 12A8 8 0 0 1 12 20" stroke="#34A853" strokeWidth="4" />
+        <path d="M12 20A8 8 0 0 1 4 12" stroke="#FBBC05" strokeWidth="4" />
+        <path d="M4 12A8 8 0 0 1 12 4" stroke="#EA4335" strokeWidth="4" />
+        <path d="M12 12H21" stroke="#4285F4" strokeWidth="4" />
+      </svg>
+    );
+  }
+  if (brand === "mistral") {
+    return (
+      <svg {...p}>
+        <rect x="3" y="4" width="18" height="4" fill="#FFD800" />
+        <rect x="3" y="9" width="18" height="4" fill="#FF9D00" />
+        <rect x="3" y="14" width="18" height="4" fill="#FF6B2C" />
+        <rect x="3" y="19" width="18" height="3" fill="#EA2D0F" />
+      </svg>
+    );
+  }
+  if (brand === "hf") {
+    return (
+      <svg {...p}>
+        <circle cx="12" cy="12" r="9" fill="#FFD21E" />
+        <circle cx="9" cy="10.6" r="1.5" fill="#2A2113" />
+        <circle cx="15" cy="10.6" r="1.5" fill="#2A2113" />
+        <path d="M8.6 14.4C9.8 16.3 14.2 16.3 15.4 14.4" stroke="#2A2113" strokeWidth="1.7" strokeLinecap="round" fill="none" />
+      </svg>
+    );
+  }
+  if (brand === "qwen") {
+    return (
+      <svg {...p}>
+        <circle cx="12" cy="12" r="9.5" fill="#615CED" />
+        <path d="M8 8.5L12 15L16 8.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path d="M9 13L12 17.6L15 13" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.5" />
+      </svg>
+    );
+  }
+  if (brand === "deepseek") {
+    return (
+      <svg {...p}>
+        <circle cx="12" cy="12" r="9.5" fill="#4D6BFE" />
+        <path d="M6 13.5C9 9 10.5 9 12 12C13.5 15 15 15 18 10.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...p}>
+      <rect x="3" y="3" width="18" height="18" rx="5" fill="#404040" />
+    </svg>
+  );
+}
+
+function Chevron({ open }) {
+  return (
+    <svg
+      width="14" height="14" viewBox="0 0 24 24" fill="none"
+      className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+    >
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ModelGridCard({ model, system, loadedId, recommended, engineState, onLoad, onUnload, onEvict }) {
+  const [open, setOpen] = useState(false);
+  const anyLoaded = model.variants.some((v) => v.id === loadedId);
+  const anyCached = model.variants.some((v) => v.cached);
+  const minVram = Math.min(...model.variants.map((v) => v.vram));
+  const fit = fitFor(minVram, system.deviceMemoryGB);
+
   return (
     <div
-      className={`border transition-colors ${
-        selected ? "border-accent/70 bg-accent/5" : "border-line bg-surface hover:border-lineHi"
+      className={`rounded-xl border overflow-hidden self-start transition-colors ${
+        anyLoaded ? "border-accent/60 bg-accent/[0.07]" : "border-line bg-surface hover:border-lineHi"
       }`}
     >
-      <button onClick={() => onSelect(model.id)} className="block w-full text-left px-3 py-2.5">
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="font-mono text-[13px] text-text truncate">{shortenId(model.id)}</div>
-          <div className="font-mono text-[11px] text-mute shrink-0">{fmtMB(model.vram)}</div>
+      <button onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left">
+        <BrandLogo brand={BRAND[model.family]} size={22} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[12.5px] text-text truncate leading-tight">{model.name}</div>
+          <div className="font-mono text-[10px] mt-0.5 flex items-center gap-1 whitespace-nowrap overflow-hidden">
+            <span className="text-mute">
+              {fmtMB(minVram)}
+              {model.variants.length > 1 ? ` · ${model.variants.length} var` : ""}
+            </span>
+            {recommended && !anyLoaded && <span className="text-accent">· recommended</span>}
+            {!fit.fits && !fit.tight && <span className="text-err">· too large</span>}
+            {fit.tight && <span className="text-warn">· tight</span>}
+          </div>
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-[10px] text-mute uppercase tracking-wider">{model.quant}</span>
-          {recommended && !loaded && <Badge tone="accent">recommended</Badge>}
-          {loaded && (
-            <Badge tone="accent">
-              <span className="pulse-dot inline-block w-1.5 h-1.5 bg-accent rounded-full" />loaded
-            </Badge>
-          )}
-          {model.cached && !loaded && <Badge tone="ok">cached</Badge>}
-          {!fits && !tight && !loaded && <Badge tone="err">too large</Badge>}
-          {tight && !loaded && <Badge tone="warn">tight fit</Badge>}
-        </div>
+        {anyLoaded && <Badge tone="accent">loaded</Badge>}
+        {!anyLoaded && anyCached && <Dot tone="ok" />}
+        <span className="text-mute"><Chevron open={open} /></span>
       </button>
-      {selected && (
-        <div className="border-t border-line px-3 py-2 flex items-center gap-2 bg-bg/40">
-          {!loaded ? (
-            <button
-              onClick={() => onLoad(model.id)}
-              disabled={engineState === "loading"}
-              className="font-mono text-[11px] px-2.5 py-1 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-40"
-            >
-              {engineState === "loading" ? "loading…" : model.cached ? "load (cached)" : "download & load"}
-            </button>
-          ) : (
-            <button
-              onClick={onUnload}
-              className="font-mono text-[11px] px-2.5 py-1 border border-line text-mute hover:text-text hover:bg-surface2"
-            >
-              unload
-            </button>
-          )}
-          {model.cached && (
-            <button
-              onClick={() => onEvict(model.id)}
-              className="font-mono text-[11px] px-2.5 py-1 border border-line text-mute hover:text-err hover:border-err/40"
-            >
-              evict
-            </button>
-          )}
+
+      {open && (
+        <div className="border-t border-line">
+          {model.variants.map((v) => {
+            const vf = fitFor(v.vram, system.deviceMemoryGB);
+            const loaded = v.id === loadedId;
+            return (
+              <div key={v.id} className="flex items-center gap-1.5 px-3 py-2 border-t border-line/50 first:border-t-0 bg-bg/30">
+                <span className="font-mono text-[10px] text-mute uppercase w-12 shrink-0">{v.quant}</span>
+                <span className="font-mono text-[10px] text-mute w-12 shrink-0">{fmtMB(v.vram)}</span>
+                <div className="flex-1 min-w-0 flex gap-1 overflow-hidden">
+                  {loaded && <Badge tone="accent">loaded</Badge>}
+                  {v.cached && !loaded && <Badge tone="ok">cached</Badge>}
+                  {!vf.fits && !vf.tight && !loaded && <Badge tone="err">too large</Badge>}
+                  {vf.tight && !loaded && <Badge tone="warn">tight</Badge>}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {loaded ? (
+                    <button onClick={onUnload} className="font-mono text-[10px] px-1.5 py-0.5 rounded-md border border-line text-mute hover:text-text">
+                      unload
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onLoad(v.id)}
+                      disabled={engineState === "loading"}
+                      className="font-mono text-[10px] px-1.5 py-0.5 rounded-md border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-40"
+                    >
+                      {v.cached ? "load" : "download"}
+                    </button>
+                  )}
+                  {v.cached && (
+                    <button
+                      onClick={() => onEvict(v.id)}
+                      className="font-mono text-[10px] px-1.5 py-0.5 rounded-md border border-line text-mute hover:text-err hover:border-err/40"
+                    >
+                      evict
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -741,86 +894,126 @@ function StatusPanel({ engineState, progress }) {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="text-mute">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+      <path d="M21 21l-4.3-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FamilyChip({ family, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-full border text-[12px] transition-colors ${
+        active ? "border-accent/60 bg-accent/10 text-text" : "border-line text-mute hover:border-lineHi hover:text-text"
+      }`}
+    >
+      <BrandLogo brand={BRAND[family]} size={17} />
+      {family}
+    </button>
+  );
+}
+
 function ModelPicker({ open, onClose, system, loadedModel, engineState, progress, defaultParams, setDefaultParams, onLoad, onUnload, onEvict, onAddCustom }) {
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState(null);
+  const [family, setFamily] = useState(null);
   const [hideTooLarge, setHideTooLarge] = useState(true);
   const [showParams, setShowParams] = useState(false);
 
-  const filtered = useMemo(() => {
-    let list = MOCK_MODELS;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter((m) => m.id.toLowerCase().includes(q) || m.family.toLowerCase().includes(q));
-    }
-    if (hideTooLarge) {
-      list = list.filter((m) => {
-        const { fits, tight } = fitFor(m.vram, system.deviceMemoryGB);
-        return fits || tight || m.cached || m.id === loadedModel;
-      });
-    }
-    return list;
-  }, [search, hideTooLarge, system, loadedModel]);
+  const families = useMemo(() => FAMILY_ORDER.filter((f) => MOCK_MODELS.some((m) => m.family === f)), []);
+  const totalVariants = useMemo(() => MOCK_MODELS.reduce((n, m) => n + m.variants.length, 0), []);
 
-  const recommendedId = useMemo(() => {
-    const r = MOCK_MODELS.find((m) => fitFor(m.vram, system.deviceMemoryGB).fits);
-    return r ? r.id : null;
+  const minVramOf = (m) => Math.min(...m.variants.map((v) => v.vram));
+
+  const recommendedName = useMemo(() => {
+    const sorted = [...MOCK_MODELS].sort((a, b) => minVramOf(a) - minVramOf(b));
+    const r = sorted.find((m) => fitFor(minVramOf(m), system.deviceMemoryGB).fits);
+    return r ? r.name : null;
   }, [system]);
 
-  const families = useMemo(() => {
-    const map = new Map();
-    filtered.forEach((m) => {
-      if (!map.has(m.family)) map.set(m.family, []);
-      map.get(m.family).push(m);
-    });
-    return [...map.entries()];
-  }, [filtered]);
+  const filtered = useMemo(() => {
+    let list = MOCK_MODELS;
+    if (family) list = list.filter((m) => m.family === family);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((m) => m.name.toLowerCase().includes(q) || m.family.toLowerCase().includes(q));
+    }
+    if (hideTooLarge) {
+      list = list.filter((m) =>
+        m.variants.some((v) => {
+          const f = fitFor(v.vram, system.deviceMemoryGB);
+          return f.fits || f.tight || v.cached || v.id === loadedModel;
+        }),
+      );
+    }
+    return [...list].sort((a, b) => minVramOf(a) - minVramOf(b));
+  }, [search, family, hideTooLarge, system, loadedModel]);
 
   return (
-    <Modal open={open} onClose={onClose} title="Models" subtitle={`${filtered.length} of ${MOCK_MODELS.length} · grouped by family, smallest first`}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Model selection"
+      subtitle={`${filtered.length} models · ${totalVariants} variants · runs in-browser via WebLLM`}
+      width="max-w-4xl"
+    >
       <div className="px-4 py-3 border-b border-line space-y-3 sticky top-0 bg-bg z-10">
-        <input
-          type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search models…"
-          className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[13px] font-mono"
-        />
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2">
+            <SearchIcon />
+          </span>
+          <input
+            type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search models…"
+            className="w-full bg-surface border border-line rounded-lg focus:border-accent/60 focus:outline-none pl-9 pr-3 py-2 text-[13px]"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setFamily(null)}
+            className={`px-3 py-1.5 rounded-full border text-[12px] transition-colors ${
+              family === null ? "border-accent/60 bg-accent/10 text-text" : "border-line text-mute hover:text-text"
+            }`}
+          >
+            All
+          </button>
+          {families.map((f) => (
+            <FamilyChip key={f} family={f} active={family === f} onClick={() => setFamily(family === f ? null : f)} />
+          ))}
+        </div>
         <div className="flex items-center justify-between">
           <label className="flex items-center gap-2 font-mono text-[11px] text-mute cursor-pointer">
             <input type="checkbox" checked={hideTooLarge} onChange={(e) => setHideTooLarge(e.target.checked)} className="accent-accent" />
             hide models too large for this device
           </label>
-          <button onClick={onAddCustom} className="font-mono text-[11px] text-mute hover:text-accent border border-line px-2 py-1">
+          <button onClick={onAddCustom} className="font-mono text-[11px] text-mute hover:text-accent border border-line rounded-md px-2 py-1">
             + custom model
           </button>
         </div>
         <StatusPanel engineState={engineState} progress={progress} />
       </div>
 
-      <div className="p-4 space-y-4">
-        {families.map(([fam, models]) => (
-          <div key={fam}>
-            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-1.5">{fam}</div>
-            <div className="space-y-1">
-              {models.map((m) => (
-                <ModelCard
-                  key={m.id}
-                  model={m}
-                  system={system}
-                  selected={selected === m.id}
-                  loaded={loadedModel === m.id}
-                  recommended={recommendedId === m.id}
-                  engineState={engineState}
-                  onSelect={setSelected}
-                  onLoad={onLoad}
-                  onUnload={onUnload}
-                  onEvict={onEvict}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-        {families.length === 0 && (
-          <div className="font-mono text-[12px] text-mute text-center py-10">No models match your search.</div>
+      <div className="p-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 items-start">
+          {filtered.map((m) => (
+            <ModelGridCard
+              key={m.name}
+              model={m}
+              system={system}
+              loadedId={loadedModel}
+              recommended={m.name === recommendedName}
+              engineState={engineState}
+              onLoad={onLoad}
+              onUnload={onUnload}
+              onEvict={onEvict}
+            />
+          ))}
+        </div>
+        {filtered.length === 0 && (
+          <div className="font-mono text-[12px] text-mute text-center py-12">No models match your search.</div>
         )}
       </div>
 
@@ -1112,8 +1305,10 @@ function App() {
   };
 
   const evictModel = (id) => {
-    const m = MOCK_MODELS.find((x) => x.id === id);
-    if (m) m.cached = false;
+    MOCK_MODELS.forEach((m) => {
+      const v = m.variants.find((x) => x.id === id);
+      if (v) v.cached = false;
+    });
     if (id === loadedModel) unloadModel();
     setThreads((t) => [...t]);
   };
