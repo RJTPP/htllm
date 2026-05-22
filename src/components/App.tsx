@@ -34,6 +34,7 @@ import { ModelPicker } from './providers/ModelPicker';
 import { SettingsModal } from './settings/SettingsModal';
 import { ThreadParams } from './providers/ThreadParams';
 import { CommandPalette, type Command } from './command/CommandPalette';
+import { searchMessages } from '../data/messages';
 
 const webllmProvider = getWebLLMProvider();
 
@@ -329,6 +330,28 @@ export default function App() {
     return cmds;
   }, [handleCreateThread, activeThreadId, deleteThread, threads, selectThread]);
 
+  // Full-text message search for the command palette — resolves matches into
+  // commands that jump to the containing thread.
+  const searchMessagesAsync = useCallback(
+    async (query: string): Promise<Command[]> => {
+      const hits = await searchMessages(query, 25);
+      return hits.map((hit) => {
+        const thread = threads.find((t) => t.id === hit.threadId);
+        return {
+          id: `msg-${hit.messageId}`,
+          label: hit.snippet,
+          sublabel: `${hit.role} · ${thread?.title || 'Untitled thread'}`,
+          group: 'Messages',
+          run: () => {
+            selectThread(hit.threadId);
+            setPage('chat');
+          },
+        };
+      });
+    },
+    [threads, selectThread],
+  );
+
   const handleSend = useCallback(
     (text: string, images?: import('../lib/image').ChatImage[]) => {
       if (modelReady) {
@@ -506,6 +529,7 @@ export default function App() {
         open={modal === 'palette'}
         onClose={() => setModal(null)}
         commands={commands}
+        asyncCommands={searchMessagesAsync}
       />
     </div>
   );
