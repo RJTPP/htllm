@@ -17,6 +17,7 @@ export function Composer({
   onSend,
   onStop,
   onParams,
+  onOpenPicker,
 }: {
   modelReady: boolean;
   model: string | null;
@@ -26,6 +27,7 @@ export function Composer({
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onParams: () => void;
+  onOpenPicker: () => void;
 }) {
   const [input, setInput] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
@@ -45,7 +47,12 @@ export function Composer({
       : null;
 
   const send = () => {
-    if (!input.trim() || !modelReady || generating) return;
+    if (!input.trim() || generating) return;
+    // No model yet — keep the draft and open the picker instead of sending.
+    if (!modelReady) {
+      onOpenPicker();
+      return;
+    }
     onSend(input.trim(), images.length > 0 ? images : undefined);
     setInput('');
     setImages([]);
@@ -122,13 +129,12 @@ export function Composer({
               }}
               onPaste={handlePaste}
               rows={1}
-              disabled={!modelReady}
               placeholder={
                 modelReady
                   ? 'Type a message — / for templates, Enter to send'
-                  : 'Load a model to begin'
+                  : "Type a message — you'll pick a model on send"
               }
-              className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute disabled:opacity-40"
+              className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute"
               style={{ maxHeight: '180px' }}
             />
             {modelReady && (
@@ -165,7 +171,7 @@ export function Composer({
             ) : (
               <button
                 onClick={send}
-                disabled={!modelReady || !input.trim()}
+                disabled={!input.trim()}
                 className="flex items-center gap-1 font-mono text-[12px] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
               >
                 send <Icon name="send" size={14} />
