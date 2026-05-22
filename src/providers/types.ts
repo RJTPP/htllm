@@ -2,6 +2,9 @@ export interface ChatProvider {
   id: string;
   displayName: string;
   authMode: 'none' | 'byok-local';
+  // True for engines with a download/load step (WebLLM); false for HTTP
+  // providers that are ready as soon as they have a model id.
+  needsModelLoad: boolean;
   capabilities: {
     streaming: boolean;
     toolCalls: boolean;
