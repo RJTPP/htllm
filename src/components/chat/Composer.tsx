@@ -237,11 +237,14 @@ export function Composer({
             <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
           )}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1" title="Reasoning effort — controls how much the model thinks before responding">
-              <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />
+            <div className="flex items-center gap-1">
+              <span title="Reasoning effort — controls how much the model thinks before responding">
+                <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />
+              </span>
               {reasoningCapability === 'toggle' ? (
                 <button
                   onClick={() => onReasoningChange(reasoningEffort === 'off' ? 'high' : 'off')}
+                  title="Reasoning effort — controls how much the model thinks before responding"
                   className={`px-1.5 py-0.5 border transition-colors ${
                     reasoningEffort !== 'off'
                       ? 'border-accent/60 text-accent bg-accent/10'
@@ -251,7 +254,7 @@ export function Composer({
                   think {reasoningEffort !== 'off' ? 'on' : 'off'}
                 </button>
               ) : (
-                <div className="flex -space-x-px">
+                <div className="flex -space-x-px" title="Reasoning effort — controls how much the model thinks before responding">
                   {(['off', 'low', 'medium', 'high'] as const).map((level) => (
                     <button
                       key={level}
