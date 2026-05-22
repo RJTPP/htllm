@@ -96,6 +96,7 @@ export function useChat(
           maxTokens: params.maxTokens,
           presencePenalty: params.presencePenalty,
           frequencyPenalty: params.frequencyPenalty,
+          reasoningEffort: params.reasoningEffort,
           signal: controller.signal,
         })) {
           fullContent += chunk.delta;

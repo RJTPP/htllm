@@ -185,6 +185,18 @@ export class OpenAICompatibleProvider implements ChatProvider {
 
     const messages = params.messages.map((m) => toOpenAIMessage(m.role, m.content));
 
+    // Build reasoning effort params. Different providers use different fields:
+    // - OpenAI o-series: `reasoning_effort` (low/medium/high)
+    // - Qwen3 via Ollama/vLLM: `enable_thinking` (boolean)
+    // We send both — providers that don't understand a field ignore it.
+    const reasoningParams: Record<string, unknown> = {};
+    if (params.reasoningEffort && params.reasoningEffort !== 'off') {
+      reasoningParams.reasoning_effort = params.reasoningEffort;
+      reasoningParams.enable_thinking = true;
+    } else if (params.reasoningEffort === 'off') {
+      reasoningParams.enable_thinking = false;
+    }
+
     let res: Response;
     try {
       res = await fetch(`${this.baseURL}/chat/completions`, {
@@ -203,6 +215,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
           max_tokens: params.maxTokens,
           presence_penalty: params.presencePenalty,
           frequency_penalty: params.frequencyPenalty,
+          ...reasoningParams,
         }),
         signal: params.signal,
       });

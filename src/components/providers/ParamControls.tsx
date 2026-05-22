@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { ModelParams } from '../../providers/types';
+import type { ModelParams, ReasoningEffort } from '../../providers/types';
+
+const REASONING_LEVELS: { value: ReasoningEffort; label: string; description: string }[] = [
+  { value: 'off', label: 'OFF', description: 'No reasoning' },
+  { value: 'low', label: 'LOW', description: 'Brief reasoning' },
+  { value: 'medium', label: 'MED', description: 'Moderate reasoning' },
+  { value: 'high', label: 'HIGH', description: 'Full reasoning' },
+];
 
 function ParamSlider({
   label,
@@ -76,6 +83,27 @@ export function ParamControls({
     onChange({ [k]: v } as Partial<ModelParams>);
   return (
     <div className="space-y-2.5">
+      <div className="flex items-center gap-3">
+        <label className="font-mono text-[11px] text-mute w-28 shrink-0">reasoning</label>
+        <div className="flex-1 flex gap-1">
+          {REASONING_LEVELS.map((level) => (
+            <button
+              key={level.value}
+              onClick={() => onChange({ reasoningEffort: level.value })}
+              className={`flex-1 font-mono text-[10px] px-2 py-1 border transition-colors ${
+                params.reasoningEffort === level.value
+                  ? level.value === 'off'
+                    ? 'border-line text-mute bg-surface'
+                    : 'border-accent/60 text-accent bg-accent/10'
+                  : 'border-line text-mute/60 hover:text-mute'
+              }`}
+              title={level.description}
+            >
+              {level.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <ParamSlider
         label="context_window"
         value={params.contextWindow}

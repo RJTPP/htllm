@@ -33,6 +33,7 @@ export interface ChatParams {
   maxTokens?: number;
   presencePenalty?: number;
   frequencyPenalty?: number;
+  reasoningEffort?: ReasoningEffort;
   signal?: AbortSignal;
 }
 
@@ -86,6 +87,8 @@ export interface Thread {
   updatedAt: number;
 }
 
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high';
+
 export interface ModelParams {
   temperature: number;
   topP: number;
@@ -94,6 +97,7 @@ export interface ModelParams {
   frequencyPenalty: number;
   contextWindow: number;
   historyMsgs: number;
+  reasoningEffort: ReasoningEffort;
 }
 
 export interface PromptTemplate {

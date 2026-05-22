@@ -108,9 +108,22 @@ export class WebLLMProvider implements ChatProvider {
       throw new ProviderError('webllm', 'Engine not ready');
     }
 
-    const openaiMessages = params.messages.map((m) =>
+    let openaiMessages = params.messages.map((m) =>
       toOpenAIMessage(m.role, m.content),
     );
+
+    // For Qwen3 models in WebLLM, thinking mode is controlled via prompt
+    // markers. When reasoning is off, prepend /no_think to the last user
+    // message so the model skips chain-of-thought.
+    const isQwen = params.modelId.toLowerCase().includes('qwen');
+    if (isQwen && params.reasoningEffort === 'off') {
+      openaiMessages = openaiMessages.map((m, i) => {
+        if (i === openaiMessages.length - 1 && m.role === 'user' && typeof m.content === 'string') {
+          return { ...m, content: `/no_think\n${m.content}` };
+        }
+        return m;
+      });
+    }
 
     const engine = this.engine;
     const onAbort = () => engine.interruptGenerate();
