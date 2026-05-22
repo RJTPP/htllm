@@ -1876,23 +1876,20 @@ function KnowledgeSearch({ corpora, ready }) {
   );
 }
 
-function KnowledgeDocuments({ corpora, docs, loadedEmbed }) {
-  const [activeCorpus, setActiveCorpus] = useState(corpora[0]?.id);
+function KnowledgeDocuments({ corpora, docs, activeCorpus, setActiveCorpus, onNewCorpus, onAddDocs }) {
   const corpusDocs = docs.filter((d) => d.corpus === activeCorpus);
   const corpus = corpora.find((c) => c.id === activeCorpus);
   const [selectedDoc, setSelectedDoc] = useState(corpusDocs[0]?.id || null);
   useEffect(() => { setSelectedDoc(docs.filter((d) => d.corpus === activeCorpus)[0]?.id || null); }, [activeCorpus]);
   const doc = corpusDocs.find((d) => d.id === selectedDoc);
-  const [modal, setModal] = useState(null);
 
   return (
-    <React.Fragment>
     <div className="flex border border-line bg-surface min-h-[440px]">
       {/* col 1: corpora */}
       <div className="w-[180px] border-r border-line flex flex-col">
         <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
           <span>corpora · {corpora.length}</span>
-          <button onClick={() => setModal("newCorpus")} className="text-mute hover:text-accent" title="New corpus"><Icon name="plus" size={12} /></button>
+          <button onClick={onNewCorpus} className="text-mute hover:text-accent" title="New corpus"><Icon name="plus" size={12} /></button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {corpora.map((c) => (
@@ -1909,7 +1906,7 @@ function KnowledgeDocuments({ corpora, docs, loadedEmbed }) {
       <div className="w-[260px] border-r border-line flex flex-col">
         <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
           <span>documents · {corpusDocs.length}</span>
-          <button onClick={() => setModal("addDocs")} className="text-mute hover:text-accent" title="Add documents"><Icon name="plus" size={12} /></button>
+          <button onClick={onAddDocs} className="text-mute hover:text-accent" title="Add documents"><Icon name="plus" size={12} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-1">
           {corpusDocs.length > 0 ? corpusDocs.map((d) => (
@@ -1956,7 +1953,7 @@ function KnowledgeDocuments({ corpora, docs, loadedEmbed }) {
               </div>
             </div>
           ) : (
-            <button onClick={() => setModal("addDocs")}
+            <button onClick={onAddDocs}
               className="w-full border border-line border-dashed px-4 py-10 text-center bg-surface/40 hover:border-accent/50 hover:bg-surface/60 transition-colors">
               <div className="flex justify-center text-mute"><Icon name="doc" size={22} /></div>
               <div className="mt-2 text-[13px] text-text">No documents in this corpus</div>
@@ -1966,9 +1963,6 @@ function KnowledgeDocuments({ corpora, docs, loadedEmbed }) {
         </div>
       </div>
     </div>
-    <NewCorpusModal open={modal === "newCorpus"} onClose={() => setModal(null)} loadedEmbed={loadedEmbed} />
-    <AddDocumentsModal open={modal === "addDocs"} onClose={() => setModal(null)} corpora={corpora} defaultCorpus={activeCorpus} />
-    </React.Fragment>
   );
 }
 
@@ -2165,6 +2159,8 @@ function AddDocumentsModal({ open, onClose, corpora, defaultCorpus }) {
 
 function KnowledgePage({ loadedEmbed, embedState, onOpenEmbedPicker }) {
   const [mode, setMode] = useState("search");
+  const [activeCorpus, setActiveCorpus] = useState(MOCK_CORPORA[0]?.id);
+  const [modal, setModal] = useState(null);
   const ready = embedState === "ready" && !!loadedEmbed;
   const mismatchCorpora = MOCK_CORPORA.filter((c) => loadedEmbed && c.embeddingModel !== loadedEmbed).length;
 
@@ -2187,15 +2183,26 @@ function KnowledgePage({ loadedEmbed, embedState, onOpenEmbedPicker }) {
 
         <EmbeddingBar loadedEmbed={loadedEmbed} embedState={embedState} onOpenPicker={onOpenEmbedPicker} mismatchCorpora={mismatchCorpora} />
 
-        <div className="flex gap-1.5 mb-4">
-          {tab("search", "search", "Global search")}
-          {tab("documents", "doc", "Documents")}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex gap-1.5">
+            {tab("search", "search", "Global search")}
+            {tab("documents", "doc", "Documents")}
+          </div>
+          <button onClick={() => setModal("addDocs")}
+            className="flex items-center gap-1.5 font-mono text-[12px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10 shrink-0">
+            <Icon name="plus" size={14} /> Add documents
+          </button>
         </div>
 
         {mode === "search"
           ? <KnowledgeSearch corpora={MOCK_CORPORA} ready={ready} />
-          : <KnowledgeDocuments corpora={MOCK_CORPORA} docs={MOCK_DOCS} loadedEmbed={loadedEmbed} />}
+          : <KnowledgeDocuments corpora={MOCK_CORPORA} docs={MOCK_DOCS}
+              activeCorpus={activeCorpus} setActiveCorpus={setActiveCorpus}
+              onNewCorpus={() => setModal("newCorpus")} onAddDocs={() => setModal("addDocs")} />}
       </div>
+
+      <NewCorpusModal open={modal === "newCorpus"} onClose={() => setModal(null)} loadedEmbed={loadedEmbed} />
+      <AddDocumentsModal open={modal === "addDocs"} onClose={() => setModal(null)} corpora={MOCK_CORPORA} defaultCorpus={activeCorpus} />
     </div>
   );
 }
