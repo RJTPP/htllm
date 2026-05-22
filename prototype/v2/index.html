@@ -1004,8 +1004,8 @@ function SystemPromptBar({ value, onChange }) {
         <span className="text-accent uppercase tracking-widest shrink-0">system</span>
         <span className="text-mute shrink-0">·</span>
         <span className="text-text/70 flex-1 min-w-0 truncate">default</span>
-        <button onClick={() => setExpanded(true)} className="hover:text-text shrink-0">show ↓</button>
         <button onClick={() => { setEditing(true); setExpanded(true); }} className="hover:text-text shrink-0">edit</button>
+        <button onClick={() => setExpanded(true)} className="hover:text-text shrink-0">show ↓</button>
       </div>
     );
   }
