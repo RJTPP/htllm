@@ -108,6 +108,7 @@ experience before any new surface area.
 | OpenAI-compatible API provider — BYOK, base URL + key (covers Groq / OpenRouter / custom) | ✦ ☐ |
 | Markdown rendering + code block syntax highlighting | ✦ ☐ (D3) |
 | Context controls — context-window size + history window (messages attached per request) | ✦ ☐ |
+| Auto-generated session names — model-written thread titles from the conversation (replaces the first-message slice) | ✦ ☐ |
 | Prompt-template management UI — create / edit / delete, plus collections, search and import / export | ◐ data layer exists; no UI |
 | Storage manager — basic (model cache list, IDB usage, clear data) | ✦ ☐ |
 | Global conversation search — full-text over all threads/messages | ✦ ☐ |
