@@ -1,4 +1,4 @@
-# Software Design Description — htllm Phase 1 (Foundation)
+# Software Design Description
 
 IEEE 1016-inspired internal guidance, unofficial.
 
