@@ -7,6 +7,7 @@ export function Modal({
   subtitle,
   children,
   width = 'max-w-2xl',
+  stableHeight = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -14,6 +15,9 @@ export function Modal({
   subtitle?: ReactNode;
   children: ReactNode;
   width?: string;
+  /** Pin the modal to a fixed height so it doesn't resize as content
+   *  changes (e.g. switching tabs). Content scrolls internally. */
+  stableHeight?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -30,7 +34,9 @@ export function Modal({
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div
-        className={`relative z-10 w-full ${width} max-h-[84vh] flex flex-col bg-bg border border-line`}
+        className={`relative z-10 w-full ${width} ${
+          stableHeight ? 'h-[84vh]' : 'max-h-[84vh]'
+        } flex flex-col bg-bg border border-line`}
       >
         <div className="flex items-start justify-between px-4 py-3 border-b border-line">
           <div>
