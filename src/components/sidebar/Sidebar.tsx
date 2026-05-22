@@ -1,6 +1,7 @@
 import type { Thread } from '../../providers/types';
 import { shortenModelId } from '../../lib/format';
 import { ThreadList } from './ThreadList';
+import { ImportExport } from '../settings/ImportExport';
 
 export function Sidebar({
   threads,
@@ -36,6 +37,8 @@ export function Sidebar({
           onDelete={onDeleteThread}
         />
       </div>
+
+      <ImportExport />
 
       <div className="border-t border-line">
         <button
