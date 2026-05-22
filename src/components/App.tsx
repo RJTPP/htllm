@@ -235,6 +235,7 @@ export default function App() {
                   generating={generating}
                   templates={templates}
                   defaultSystemPrompt={defaultSystemPrompt}
+                  params={params}
                   onSend={send}
                   onStop={stop}
                   onRegenerate={regenerate}

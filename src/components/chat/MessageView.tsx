@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Message, ModelInfo, ContentPart, UsageStats } from '../../providers/types';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
-import { Icon } from '../ui/Icon';
+import { Info, RefreshCw } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MessageBody } from './MessageBody';
 
@@ -98,7 +98,7 @@ export function MessageView({
                 }`}
                 title="Generation stats"
               >
-                <Icon name="info" size={12} /> stats
+                <Info size={12} /> stats
               </button>
             )}
             {isLast && (
@@ -107,7 +107,7 @@ export function MessageView({
                 className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border border-transparent text-mute hover:text-text"
                 title="Regenerate response"
               >
-                <Icon name="regen" size={12} /> regenerate
+                <RefreshCw size={12} /> regenerate
               </button>
             )}
           </div>

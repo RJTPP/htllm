@@ -3,10 +3,58 @@ import type { PromptTemplate } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
-import { Icon } from '../ui/Icon';
+import { Image, ArrowRight } from 'lucide-react';
 import { PromptHints } from './PromptHints';
 
 const MAX_IMAGES = 3;
+
+function ContextRing({
+  used,
+  total,
+}: {
+  used: number;
+  total: number;
+}) {
+  const pct = total > 0 ? Math.min(used / total, 1) : 0;
+  const r = 6;
+  const sw = 2.5;
+  const size = (r + sw) * 2;
+  const center = size / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - pct);
+  const color = pct > 0.9 ? '#ef4444' : pct > 0.7 ? '#eab308' : '#f59e0b';
+  const label = `${(used / 1000).toFixed(1)}k / ${(total / 1000).toFixed(1)}k (${Math.round(pct * 100)}%)`;
+
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`Context: ${label}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+        <circle
+          cx={center}
+          cy={center}
+          r={r}
+          fill="none"
+          stroke="#404040"
+          strokeWidth={sw}
+        />
+        {pct > 0 && (
+          <circle
+            cx={center}
+            cy={center}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={sw}
+            strokeDasharray={circ}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${center} ${center})`}
+          />
+        )}
+      </svg>
+      <span>{label}</span>
+    </span>
+  );
+}
 
 export function Composer({
   modelReady,
@@ -14,6 +62,8 @@ export function Composer({
   visionOk,
   generating,
   templates,
+  contextUsed,
+  contextTotal,
   onSend,
   onStop,
   onParams,
@@ -24,6 +74,8 @@ export function Composer({
   visionOk: boolean;
   generating: boolean;
   templates: PromptTemplate[];
+  contextUsed: number;
+  contextTotal: number;
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onParams: () => void;
@@ -48,7 +100,6 @@ export function Composer({
 
   const send = () => {
     if (!input.trim() || generating) return;
-    // No model yet — keep the draft and open the picker instead of sending.
     if (!modelReady) {
       onOpenPicker();
       return;
@@ -149,7 +200,7 @@ export function Composer({
                   }
                   className="px-2.5 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  <Icon name="image" size={16} />
+                  <Image size={16} />
                 </button>
                 <input
                   ref={fileRef}
@@ -174,13 +225,17 @@ export function Composer({
                 disabled={!input.trim()}
                 className="flex items-center gap-1 font-mono text-[12px] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
               >
-                send <Icon name="send" size={14} />
+                send <ArrowRight size={14} />
               </button>
             )}
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
-          <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
+          {contextTotal > 0 ? (
+            <ContextRing used={contextUsed} total={contextTotal} />
+          ) : (
+            <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
+          )}
           <button
             onClick={onParams}
             disabled={!modelReady}

@@ -1,5 +1,5 @@
 import type { Thread } from '../../providers/types';
-import { Icon } from '../ui/Icon';
+import { Plus } from 'lucide-react';
 import { ThreadItem } from './ThreadItem';
 
 export function Sidebar({
@@ -24,7 +24,7 @@ export function Sidebar({
           onClick={onNew}
           className="w-full flex items-center justify-center gap-1.5 font-mono text-[11px] px-2.5 py-2 border border-line text-text bg-bg hover:border-accent/50 hover:text-accent transition-colors"
         >
-          <Icon name="plus" size={13} /> new chat
+          <Plus size={13} /> new chat
         </button>
       </div>
       <div className="px-3 pb-1 font-mono text-[10px] text-mute uppercase tracking-widest">
