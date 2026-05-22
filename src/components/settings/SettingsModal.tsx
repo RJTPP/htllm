@@ -139,7 +139,8 @@ export function SettingsModal({
 
   const doReset = async () => {
     await resetEverything();
-    window.location.reload();
+    // resetEverything() clears the first-run flag, so '/' shows the landing.
+    window.location.href = '/';
   };
 
   return (
