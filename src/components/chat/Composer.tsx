@@ -257,16 +257,16 @@ export function Composer({
                   think {reasoningEffort !== 'off' ? 'on' : 'off'}
                 </button>
               ) : (
-                <div className="flex">
+                <div className="flex -space-x-px">
                   {(['off', 'low', 'medium', 'high'] as const).map((level) => (
                     <button
                       key={level}
                       onClick={() => onReasoningChange(level)}
-                      className={`px-1.5 py-0.5 border-y border-r first:border-l transition-colors ${
+                      className={`px-1.5 py-0.5 border transition-colors ${
                         reasoningEffort === level
                           ? level === 'off'
-                            ? 'border-line text-mute bg-surface'
-                            : 'border-accent/60 text-accent bg-accent/10'
+                            ? 'border-line text-mute bg-surface z-10'
+                            : 'border-accent/60 text-accent bg-accent/10 z-10'
                           : 'border-line text-mute/50 hover:text-mute'
                       }`}
                     >
