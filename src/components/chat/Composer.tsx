@@ -244,13 +244,8 @@ export function Composer({
                   : 'This model supports reasoning effort levels'
                 : 'Reasoning control — may not apply to this model'
             }>
-              <Brain size={11} className={
-                reasoningEffort !== 'off'
-                  ? reasoningCapability ? 'text-accent' : 'text-accent/50'
-                  : 'text-mute/40'
-              } />
+              <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />
               {reasoningCapability === 'toggle' ? (
-                // Detected toggle model — compact on/off
                 <button
                   onClick={() => onReasoningChange(reasoningEffort === 'off' ? 'high' : 'off')}
                   className={`px-1.5 py-0.5 border transition-colors ${
@@ -262,7 +257,6 @@ export function Composer({
                   think {reasoningEffort !== 'off' ? 'on' : 'off'}
                 </button>
               ) : (
-                // Effort model or undetected — show full selector
                 <div className="flex">
                   {(['off', 'low', 'medium', 'high'] as const).map((level) => (
                     <button
@@ -272,12 +266,8 @@ export function Composer({
                         reasoningEffort === level
                           ? level === 'off'
                             ? 'border-line text-mute bg-surface'
-                            : reasoningCapability
-                              ? 'border-accent/60 text-accent bg-accent/10'
-                              : 'border-accent/40 text-accent/60 bg-accent/5'
-                          : reasoningCapability
-                            ? 'border-line text-mute/50 hover:text-mute'
-                            : 'border-line/60 text-mute/30 hover:text-mute/50'
+                            : 'border-accent/60 text-accent bg-accent/10'
+                          : 'border-line text-mute/50 hover:text-mute'
                       }`}
                     >
                       {level === 'medium' ? 'med' : level}

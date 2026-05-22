@@ -13,6 +13,7 @@ const EFFORT_PATTERNS: RegExp[] = [
   /\bo[134]$/i,           // bare "o1", "o3", "o4"
   /openai\/o[134]/i,      // OpenRouter-style "openai/o3-mini"
   /gpt-o[134]/i,          // alternate naming "gpt-o3"
+  /gpt-oss/i,             // openai/gpt-oss-* series
 ];
 
 /** Models that support thinking toggle (on/off) only. */

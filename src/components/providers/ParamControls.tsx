@@ -88,12 +88,6 @@ export function ParamControls({
    *  Omit to always show the full control (e.g. in global defaults). */
   reasoningCapability?: ReasoningCapability | null;
 }) {
-  // Determine which buttons to show:
-  // - undefined (global defaults, no model context): show full effort levels
-  // - 'effort': show OFF/LOW/MED/HIGH (auto-detected)
-  // - 'toggle': show OFF/ON (auto-detected)
-  // - null (model loaded but not detected as reasoning): show full, dimmed
-  const isDetected = reasoningCapability === 'effort' || reasoningCapability === 'toggle';
   const levels = reasoningCapability === 'toggle' ? TOGGLE_LEVELS : EFFORT_LEVELS;
 
   // For toggle mode, map any non-off value to 'high' for display purposes.
@@ -106,13 +100,10 @@ export function ParamControls({
     onChange({ [k]: v } as Partial<ModelParams>);
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-3">
-        <label className="font-mono text-[11px] text-mute w-28 shrink-0">
-          reasoning
-          {reasoningCapability === null && (
-            <span className="block text-[9px] text-mute/50 leading-tight">may not apply</span>
-          )}
-        </label>
+      <div className="flex items-center gap-3" title={
+        reasoningCapability === null ? 'Reasoning control — may not apply to this model' : undefined
+      }>
+        <label className="font-mono text-[11px] text-mute w-28 shrink-0">reasoning</label>
         <div className="flex-1 flex gap-1">
           {levels.map((level) => (
             <button
@@ -122,12 +113,8 @@ export function ParamControls({
                 activeValue === level.value
                   ? level.value === 'off'
                     ? 'border-line text-mute bg-surface'
-                    : isDetected || reasoningCapability === undefined
-                      ? 'border-accent/60 text-accent bg-accent/10'
-                      : 'border-accent/40 text-accent/60 bg-accent/5'
-                  : isDetected || reasoningCapability === undefined
-                    ? 'border-line text-mute/60 hover:text-mute'
-                    : 'border-line/60 text-mute/40 hover:text-mute/60'
+                    : 'border-accent/60 text-accent bg-accent/10'
+                  : 'border-line text-mute/60 hover:text-mute'
               }`}
               title={level.description}
             >
