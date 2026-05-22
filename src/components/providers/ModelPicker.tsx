@@ -12,6 +12,7 @@ import { getHttpProviders, WEBLLM_ID } from '../../providers/registry';
 import { Modal } from '../ui/Modal';
 import { Search } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
+import { ProviderLogo } from '../ui/ProviderLogo';
 import { StatusPanel } from './StatusPanel';
 import { ParamControls } from './ParamControls';
 import { ModelGridCard } from './ModelGridCard';
@@ -152,10 +153,11 @@ export function ModelPicker({
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`font-mono text-[11px] px-4 py-2.5 border-r border-line whitespace-nowrap ${
+            className={`flex items-center gap-1.5 font-mono text-[11px] px-4 py-2.5 border-r border-line whitespace-nowrap ${
               tab === id ? 'text-accent bg-accent/5' : 'text-mute hover:text-text'
             }`}
           >
+            <ProviderLogo providerId={id} size={13} />
             {label}
           </button>
         ))}

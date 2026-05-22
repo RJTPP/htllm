@@ -1,5 +1,5 @@
 import type { ModelInfo } from '../../providers/types';
-import { User, MessageCircle } from 'lucide-react';
+import { User, Bot } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { brandForModelId } from '../../lib/model-meta';
 
@@ -22,7 +22,7 @@ export function Avatar({
   const brand = modelId ? brandForModelId(modelId, models) : null;
   return (
     <div className="w-7 h-7 shrink-0 rounded-md border border-line bg-surface flex items-center justify-center">
-      {brand ? <BrandLogo brand={brand} size={17} /> : <MessageCircle size={15} />}
+      {brand ? <BrandLogo brand={brand} size={17} /> : <Bot size={15} className="text-mute" />}
     </div>
   );
 }
