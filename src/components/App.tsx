@@ -116,6 +116,13 @@ export default function App() {
     }
   }, [threadsLoaded, activeThreadId, loadedModelId, createThread]);
 
+  useEffect(() => {
+    if (!modelReady || !pendingRef.current) return;
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    send(pending.text, pending.images);
+  }, [modelReady, send]);
+
   const handleLoad = useCallback(
     async (modelId: string) => {
       setEngineStatus('loading');
@@ -134,12 +141,6 @@ export default function App() {
         setModal(null);
         setLastModelId(modelId);
         await setSetting('lastModelId', modelId);
-
-        const pending = pendingRef.current;
-        if (pending) {
-          pendingRef.current = null;
-          send(pending.text, pending.images);
-        }
       } catch (err) {
         setEngineStatus('error');
         setLoadProgress({
