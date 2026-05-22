@@ -33,10 +33,11 @@ import { StorageStub } from './storage/StorageStub';
 import { ModelPicker } from './providers/ModelPicker';
 import { SettingsModal } from './settings/SettingsModal';
 import { ThreadParams } from './providers/ThreadParams';
+import { CommandPalette, type Command } from './command/CommandPalette';
 
 const webllmProvider = getWebLLMProvider();
 
-type ModalId = 'picker' | 'settings' | 'params' | null;
+type ModalId = 'picker' | 'settings' | 'params' | 'palette' | null;
 
 export default function App() {
   const system = useSystem();
@@ -243,10 +244,14 @@ export default function App() {
     setPage('chat');
   }, [createThread, activeProviderId, activeModelId, activeThreadId, messages.length]);
 
-  // Cmd/Ctrl + Shift + O — new chat.
+  // Global shortcuts: Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+Shift+O
+  // starts a new chat.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyO') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === 'KeyK') {
+        e.preventDefault();
+        setModal((m) => (m === 'palette' ? null : 'palette'));
+      } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyO') {
         e.preventDefault();
         handleCreateThread();
       }
@@ -254,6 +259,75 @@ export default function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleCreateThread]);
+
+  const commands: Command[] = useMemo(() => {
+    const cmds: Command[] = [
+      {
+        id: 'new-chat',
+        label: 'New chat',
+        group: 'Actions',
+        hint: '⇧⌘O',
+        run: () => void handleCreateThread(),
+      },
+      {
+        id: 'change-model',
+        label: 'Change model',
+        group: 'Actions',
+        run: () => setModal('picker'),
+      },
+      {
+        id: 'thread-params',
+        label: 'Thread parameters',
+        group: 'Actions',
+        run: () => setModal('params'),
+      },
+      {
+        id: 'settings',
+        label: 'Open settings',
+        group: 'Actions',
+        run: () => setModal('settings'),
+      },
+      {
+        id: 'nav-chat',
+        label: 'Go to Chat',
+        group: 'Navigation',
+        run: () => setPage('chat'),
+      },
+      {
+        id: 'nav-knowledge',
+        label: 'Go to Knowledge',
+        group: 'Navigation',
+        run: () => setPage('knowledge'),
+      },
+      {
+        id: 'nav-storage',
+        label: 'Go to Storage',
+        group: 'Navigation',
+        run: () => setPage('storage'),
+      },
+    ];
+    if (activeThreadId) {
+      cmds.push({
+        id: 'delete-thread',
+        label: 'Delete current thread',
+        group: 'Actions',
+        run: () => void deleteThread(activeThreadId),
+      });
+    }
+    for (const t of threads) {
+      if (t.id === activeThreadId) continue;
+      cmds.push({
+        id: `thread-${t.id}`,
+        label: t.title || 'Untitled thread',
+        group: 'Switch to thread',
+        run: () => {
+          selectThread(t.id);
+          setPage('chat');
+        },
+      });
+    }
+    return cmds;
+  }, [handleCreateThread, activeThreadId, deleteThread, threads, selectThread]);
 
   const handleSend = useCallback(
     (text: string, images?: import('../lib/image').ChatImage[]) => {
@@ -426,6 +500,12 @@ export default function App() {
         reasoningCapability={activeReasoningCapability}
         onApply={handleThreadParamsApply}
         onReset={handleThreadParamsReset}
+      />
+
+      <CommandPalette
+        open={modal === 'palette'}
+        onClose={() => setModal(null)}
+        commands={commands}
       />
     </div>
   );
