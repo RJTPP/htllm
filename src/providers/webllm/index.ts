@@ -1,0 +1,158 @@
+import { WebWorkerMLCEngine, deleteModelAllInfoInCache } from '@mlc-ai/web-llm';
+import type {
+  ChatProvider,
+  ChatParams,
+  ChatChunk,
+  ModelInfo,
+  LoadProgress,
+  EngineStatus,
+  ContentPart,
+} from '../types';
+import { ProviderError } from '../../lib/errors';
+import { getModelList } from './model-list';
+
+function contentToOpenAI(
+  content: string | ContentPart[],
+): string | Array<{ type: string; text?: string; image_url?: { url: string } }> {
+  if (typeof content === 'string') return content;
+  return content.map((part) => {
+    if (part.type === 'text') return { type: 'text' as const, text: part.text };
+    return { type: 'image_url' as const, image_url: { url: part.image_url.url } };
+  });
+}
+
+export class WebLLMProvider implements ChatProvider {
+  readonly id = 'webllm';
+  readonly displayName = 'WebLLM (In-Browser)';
+  readonly authMode = 'none' as const;
+  readonly capabilities = {
+    streaming: true,
+    toolCalls: false,
+    vision: true,
+  };
+
+  private engine: WebWorkerMLCEngine | null = null;
+  private worker: Worker | null = null;
+  private loadedModelId: string | null = null;
+  private status: EngineStatus = 'idle';
+
+  async listModels(): Promise<ModelInfo[]> {
+    return getModelList();
+  }
+
+  getLoadedModelId(): string | null {
+    return this.loadedModelId;
+  }
+
+  getEngineStatus(): EngineStatus {
+    return this.status;
+  }
+
+  async loadModel(
+    modelId: string,
+    onProgress: (report: LoadProgress) => void,
+  ): Promise<void> {
+    this.status = 'loading';
+
+    if (this.engine) {
+      try {
+        await this.engine.unload();
+      } catch {
+        // ignore unload errors
+      }
+      this.loadedModelId = null;
+    }
+
+    if (!this.worker) {
+      this.worker = new Worker(
+        new URL('../../workers/webllm-worker.ts', import.meta.url),
+        { type: 'module' },
+      );
+    }
+
+    this.engine = new WebWorkerMLCEngine(this.worker);
+    this.engine.setInitProgressCallback((report) => {
+      onProgress({
+        progress: report.progress,
+        text: report.text,
+        timeElapsed: report.timeElapsed,
+      });
+    });
+
+    try {
+      await this.engine.reload(modelId);
+      this.loadedModelId = modelId;
+      this.status = 'ready';
+    } catch (err) {
+      this.status = 'error';
+      throw new ProviderError('webllm', `Failed to load model: ${String(err)}`, err);
+    }
+  }
+
+  async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
+    if (!this.engine || this.status !== 'ready') {
+      throw new ProviderError('webllm', 'Engine not ready');
+    }
+
+    const openaiMessages = params.messages.map((m) => ({
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: contentToOpenAI(m.content),
+    }));
+
+    const stream = await this.engine.chat.completions.create({
+      messages: openaiMessages,
+      stream: true,
+      temperature: params.temperature,
+      top_p: params.topP,
+      max_tokens: params.maxTokens,
+      presence_penalty: params.presencePenalty,
+      frequency_penalty: params.frequencyPenalty,
+      stream_options: { include_usage: true },
+    });
+
+    for await (const chunk of stream) {
+      if (params.signal?.aborted) {
+        this.engine.interruptGenerate();
+        break;
+      }
+
+      const choice = chunk.choices?.[0];
+      const delta = choice?.delta?.content ?? '';
+      const finishReason = choice?.finish_reason as ChatChunk['finishReason'] | null;
+
+      const chatChunk: ChatChunk = { delta };
+      if (finishReason) {
+        chatChunk.finishReason = finishReason;
+      }
+      if (chunk.usage) {
+        chatChunk.usage = {
+          promptTokens: chunk.usage.prompt_tokens,
+          completionTokens: chunk.usage.completion_tokens,
+          prefillTokensPerSecond: chunk.usage.extra?.prefill_tokens_per_s,
+          decodeTokensPerSecond: chunk.usage.extra?.decode_tokens_per_s,
+        };
+      }
+
+      yield chatChunk;
+    }
+  }
+
+  async unload(): Promise<void> {
+    if (this.engine) {
+      try {
+        await this.engine.unload();
+      } catch {
+        // ignore
+      }
+    }
+    this.loadedModelId = null;
+    this.status = 'idle';
+  }
+
+  async evictModel(modelId: string): Promise<void> {
+    if (modelId === this.loadedModelId) {
+      await this.unload();
+    }
+    await deleteModelAllInfoInCache(modelId);
+  }
+}
