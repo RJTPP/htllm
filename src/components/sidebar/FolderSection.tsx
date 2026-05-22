@@ -102,7 +102,9 @@ export function FolderSection({
           </div>
         )}
       </div>
-      {!collapsed && <div className="space-y-0.5">{children}</div>}
+      {!collapsed && (
+        <div className="space-y-0.5 pl-3 ml-2 border-l border-line">{children}</div>
+      )}
     </div>
   );
 }
