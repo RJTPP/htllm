@@ -56,6 +56,20 @@ provider each. Ollama and LM Studio stay as distinct localhost providers
 (they keep auto-detection). Supersedes the SDD's separate Groq / OpenRouter /
 generic-endpoint entries.
 
+### D6 — Embedding models are provider-served, not WebLLM-exclusive
+
+An embedding model is a model like any other. WebLLM runs local ones, and the
+OpenAI-compatible (D5) and Ollama providers expose `/v1/embeddings` (or the
+equivalent) — so embedding support is not WebLLM-only. This gates the provider
+abstraction: a provider must expose an embedding capability separate from
+`ChatProvider.chat()` — either a distinct `EmbeddingProvider` interface or an
+`embed()` method behind a `capabilities.embedding` flag. The model picker's
+embedding type must therefore source models across providers, not just WebLLM.
+D2 still holds — vectors stay tagged to the producing model id regardless of
+which provider produced them. Privacy note: API / localhost embedding sends
+document chunks off-device (the same opt-in trade as BYOK chat), so the UI must
+label non-local embedding explicitly.
+
 ---
 
 ## Phase plan
@@ -93,7 +107,8 @@ experience before any new surface area.
 | Ollama, LM Studio providers (localhost) | ☐ |
 | OpenAI-compatible API provider — BYOK, base URL + key (covers Groq / OpenRouter / custom) | ✦ ☐ |
 | Markdown rendering + code block syntax highlighting | ✦ ☐ (D3) |
-| Prompt-template management UI (create / edit / delete) | ◐ data layer exists; no UI |
+| Context controls — context-window size + history window (messages attached per request) | ✦ ☐ |
+| Prompt-template management UI — create / edit / delete, plus collections, search and import / export | ◐ data layer exists; no UI |
 | Storage manager — basic (model cache list, IDB usage, clear data) | ✦ ☐ |
 | Global conversation search — full-text over all threads/messages | ✦ ☐ |
 | Chat folders / thread organization | ✦ ☐ |
@@ -106,6 +121,7 @@ experience before any new surface area.
 |---|---|
 | `embeddings` IndexedDB store, model-tagged (D2) | ✦ ☐ |
 | Embedding model support in the picker (model-type aware) | ✦ ☐ |
+| Embedding via OpenAI-compatible API / Ollama — provider-served `/v1/embeddings` (D6) | ✦ ☐ |
 | txt / PDF ingestion + chunking (lazy-loaded PDF parser) | ✦ ☐ |
 | Vector store + similarity retrieval | ✦ ☐ |
 | Knowledge page — global semantic search surface | ✦ ☐ |
