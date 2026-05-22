@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Message, ModelInfo, ContentPart, UsageStats } from '../../providers/types';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
 import { parseThinking } from '../../lib/thinking';
-import { Info, RefreshCw, Pencil, X, Check } from 'lucide-react';
+import { Info, RefreshCw, Pencil, X, Check, Copy } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MessageBody } from './MessageBody';
 import { ThinkingBlock } from './ThinkingBlock';
@@ -30,6 +30,37 @@ function UsageInline({ usage }: { usage: UsageStats }) {
         <span className="text-mute/70">decode {usage.decodeTokensPerSecond.toFixed(1)} tok/s</span>
       )}
     </div>
+  );
+}
+
+/** Copies the given text to the clipboard with brief "copied" feedback. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    try {
+      navigator.clipboard.writeText(text);
+    } catch {
+      // clipboard unavailable
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+  return (
+    <button
+      onClick={copy}
+      className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border border-transparent text-mute hover:text-text transition-colors"
+      title="Copy message"
+    >
+      {copied ? (
+        <>
+          <Check size={12} /> copied
+        </>
+      ) : (
+        <>
+          <Copy size={12} /> copy
+        </>
+      )}
+    </button>
   );
 }
 
@@ -187,17 +218,18 @@ export function MessageView({
                 )}
                 {text && <MessageBody content={text} />}
               </div>
-              {!generating && (
-                <div className="mt-1.5">
+              <div className="mt-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={text} />
+                {!generating && (
                   <button
                     onClick={startEditing}
-                    className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border border-transparent text-mute opacity-0 group-hover:opacity-100 hover:text-text transition-opacity"
+                    className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border border-transparent text-mute hover:text-text"
                     title="Edit message"
                   >
                     <Pencil size={11} /> edit
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )
         ) : (
@@ -215,8 +247,9 @@ export function MessageView({
           </div>
         )}
 
-        {!isUser && !streaming && (message.usage || isLast) && (
+        {!isUser && !streaming && (
           <div className="mt-1.5 flex items-center gap-1">
+            <CopyButton text={thinking?.reply ?? text} />
             {message.usage && (
               <button
                 onClick={() => setShowUsage((s) => !s)}
