@@ -166,7 +166,7 @@ export function ProviderConfig({ provider }: { provider: OpenAICompatibleProvide
             // requires a key — so a passing test here can still 401 on send.
             <span className="font-mono text-[10px] text-warn">
               {status.count} models listed — no API key set, so sending a message may
-              fail with 401
+              fail
             </span>
           ) : (
             <span className="font-mono text-[10px] text-ok">
