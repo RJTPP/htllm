@@ -129,7 +129,7 @@ export function SettingsModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Settings" width="max-w-3xl">
+    <Modal open={open} onClose={onClose} title="Settings" width="max-w-3xl" stableHeight>
       <div className="flex border-b border-line">
         {TABS.map(([id, label]) => (
           <button
