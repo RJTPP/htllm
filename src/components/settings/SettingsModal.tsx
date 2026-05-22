@@ -78,9 +78,9 @@ export function SettingsModal({
   setCodeTheme: (value: string) => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>('templates');
-  const [draft, setDraft] = useState({ title: '', content: '' });
+  const [draft, setDraft] = useState({ title: '', content: '', description: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState({ title: '', content: '' });
+  const [editDraft, setEditDraft] = useState({ title: '', content: '', description: '' });
   const [resetArmed, setResetArmed] = useState(false);
   const [resetText, setResetText] = useState('');
 
@@ -89,10 +89,11 @@ export function SettingsModal({
     const t = await createTemplate({
       title: draft.title.trim(),
       content: draft.content,
+      description: draft.description.trim() || undefined,
       isBuiltIn: false,
     });
     setTemplates((prev) => [...prev, t]);
-    setDraft({ title: '', content: '' });
+    setDraft({ title: '', content: '', description: '' });
   };
 
   const removeTemplate = async (id: string) => {
@@ -102,21 +103,28 @@ export function SettingsModal({
 
   const startEdit = (t: PromptTemplate) => {
     setEditingId(t.id);
-    setEditDraft({ title: t.title, content: t.content });
+    setEditDraft({
+      title: t.title,
+      content: t.content,
+      description: t.description ?? '',
+    });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditDraft({ title: '', content: '' });
+    setEditDraft({ title: '', content: '', description: '' });
   };
 
   const saveEdit = async (id: string) => {
     const title = editDraft.title.trim();
     if (!title) return;
-    await updateTemplate(id, { title, content: editDraft.content });
+    const description = editDraft.description.trim() || undefined;
+    await updateTemplate(id, { title, content: editDraft.content, description });
     setTemplates((prev) =>
       prev.map((t) =>
-        t.id === id ? { ...t, title, content: editDraft.content } : t,
+        t.id === id
+          ? { ...t, title, content: editDraft.content, description }
+          : t,
       ),
     );
     cancelEdit();
@@ -162,6 +170,14 @@ export function SettingsModal({
                       placeholder="Title (used as /trigger)"
                       className="w-full bg-bg border border-accent/50 focus:outline-none px-2 py-1 text-[12px] font-mono"
                     />
+                    <input
+                      value={editDraft.description}
+                      onChange={(e) =>
+                        setEditDraft((d) => ({ ...d, description: e.target.value }))
+                      }
+                      placeholder="Description (optional) — shown in the / menu"
+                      className="w-full bg-bg border border-line focus:border-accent/60 focus:outline-none px-2 py-1 text-[12px]"
+                    />
                     <textarea
                       value={editDraft.content}
                       onChange={(e) =>
@@ -191,7 +207,7 @@ export function SettingsModal({
                     <div className="flex-1 min-w-0">
                       <div className="font-mono text-[12px] text-text">/{t.title}</div>
                       <div className="font-mono text-[10px] text-mute truncate">
-                        {t.content.replace(/\n/g, ' ').trim()}
+                        {t.description?.trim() || t.content.replace(/\n/g, ' ').trim()}
                       </div>
                     </div>
                     {t.isBuiltIn ? (
@@ -226,6 +242,12 @@ export function SettingsModal({
               onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
               placeholder="Title (used as /trigger)"
               className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[12px] font-mono"
+            />
+            <input
+              value={draft.description}
+              onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+              placeholder="Description (optional) — shown in the / menu"
+              className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[12px]"
             />
             <textarea
               value={draft.content}

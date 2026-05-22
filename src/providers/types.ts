@@ -121,6 +121,8 @@ export interface PromptTemplate {
   id: string;
   title: string;
   content: string;
+  /** Optional short description — shown in the / menu instead of content. */
+  description?: string;
   isBuiltIn: boolean;
   createdAt: number;
 }

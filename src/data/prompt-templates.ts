@@ -6,21 +6,25 @@ const BUILT_IN_TEMPLATES: Omit<PromptTemplate, 'id' | 'createdAt'>[] = [
   {
     title: 'Explain',
     content: 'Explain the following in simple terms:\n\n',
+    description: 'Explain something in simple terms',
     isBuiltIn: true,
   },
   {
     title: 'Summarize',
     content: 'Summarize the following text concisely:\n\n',
+    description: 'Summarize text concisely',
     isBuiltIn: true,
   },
   {
     title: 'Code Review',
     content: 'Review the following code for bugs, improvements, and best practices:\n\n```\n\n```',
+    description: 'Review code for bugs and improvements',
     isBuiltIn: true,
   },
   {
     title: 'Translate',
     content: 'Translate the following text to English:\n\n',
+    description: 'Translate text to English',
     isBuiltIn: true,
   },
 ];
