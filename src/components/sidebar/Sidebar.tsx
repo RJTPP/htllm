@@ -16,6 +16,7 @@ export function Sidebar({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  locked,
 }: {
   threads: Thread[];
   folders: Folder[];
@@ -28,6 +29,9 @@ export function Sidebar({
   onCreateFolder: (name: string) => void;
   onRenameFolder: (id: string, name: string) => void;
   onDeleteFolder: (id: string) => void;
+  /** While a generation is in progress the thread list is locked so the
+   *  active thread can't change mid-stream. */
+  locked: boolean;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [newFolder, setNewFolder] = useState<string | null>(null);
@@ -69,15 +73,41 @@ export function Sidebar({
     setNewFolder(null);
   };
 
+  // While locked, thread rows are non-interactive so the active thread
+  // can't change. The current thread stays bright; others dim.
+  const renderThread = (t: Thread) => {
+    const isActive = t.id === activeId;
+    return (
+      <div
+        key={t.id}
+        className={
+          locked
+            ? isActive
+              ? 'pointer-events-none'
+              : 'pointer-events-none opacity-50'
+            : undefined
+        }
+      >
+        <ThreadItem thread={t} active={isActive} {...threadProps} />
+      </div>
+    );
+  };
+
   return (
     <aside className="reveal reveal-2 w-[248px] shrink-0 border-r border-line bg-surface flex flex-col">
       <div className="px-3 py-2.5">
         <button
           onClick={onNew}
-          className="w-full flex items-center justify-center gap-1.5 font-mono text-[11px] px-2.5 py-2 border border-line text-text bg-bg hover:border-accent/50 hover:text-accent transition-colors"
+          disabled={locked}
+          className="w-full flex items-center justify-center gap-1.5 font-mono text-[11px] px-2.5 py-2 border border-line text-text bg-bg hover:border-accent/50 hover:text-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-text"
         >
           <Plus size={13} /> new chat
         </button>
+        {locked && (
+          <div className="mt-1.5 font-mono text-[10px] text-mute/70 text-center">
+            generating — stop to switch threads
+          </div>
+        )}
       </div>
 
       <div className="px-3 pb-1 flex items-center justify-between">
@@ -123,14 +153,7 @@ export function Sidebar({
               onRename={onRenameFolder}
               onDelete={onDeleteFolder}
             >
-              {inFolder.map((t) => (
-                <ThreadItem
-                  key={t.id}
-                  thread={t}
-                  active={t.id === activeId}
-                  {...threadProps}
-                />
-              ))}
+              {inFolder.map(renderThread)}
               {inFolder.length === 0 && (
                 <div className="px-2.5 py-1.5 font-mono text-[10px] text-mute/60">
                   empty
@@ -145,14 +168,7 @@ export function Sidebar({
             ungrouped
           </div>
         )}
-        {ungrouped.map((t) => (
-          <ThreadItem
-            key={t.id}
-            thread={t}
-            active={t.id === activeId}
-            {...threadProps}
-          />
-        ))}
+        {ungrouped.map(renderThread)}
 
         {threads.length === 0 && (
           <div className="px-2.5 py-6 font-mono text-[11px] text-mute text-center">

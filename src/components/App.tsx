@@ -262,6 +262,9 @@ export default function App() {
   );
 
   const handleCreateThread = useCallback(async () => {
+    // Thread switching is locked during generation so the stream can't
+    // bleed into another thread.
+    if (generating) return;
     if (activeThreadId && messages.length === 0) {
       setPage('chat');
       return;
@@ -278,6 +281,7 @@ export default function App() {
     activeThread,
     activeThreadId,
     messages.length,
+    generating,
   ]);
 
   // Global shortcuts: Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+Shift+O
@@ -297,14 +301,18 @@ export default function App() {
   }, [handleCreateThread]);
 
   const commands: Command[] = useMemo(() => {
-    const cmds: Command[] = [
-      {
+    const cmds: Command[] = [];
+    // New chat is omitted mid-generation — thread switching is locked.
+    if (!generating) {
+      cmds.push({
         id: 'new-chat',
         label: 'New chat',
         group: 'Actions',
         hint: '⇧⌘O',
         run: () => void handleCreateThread(),
-      },
+      });
+    }
+    cmds.push(
       {
         id: 'change-model',
         label: 'Change model',
@@ -341,29 +349,40 @@ export default function App() {
         group: 'Navigation',
         run: () => setPage('storage'),
       },
-    ];
-    if (activeThreadId) {
-      cmds.push({
-        id: 'delete-thread',
-        label: 'Delete current thread',
-        group: 'Actions',
-        run: () => void deleteThread(activeThreadId),
-      });
-    }
-    for (const t of threads) {
-      if (t.id === activeThreadId) continue;
-      cmds.push({
-        id: `thread-${t.id}`,
-        label: t.title || 'Untitled thread',
-        group: 'Switch to thread',
-        run: () => {
-          selectThread(t.id);
-          setPage('chat');
-        },
-      });
+    );
+    // Deleting the current thread and switching threads both move
+    // activeThreadId — omitted while a generation is in progress.
+    if (!generating) {
+      if (activeThreadId) {
+        cmds.push({
+          id: 'delete-thread',
+          label: 'Delete current thread',
+          group: 'Actions',
+          run: () => void deleteThread(activeThreadId),
+        });
+      }
+      for (const t of threads) {
+        if (t.id === activeThreadId) continue;
+        cmds.push({
+          id: `thread-${t.id}`,
+          label: t.title || 'Untitled thread',
+          group: 'Switch to thread',
+          run: () => {
+            selectThread(t.id);
+            setPage('chat');
+          },
+        });
+      }
     }
     return cmds;
-  }, [handleCreateThread, activeThreadId, deleteThread, threads, selectThread]);
+  }, [
+    handleCreateThread,
+    activeThreadId,
+    deleteThread,
+    threads,
+    selectThread,
+    generating,
+  ]);
 
   // Full-text message search for the command palette — resolves matches into
   // commands that jump to the containing thread.
@@ -521,6 +540,7 @@ export default function App() {
                   onCreateFolder={createFolder}
                   onRenameFolder={renameFolder}
                   onDeleteFolder={handleDeleteFolder}
+                  locked={generating}
                 />
                 <ChatPage
                   thread={activeThread}
