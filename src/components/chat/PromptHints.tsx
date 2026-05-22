@@ -1,17 +1,20 @@
 import type { PromptTemplate } from '../../providers/types';
 
+/**
+ * Dropdown of /-triggered prompt templates. Presentational — the composer
+ * owns the match list and keyboard selection so Enter/arrows work.
+ */
 export function PromptHints({
-  query,
-  templates,
+  matches,
+  selectedIndex,
   onPick,
+  onHover,
 }: {
-  query: string;
-  templates: PromptTemplate[];
+  matches: PromptTemplate[];
+  selectedIndex: number;
   onPick: (template: PromptTemplate) => void;
+  onHover: (index: number) => void;
 }) {
-  const matches = templates.filter((t) =>
-    t.title.toLowerCase().includes(query.toLowerCase()),
-  );
   if (matches.length === 0) return null;
   return (
     <div className="absolute bottom-full left-0 right-0 mb-1.5 border border-line bg-surface max-h-52 overflow-y-auto z-20">
@@ -22,8 +25,9 @@ export function PromptHints({
         <button
           key={t.id}
           onClick={() => onPick(t)}
+          onMouseMove={() => onHover(i)}
           className={`w-full text-left px-3 py-2 flex items-center justify-between ${
-            i === 0 ? 'bg-accent/5' : 'hover:bg-surface2'
+            i === selectedIndex ? 'bg-accent/10' : 'hover:bg-surface2'
           }`}
         >
           <div className="min-w-0">

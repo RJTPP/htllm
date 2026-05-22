@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
@@ -110,6 +110,24 @@ export function Composer({
       ? input.slice(1)
       : null;
 
+  // Templates matching the current /-query, and the keyboard-selected one.
+  const hintMatches = useMemo(() => {
+    if (hintQuery === null) return [];
+    const q = hintQuery.toLowerCase();
+    return templates.filter((t) => t.title.toLowerCase().includes(q));
+  }, [hintQuery, templates]);
+  const hintsOpen = hintMatches.length > 0;
+
+  const [hintIndex, setHintIndex] = useState(0);
+  // Reset the selection whenever the query changes.
+  useEffect(() => {
+    setHintIndex(0);
+  }, [hintQuery]);
+
+  const pickTemplate = (t: PromptTemplate) => {
+    setInput(t.content);
+  };
+
   const send = () => {
     if (!input.trim() || generating) return;
     onSend(input.trim(), images.length > 0 ? images : undefined);
@@ -168,11 +186,12 @@ export function Composer({
           </div>
         )}
         <div className="relative">
-          {hintQuery !== null && (
+          {hintsOpen && (
             <PromptHints
-              query={hintQuery}
-              templates={templates}
-              onPick={(t) => setInput(t.content)}
+              matches={hintMatches}
+              selectedIndex={hintIndex}
+              onPick={pickTemplate}
+              onHover={setHintIndex}
             />
           )}
           <div className="flex items-end gap-2">
@@ -181,7 +200,27 @@ export function Composer({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && hintQuery === null) {
+                // When the /-template hints are open, arrows navigate them
+                // and Enter picks the selected one instead of sending.
+                if (hintsOpen) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setHintIndex((i) => Math.min(i + 1, hintMatches.length - 1));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setHintIndex((i) => Math.max(i - 1, 0));
+                    return;
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const t = hintMatches[hintIndex];
+                    if (t) pickTemplate(t);
+                    return;
+                  }
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   send();
                 }
