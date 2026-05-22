@@ -266,10 +266,18 @@ export default function App() {
       return;
     }
     // Carry the current provider + model into the new thread so "new chat"
-    // continues with whatever the user was just using.
-    await createThread(activeProviderId, activeModelId);
+    // continues with whatever the user was just using — and keep it in the
+    // same folder as the current thread.
+    await createThread(activeProviderId, activeModelId, activeThread?.folderId);
     setPage('chat');
-  }, [createThread, activeProviderId, activeModelId, activeThreadId, messages.length]);
+  }, [
+    createThread,
+    activeProviderId,
+    activeModelId,
+    activeThread,
+    activeThreadId,
+    messages.length,
+  ]);
 
   // Global shortcuts: Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+Shift+O
   // starts a new chat.
