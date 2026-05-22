@@ -100,9 +100,7 @@ export function ParamControls({
     onChange({ [k]: v } as Partial<ModelParams>);
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-3" title={
-        reasoningCapability === null ? 'Reasoning control — may not apply to this model' : undefined
-      }>
+      <div className="flex items-center gap-3" title="Reasoning effort — controls how much the model thinks before responding">
         <label className="font-mono text-[11px] text-mute w-28 shrink-0">reasoning</label>
         <div className="flex-1 flex gap-1">
           {levels.map((level) => (

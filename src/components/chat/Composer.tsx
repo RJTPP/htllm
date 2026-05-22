@@ -237,13 +237,7 @@ export function Composer({
             <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
           )}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1" title={
-              reasoningCapability
-                ? reasoningCapability === 'toggle'
-                  ? 'This model supports thinking on/off'
-                  : 'This model supports reasoning effort levels'
-                : 'Reasoning control — may not apply to this model'
-            }>
+            <div className="flex items-center gap-1" title="Reasoning effort — controls how much the model thinks before responding">
               <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />
               {reasoningCapability === 'toggle' ? (
                 <button
