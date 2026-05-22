@@ -1,41 +1,61 @@
-import { useState, useMemo, type ReactNode } from 'react';
-import { highlightCode } from '../../lib/highlight';
+import { useState, useEffect, useMemo } from 'react';
+import { Marked, type Tokens } from 'marked';
+import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
 import { Check, Copy } from 'lucide-react';
 
-function renderInline(text: string): ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  return parts.map((p, i) => {
-    if (p.startsWith('**') && p.endsWith('**'))
-      return (
-        <strong key={i} className="text-text font-semibold">
-          {p.slice(2, -2)}
-        </strong>
-      );
-    if (p.startsWith('`') && p.endsWith('`'))
-      return (
-        <code
-          key={i}
-          className="font-mono text-[12px] bg-surface2 border border-line rounded px-1 py-0.5 text-accent"
-        >
-          {p.slice(1, -1)}
-        </code>
-      );
-    return <span key={i}>{p}</span>;
+// ── Marked instance with custom code-block renderer ─────────────────
+// We render code blocks ourselves (with a copy button), so we emit a
+// placeholder that we split on later. Inline markdown (bold, italic,
+// inline code, links, lists, tables, headings, hr) is handled by marked's
+// default HTML output.
+
+const CODE_DELIM = '<!--shiki-code-->';
+
+function buildMarked(): Marked {
+  const m = new Marked();
+  m.use({
+    renderer: {
+      code(token: Tokens.Code): string {
+        const lang = (token.lang ?? '').trim();
+        const html = highlightToHtml(token.text, lang || undefined);
+        // Encode for safe splitting: base64 the inner HTML.
+        const payload = btoa(
+          encodeURIComponent(
+            JSON.stringify({ lang, html, raw: token.text }),
+          ),
+        );
+        return `${CODE_DELIM}${payload}${CODE_DELIM}`;
+      },
+    },
   });
+  return m;
 }
 
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
+let markedInstance: Marked | null = null;
+function getMarked(): Marked {
+  if (!markedInstance) markedInstance = buildMarked();
+  return markedInstance;
+}
+
+// ── Code block component ────────────────────────────────────────────
+
+function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: string }) {
   const [copied, setCopied] = useState(false);
-  const tokens = useMemo(() => highlightCode(code, lang.toLowerCase()), [code, lang]);
+
   const copy = () => {
     try {
-      navigator.clipboard.writeText(code);
+      navigator.clipboard.writeText(raw);
     } catch {
       // clipboard unavailable
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
+
+  // If html came from shiki it's a full <pre><code>…</code></pre> block.
+  // If it's a plain-text fallback it's just escaped text.
+  const isShikiHtml = html.startsWith('<pre');
+
   return (
     <div className="my-2 border border-line overflow-hidden bg-[#0d0d0d]">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-line bg-surface">
@@ -57,169 +77,75 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
           )}
         </button>
       </div>
-      <pre className="px-3 py-2.5 overflow-x-auto">
-        <code className="font-mono text-[12.5px] text-text/90 leading-relaxed">
-          {tokens.map(([cls, txt], i) =>
-            cls ? (
-              <span key={i} className={cls}>
-                {txt}
-              </span>
-            ) : (
-              <span key={i}>{txt}</span>
-            ),
-          )}
-        </code>
-      </pre>
+      {isShikiHtml ? (
+        <div
+          className="shiki-container px-3 py-2.5 overflow-x-auto [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:font-mono [&_code]:text-[12.5px] [&_code]:leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      ) : (
+        <pre className="px-3 py-2.5 overflow-x-auto">
+          <code className="font-mono text-[12.5px] text-text/90 leading-relaxed">
+            {raw}
+          </code>
+        </pre>
+      )}
     </div>
   );
 }
 
-function parseCells(row: string): string[] {
-  return row
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((c) => c.trim());
-}
-
-function isSeparator(row: string): boolean {
-  return /^\|?[\s:]*-{2,}[\s:]*(\|[\s:]*-{2,}[\s:]*)*\|?$/.test(row.trim());
-}
-
-function isTableRow(line: string): boolean {
-  return line.trimStart().startsWith('|') && line.trimEnd().endsWith('|');
-}
-
-function renderBlocks(text: string): ReactNode[] {
-  const lines = text.split('\n');
-  const result: ReactNode[] = [];
-  let listItems: ReactNode[] = [];
-  let key = 0;
-
-  const flushList = () => {
-    if (listItems.length > 0) {
-      result.push(
-        <ul key={key++} className="my-1.5 pl-5 list-disc space-y-0.5">
-          {listItems}
-        </ul>,
-      );
-      listItems = [];
-    }
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-
-    if (
-      isTableRow(line) &&
-      i + 1 < lines.length &&
-      isSeparator(lines[i + 1] ?? '')
-    ) {
-      flushList();
-      const headerCells = parseCells(line);
-      const bodyRows: string[][] = [];
-      i += 2;
-      while (i < lines.length && isTableRow(lines[i] ?? '')) {
-        bodyRows.push(parseCells(lines[i] ?? ''));
-        i++;
-      }
-      i--;
-      result.push(
-        <div key={key++} className="my-2 overflow-x-auto">
-          <table className="border-collapse text-[13px] font-mono">
-            <thead>
-              <tr>
-                {headerCells.map((c, j) => (
-                  <th
-                    key={j}
-                    className="border border-line px-3 py-1.5 text-left text-[11px] uppercase tracking-wider text-mute bg-surface"
-                  >
-                    {renderInline(c)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {bodyRows.map((row, ri) => (
-                <tr key={ri}>
-                  {row.map((c, ci) => (
-                    <td key={ci} className="border border-line px-3 py-1.5 text-text/90">
-                      {renderInline(c)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>,
-      );
-      continue;
-    }
-
-    if (/^---+$/.test(line.trim())) {
-      flushList();
-      result.push(<hr key={key++} className="my-3 border-line" />);
-      continue;
-    }
-
-    const bullet = line.match(/^[ \t]*[-*][ \t]+(.*)$/);
-    if (bullet) {
-      listItems.push(
-        <li key={key++} className="break-words">
-          {renderInline(bullet[1] ?? '')}
-        </li>,
-      );
-      continue;
-    }
-
-    flushList();
-
-    const heading = line.match(/^(#{1,4})\s+(.*)$/);
-    if (heading) {
-      const level = heading[1]?.length ?? 1;
-      const text = heading[2] ?? '';
-      const cls =
-        level === 1
-          ? 'text-[18px] font-semibold mt-4 mb-1.5'
-          : level === 2
-            ? 'text-[16px] font-semibold mt-3 mb-1'
-            : level === 3
-              ? 'text-[14.5px] font-semibold mt-2.5 mb-0.5'
-              : 'text-[13.5px] font-semibold mt-2 mb-0.5';
-      result.push(
-        <div key={key++} className={cls}>
-          {renderInline(text)}
-        </div>,
-      );
-      continue;
-    }
-
-    if (i > 0) result.push(<br key={key++} />);
-    result.push(
-      <span key={key++} className="break-words">
-        {renderInline(line)}
-      </span>,
-    );
-  }
-  flushList();
-  return result;
-}
+// ── Main component ──────────────────────────────────────────────────
 
 export function MessageBody({ content }: { content: string }) {
-  const segments = content.split(/```/);
-  return (
-    <div className="text-[13.5px] text-text leading-relaxed">
-      {segments.map((seg, i) => {
-        if (i % 2 === 1) {
-          const nl = seg.indexOf('\n');
-          const lang = nl > -1 ? seg.slice(0, nl).trim() : '';
-          const code = nl > -1 ? seg.slice(nl + 1).replace(/\n$/, '') : seg;
-          return <CodeBlock key={i} lang={lang} code={code} />;
+  const [highlighterVersion, setHighlighterVersion] = useState(0);
+
+  // Re-render when the highlighter finishes loading or an on-demand grammar
+  // becomes available, so code blocks upgrade from plain text to highlighted.
+  useEffect(() => {
+    return subscribeHighlight(() => {
+      // Rebuild the marked instance so the renderer picks up the new state.
+      markedInstance = null;
+      setHighlighterVersion((n) => n + 1);
+    });
+  }, []);
+
+  const segments = useMemo(() => {
+    const marked = getMarked();
+    const rawHtml = marked.parse(content, { async: false }) as string;
+
+    // Split on our code-block placeholders.
+    const parts = rawHtml.split(CODE_DELIM);
+    return parts.map((part, i) => {
+      if (i % 2 === 1) {
+        // This is a code block payload.
+        try {
+          const decoded = JSON.parse(decodeURIComponent(atob(part))) as {
+            lang: string;
+            html: string;
+            raw: string;
+          };
+          return { kind: 'code' as const, ...decoded };
+        } catch {
+          return { kind: 'html' as const, html: part };
         }
+      }
+      return { kind: 'html' as const, html: part };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- highlighterVersion forces reparse when shiki loads
+  }, [content, highlighterVersion]);
+
+  return (
+    <div className="text-[13.5px] text-text leading-relaxed prose-custom">
+      {segments.map((seg, i) => {
+        if (seg.kind === 'code') {
+          return <CodeBlock key={i} lang={seg.lang} html={seg.html} raw={seg.raw} />;
+        }
+        if (!seg.html.trim()) return null;
         return (
-          <span key={i} className="whitespace-pre-wrap">
-            {renderBlocks(seg)}
-          </span>
+          <div
+            key={i}
+            className="markdown-body"
+            dangerouslySetInnerHTML={{ __html: seg.html }}
+          />
         );
       })}
     </div>
