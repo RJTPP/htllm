@@ -15,6 +15,14 @@ export interface ChatProvider {
   unload?(): Promise<void>;
 }
 
+/**
+ * Reasoning capability of a model:
+ * - `'effort'` — supports off/low/medium/high (OpenAI o-series)
+ * - `'toggle'` — supports on/off only (Qwen3, QwQ, DeepSeek-R1)
+ * - `undefined` — no reasoning support
+ */
+export type ReasoningCapability = 'effort' | 'toggle';
+
 export interface ModelInfo {
   id: string;
   displayName: string;
@@ -23,6 +31,7 @@ export interface ModelInfo {
   quantization: string;
   cached: boolean;
   vision?: boolean;
+  reasoning?: ReasoningCapability;
 }
 
 export interface ChatParams {
@@ -33,11 +42,14 @@ export interface ChatParams {
   maxTokens?: number;
   presencePenalty?: number;
   frequencyPenalty?: number;
+  reasoningEffort?: ReasoningEffort;
   signal?: AbortSignal;
 }
 
 export interface ChatChunk {
   delta: string;
+  /** Reasoning/thinking delta from structured API fields (not in-content tags). */
+  reasoning?: string;
   finishReason?: 'stop' | 'length' | 'error';
   usage?: UsageStats;
 }
@@ -69,6 +81,8 @@ export interface Message {
   content: string | ContentPart[];
   createdAt: number;
   usage?: UsageStats;
+  /** Structured reasoning/thinking content from API providers. */
+  reasoning?: string;
 }
 
 export interface Thread {
@@ -82,6 +96,8 @@ export interface Thread {
   updatedAt: number;
 }
 
+export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high';
+
 export interface ModelParams {
   temperature: number;
   topP: number;
@@ -90,6 +106,7 @@ export interface ModelParams {
   frequencyPenalty: number;
   contextWindow: number;
   historyMsgs: number;
+  reasoningEffort: ReasoningEffort;
 }
 
 export interface PromptTemplate {

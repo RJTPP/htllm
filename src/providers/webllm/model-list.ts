@@ -1,5 +1,6 @@
 import { prebuiltAppConfig, hasModelInCache, ModelType } from '@mlc-ai/web-llm';
 import type { ModelInfo } from '../types';
+import { detectReasoning } from '../../lib/reasoning';
 
 function parseFamily(modelId: string): string {
   const id = modelId.toLowerCase();
@@ -55,6 +56,7 @@ export async function getModelList(): Promise<ModelInfo[]> {
       quantization: parseQuantization(m.model_id),
       cached: await hasModelInCache(m.model_id).catch(() => false),
       vision: m.model_type === ModelType.VLM || /-VL-|vision/i.test(m.model_id),
+      reasoning: detectReasoning(m.model_id),
     })),
   );
 

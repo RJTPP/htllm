@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Message, ModelInfo, ContentPart, UsageStats } from '../../providers/types';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
+import { parseThinking } from '../../lib/thinking';
 import { Info, RefreshCw, Pencil, X, Check } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MessageBody } from './MessageBody';
+import { ThinkingBlock } from './ThinkingBlock';
 
 function splitContent(content: string | ContentPart[]): { text: string; images: string[] } {
   if (typeof content === 'string') return { text: content, images: [] };
@@ -56,6 +58,23 @@ export function MessageView({
   const editRef = useRef<HTMLTextAreaElement>(null);
   const isUser = message.role === 'user';
   const { text, images } = splitContent(message.content);
+
+  // Resolve reasoning/thinking content. Prefer the structured `reasoning`
+  // field (from API providers like DeepSeek, OpenAI o-series). Fall back to
+  // parsing in-content `<think>` tags (WebLLM Qwen3, DeepSeek-R1 local).
+  const thinking = useMemo(() => {
+    if (isUser) return null;
+    if (message.reasoning) {
+      // Structured reasoning from API — content is already clean.
+      // Still "thinking" if streaming + has reasoning but no content yet.
+      return {
+        thinking: message.reasoning,
+        reply: text,
+        isThinking: streaming && !text,
+      };
+    }
+    return parseThinking(text);
+  }, [isUser, text, message.reasoning, streaming]);
 
   // Auto-focus and auto-size the textarea when entering edit mode.
   useEffect(() => {
@@ -183,7 +202,13 @@ export function MessageView({
           )
         ) : (
           <div className="pr-2">
-            <MessageBody content={text} />
+            {thinking && (thinking.thinking || thinking.isThinking) && (
+              <ThinkingBlock
+                content={thinking.thinking}
+                isThinking={thinking.isThinking}
+              />
+            )}
+            <MessageBody content={thinking?.reply ?? text} />
             {streaming && (
               <span className="inline-block w-1.5 h-3.5 bg-accent ml-0.5 align-middle blink" />
             )}

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { PromptTemplate } from '../../providers/types';
+import type { PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
-import { Image, ArrowRight } from 'lucide-react';
+import { Image, ArrowRight, Brain } from 'lucide-react';
 import { PromptHints } from './PromptHints';
+import { Tooltip } from '../ui/Tooltip';
 
 const MAX_IMAGES = 3;
 
@@ -64,6 +65,9 @@ export function Composer({
   templates,
   contextUsed,
   contextTotal,
+  reasoningCapability,
+  reasoningEffort,
+  onReasoningChange,
   onSend,
   onStop,
   onParams,
@@ -75,6 +79,9 @@ export function Composer({
   templates: PromptTemplate[];
   contextUsed: number;
   contextTotal: number;
+  reasoningCapability?: ReasoningCapability;
+  reasoningEffort: ReasoningEffort;
+  onReasoningChange: (effort: ReasoningEffort) => void;
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onParams: () => void;
@@ -83,6 +90,13 @@ export function Composer({
   const [images, setImages] = useState<ChatImage[]>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const reasoningTooltip =
+    reasoningCapability === 'toggle'
+      ? 'Thinking — this model supports on/off'
+      : reasoningCapability === 'effort'
+        ? 'Reasoning effort — this model supports low/medium/high'
+        : 'Reasoning effort — may not apply to this model';
 
   useEffect(() => {
     const ta = taRef.current;
@@ -230,13 +244,50 @@ export function Composer({
           ) : (
             <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
           )}
-          <button
-            onClick={onParams}
-            disabled={!modelReady}
-            className={modelReady ? 'hover:text-text' : 'opacity-50 cursor-not-allowed'}
-          >
-            thread parameters →
-          </button>
+          <div className="flex items-center gap-3">
+            <Tooltip label={reasoningTooltip}>
+              <div className="flex items-center gap-1">
+                <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />
+                {reasoningCapability === 'toggle' ? (
+                  <button
+                    onClick={() => onReasoningChange(reasoningEffort === 'off' ? 'high' : 'off')}
+                    className={`px-1.5 py-0.5 border transition-colors ${
+                      reasoningEffort !== 'off'
+                        ? 'border-accent/60 text-accent bg-accent/10'
+                        : 'border-line text-mute/60 hover:text-mute'
+                    }`}
+                  >
+                    think {reasoningEffort !== 'off' ? 'on' : 'off'}
+                  </button>
+                ) : (
+                  <div className="flex -space-x-px">
+                    {(['off', 'low', 'medium', 'high'] as const).map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => onReasoningChange(level)}
+                        className={`px-1.5 py-0.5 border transition-colors ${
+                          reasoningEffort === level
+                            ? level === 'off'
+                              ? 'border-line text-mute bg-surface z-10'
+                              : 'border-accent/60 text-accent bg-accent/10 z-10'
+                            : 'border-line text-mute/50 hover:text-mute'
+                        }`}
+                      >
+                        {level === 'medium' ? 'med' : level}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Tooltip>
+            <button
+              onClick={onParams}
+              disabled={!modelReady}
+              className={modelReady ? 'hover:text-text' : 'opacity-50 cursor-not-allowed'}
+            >
+              thread parameters →
+            </button>
+          </div>
         </div>
       </div>
     </div>

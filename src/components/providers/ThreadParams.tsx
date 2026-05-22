@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { ModelParams } from '../../providers/types';
+import type { ModelParams, ReasoningCapability } from '../../providers/types';
 import { Modal } from '../ui/Modal';
 import { ParamControls } from './ParamControls';
 
@@ -8,6 +8,7 @@ export function ThreadParams({
   onClose,
   params,
   defaults,
+  reasoningCapability,
   onApply,
   onReset,
 }: {
@@ -15,6 +16,7 @@ export function ThreadParams({
   onClose: () => void;
   params: ModelParams;
   defaults: ModelParams;
+  reasoningCapability?: ReasoningCapability;
   onApply: (next: ModelParams) => void;
   onReset: () => void;
 }) {
@@ -52,6 +54,7 @@ export function ThreadParams({
         <ParamControls
           params={draft}
           onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+          reasoningCapability={reasoningCapability ?? null}
         />
         <div className="flex items-center justify-between border-t border-line pt-3">
           <span className="font-mono text-[10px] text-mute">

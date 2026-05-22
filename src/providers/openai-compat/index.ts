@@ -6,6 +6,7 @@ import type {
   ContentPart,
 } from '../types';
 import { ProviderError } from '../../lib/errors';
+import { detectReasoning } from '../../lib/reasoning';
 import { getKey, setKey, deleteKey } from '../../data/keys';
 import { getSetting, setSetting } from '../../data/settings';
 
@@ -89,7 +90,10 @@ export class OpenAICompatibleProvider implements ChatProvider {
   readonly capabilities = {
     streaming: true,
     toolCalls: false,
-    vision: false,
+    // Always true for API providers — the OpenAI message format supports
+    // image_url parts natively. If a model can't handle images, the API
+    // returns an error which we already display. No reason to gatekeep.
+    vision: true,
   };
   readonly spec: HttpProviderSpec;
 
@@ -174,7 +178,8 @@ export class OpenAICompatibleProvider implements ChatProvider {
         vramRequiredMB: 0,
         quantization: '',
         cached: true,
-        vision: false,
+        vision: true,
+        reasoning: detectReasoning(m.id),
       }));
   }
 
@@ -184,6 +189,18 @@ export class OpenAICompatibleProvider implements ChatProvider {
     }
 
     const messages = params.messages.map((m) => toOpenAIMessage(m.role, m.content));
+
+    // Build reasoning effort params. Different providers use different fields:
+    // - OpenAI o-series: `reasoning_effort` (low/medium/high)
+    // - Qwen3 via Ollama/vLLM: `enable_thinking` (boolean)
+    // We send both — providers that don't understand a field ignore it.
+    const reasoningParams: Record<string, unknown> = {};
+    if (params.reasoningEffort && params.reasoningEffort !== 'off') {
+      reasoningParams.reasoning_effort = params.reasoningEffort;
+      reasoningParams.enable_thinking = true;
+    } else if (params.reasoningEffort === 'off') {
+      reasoningParams.enable_thinking = false;
+    }
 
     let res: Response;
     try {
@@ -203,6 +220,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
           max_tokens: params.maxTokens,
           presence_penalty: params.presencePenalty,
           frequency_penalty: params.frequencyPenalty,
+          ...reasoningParams,
         }),
         signal: params.signal,
       });
@@ -239,7 +257,16 @@ export class OpenAICompatibleProvider implements ChatProvider {
           if (data === '[DONE]') return;
 
           let json: {
-            choices?: { delta?: { content?: string }; finish_reason?: string }[];
+            choices?: {
+              delta?: {
+                content?: string;
+                // DeepSeek API, OpenRouter reasoning models
+                reasoning_content?: string;
+                // OpenAI native reasoning (o1/o3/o4)
+                reasoning?: string;
+              };
+              finish_reason?: string;
+            }[];
             usage?: { prompt_tokens?: number; completion_tokens?: number };
           };
           try {
@@ -249,7 +276,15 @@ export class OpenAICompatibleProvider implements ChatProvider {
           }
 
           const choice = json.choices?.[0];
-          const chunk: ChatChunk = { delta: choice?.delta?.content ?? '' };
+          const delta = choice?.delta;
+          const chunk: ChatChunk = { delta: delta?.content ?? '' };
+
+          // Structured reasoning from API (separate from content).
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+          if (reasoning) {
+            chunk.reasoning = reasoning;
+          }
+
           const finishReason = choice?.finish_reason;
           if (finishReason === 'stop' || finishReason === 'length') {
             chunk.finishReason = finishReason;

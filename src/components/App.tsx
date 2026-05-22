@@ -6,6 +6,7 @@ import type {
   PromptTemplate,
   ModelParams,
   ChatProvider,
+  ReasoningEffort,
 } from '../providers/types';
 import { getProvider, getWebLLMProvider, getHttpProviders } from '../providers/registry';
 import { useSystem } from '../hooks/useSystem';
@@ -20,6 +21,7 @@ import {
   DEFAULT_CODE_THEME,
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
+import { detectReasoning, defaultEffort } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
 import { ModelSlot } from './system/ModelSlot';
@@ -55,7 +57,7 @@ export default function App() {
     [threads, activeThreadId],
   );
 
-  const { params, globalDefaults, setGlobalDefaults } = useModelParams(activeThread);
+  const { params: rawParams, globalDefaults, setGlobalDefaults } = useModelParams(activeThread);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>('idle');
@@ -122,6 +124,19 @@ export default function App() {
   const isApiThread = !activeProvider.needsModelLoad;
   const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
 
+  const activeReasoningCapability = useMemo(
+    () => (activeModelId ? detectReasoning(activeModelId) : undefined),
+    [activeModelId],
+  );
+
+  // When a thread hasn't been customized, the reasoning effort default
+  // depends on model capability: 'low' for effort models, 'off' for toggle
+  // models. Customized threads keep their explicit stored value.
+  const params = useMemo<ModelParams>(() => {
+    if (activeThread?.modelParams) return rawParams;
+    return { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
+  }, [rawParams, activeThread?.modelParams, activeReasoningCapability]);
+
   const { messages, generating, send, regenerate, editAndResend, stop } = useChat(
     activeProvider,
     activeModelId,
@@ -135,6 +150,12 @@ export default function App() {
   const modelReady = isApiThread
     ? !!activeThread?.modelId
     : engineStatus === 'ready';
+
+  // Vision capability: API providers support image_url parts natively, so use
+  // the provider capability. WebLLM models vary — look up the loaded model.
+  const visionOk = isApiThread
+    ? activeProvider.capabilities.vision
+    : !!models.find((m) => m.id === activeModelId)?.vision;
 
   // Ensure there is always an active thread to type into — created on first
   // run (and after the last thread is deleted), independent of model state.
@@ -284,6 +305,17 @@ export default function App() {
     if (activeThreadId) updateThread(activeThreadId, { modelParams: undefined });
   }, [activeThreadId, updateThread]);
 
+  const handleReasoningChange = useCallback(
+    (effort: ReasoningEffort) => {
+      if (activeThreadId) {
+        updateThread(activeThreadId, {
+          modelParams: { ...params, reasoningEffort: effort },
+        });
+      }
+    },
+    [activeThreadId, params, updateThread],
+  );
+
   return (
     <div className="h-screen flex overflow-hidden bg-bg text-text font-sans">
       <NavRail page={page} setPage={setPage} onOpenSettings={() => setModal('settings')} />
@@ -336,6 +368,9 @@ export default function App() {
                   templates={templates}
                   defaultSystemPrompt={defaultSystemPrompt}
                   params={params}
+                  visionOk={visionOk}
+                  reasoningCapability={activeReasoningCapability}
+                  onReasoningChange={handleReasoningChange}
                   onSend={handleSend}
                   onStop={stop}
                   onRegenerate={regenerate}
@@ -388,6 +423,7 @@ export default function App() {
         onClose={() => setModal(null)}
         params={params}
         defaults={globalDefaults}
+        reasoningCapability={activeReasoningCapability}
         onApply={handleThreadParamsApply}
         onReset={handleThreadParamsReset}
       />
