@@ -160,11 +160,19 @@ export function ProviderConfig({ provider }: { provider: OpenAICompatibleProvide
         >
           {status.kind === 'testing' ? 'connecting…' : 'save & test connection'}
         </button>
-        {status.kind === 'ok' && (
-          <span className="font-mono text-[10px] text-ok">
-            connected — {status.count} models available
-          </span>
-        )}
+        {status.kind === 'ok' &&
+          (spec.usesKey && !apiKey.trim() ? (
+            // /models often responds without auth even when /chat/completions
+            // requires a key — so a passing test here can still 401 on send.
+            <span className="font-mono text-[10px] text-warn">
+              {status.count} models listed — no API key set, so sending a message may
+              fail with 401
+            </span>
+          ) : (
+            <span className="font-mono text-[10px] text-ok">
+              connected — {status.count} models available
+            </span>
+          ))}
         {status.kind === 'err' && (
           <span className="font-mono text-[10px] text-err break-all">{status.msg}</span>
         )}
