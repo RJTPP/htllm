@@ -169,13 +169,11 @@ export default function App() {
     [activeThreadId, updateThread],
   );
 
-  const handleThreadParamsChange = useCallback(
-    (patch: Partial<ModelParams>) => {
-      if (activeThreadId) {
-        updateThread(activeThreadId, { modelParams: { ...params, ...patch } });
-      }
+  const handleThreadParamsApply = useCallback(
+    (next: ModelParams) => {
+      if (activeThreadId) updateThread(activeThreadId, { modelParams: next });
     },
-    [activeThreadId, params, updateThread],
+    [activeThreadId, updateThread],
   );
 
   const handleThreadParamsReset = useCallback(() => {
@@ -267,7 +265,7 @@ export default function App() {
         onClose={() => setModal(null)}
         params={params}
         defaults={globalDefaults}
-        onChange={handleThreadParamsChange}
+        onApply={handleThreadParamsApply}
         onReset={handleThreadParamsReset}
       />
     </div>

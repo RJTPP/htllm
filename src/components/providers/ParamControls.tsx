@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import type { ModelParams } from '../../providers/types';
 
 function ParamSlider({
@@ -15,6 +16,26 @@ function ParamSlider({
   step: number;
   onChange: (v: number) => void;
 }) {
+  const display = (v: number) => (step < 1 ? v.toFixed(2) : String(v));
+  const [text, setText] = useState(display(value));
+
+  useEffect(() => {
+    setText(display(value));
+  }, [value, step]);
+
+  // The number input commits on blur / Enter so intermediate keystrokes
+  // (e.g. "6" while typing "640") don't get clamped or persisted.
+  const commit = () => {
+    const v = parseFloat(text);
+    if (Number.isNaN(v)) {
+      setText(display(value));
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, v));
+    onChange(clamped);
+    setText(display(clamped));
+  };
+
   return (
     <div className="flex items-center gap-3">
       <label className="font-mono text-[11px] text-mute w-28 shrink-0">{label}</label>
@@ -27,9 +48,19 @@ function ParamSlider({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="flex-1 h-1 accent-accent"
       />
-      <span className="font-mono text-[11px] text-text w-12 text-right">
-        {step < 1 ? value.toFixed(2) : value}
-      </span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        className="font-mono text-[11px] text-text w-16 text-right bg-surface border border-line focus:border-accent/60 focus:outline-none px-1 py-0.5"
+      />
     </div>
   );
 }

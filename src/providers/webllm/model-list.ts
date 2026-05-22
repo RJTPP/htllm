@@ -3,26 +3,19 @@ import type { ModelInfo } from '../types';
 
 function parseFamily(modelId: string): string {
   const id = modelId.toLowerCase();
+  // Base families — versions (Llama 2/3, Qwen 2/3, …) collapse into one group.
+  // Order matters: more specific names first (DeepSeek/TinyLlama embed "llama").
   const families: [RegExp, string][] = [
-    [/llama-3\.2/i, 'Llama 3.2'],
-    [/llama-3\.1/i, 'Llama 3.1'],
-    [/llama-3/i, 'Llama 3'],
-    [/llama-2/i, 'Llama 2'],
-    [/qwen2\.5/i, 'Qwen 2.5'],
-    [/qwen2/i, 'Qwen 2'],
-    [/qwen3/i, 'Qwen 3'],
-    [/mistral/i, 'Mistral'],
-    [/gemma-2/i, 'Gemma 2'],
-    [/gemma/i, 'Gemma'],
-    [/phi-4/i, 'Phi 4'],
-    [/phi-3\.5/i, 'Phi 3.5'],
-    [/phi-3/i, 'Phi 3'],
-    [/smollm2/i, 'SmolLM 2'],
-    [/smollm/i, 'SmolLM'],
     [/deepseek/i, 'DeepSeek'],
+    [/tinyllama/i, 'TinyLlama'],
+    [/llama/i, 'Llama'],
+    [/qwen/i, 'Qwen'],
+    [/gemma/i, 'Gemma'],
+    [/phi/i, 'Phi'],
+    [/mistral/i, 'Mistral'],
+    [/smollm/i, 'SmolLM'],
     [/hermes/i, 'Hermes'],
     [/stablelm/i, 'StableLM'],
-    [/tinyllama/i, 'TinyLlama'],
   ];
 
   for (const [re, name] of families) {
