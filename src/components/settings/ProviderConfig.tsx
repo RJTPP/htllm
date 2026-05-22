@@ -209,11 +209,10 @@ export function ProviderConfig({ provider }: { provider: OpenAICompatibleProvide
               The key is saved only in this browser's IndexedDB, in plain text. It is
               not encrypted, not synced, and never sent anywhere except as the
               Authorization header to your configured base URL.{' '}
-              <strong className="text-text font-semibold">
+              <strong className="text-warn font-semibold">
                 Anyone with access to this browser profile — or a browser extension
-                that can read this page
-              </strong>{' '}
-              — can read it.
+                that can read this page — can read it.
+              </strong>
             </div>
             <div>
               <div className="text-text text-[12.5px] font-semibold mb-0.5">
