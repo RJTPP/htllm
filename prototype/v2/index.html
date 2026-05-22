@@ -1868,21 +1868,23 @@ function KnowledgeSearch({ corpora, ready }) {
   );
 }
 
-function KnowledgeDocuments({ corpora, docs }) {
+function KnowledgeDocuments({ corpora, docs, loadedEmbed }) {
   const [activeCorpus, setActiveCorpus] = useState(corpora[0]?.id);
   const corpusDocs = docs.filter((d) => d.corpus === activeCorpus);
   const corpus = corpora.find((c) => c.id === activeCorpus);
   const [selectedDoc, setSelectedDoc] = useState(corpusDocs[0]?.id || null);
   useEffect(() => { setSelectedDoc(docs.filter((d) => d.corpus === activeCorpus)[0]?.id || null); }, [activeCorpus]);
   const doc = corpusDocs.find((d) => d.id === selectedDoc);
+  const [modal, setModal] = useState(null);
 
   return (
+    <React.Fragment>
     <div className="flex border border-line bg-surface min-h-[440px]">
       {/* col 1: corpora */}
       <div className="w-[180px] border-r border-line flex flex-col">
         <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
           <span>corpora · {corpora.length}</span>
-          <button className="text-mute hover:text-accent" title="New corpus"><Icon name="plus" size={12} /></button>
+          <button onClick={() => setModal("newCorpus")} className="text-mute hover:text-accent" title="New corpus"><Icon name="plus" size={12} /></button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {corpora.map((c) => (
@@ -1899,7 +1901,7 @@ function KnowledgeDocuments({ corpora, docs }) {
       <div className="w-[260px] border-r border-line flex flex-col">
         <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest flex items-center justify-between">
           <span>documents · {corpusDocs.length}</span>
-          <button className="text-mute hover:text-accent" title="Add documents"><Icon name="plus" size={12} /></button>
+          <button onClick={() => setModal("addDocs")} className="text-mute hover:text-accent" title="Add documents"><Icon name="plus" size={12} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-1">
           {corpusDocs.length > 0 ? corpusDocs.map((d) => (
@@ -1946,15 +1948,210 @@ function KnowledgeDocuments({ corpora, docs }) {
               </div>
             </div>
           ) : (
-            <div className="border border-line border-dashed px-4 py-10 text-center bg-surface/40">
-              <Icon name="doc" size={22} />
+            <button onClick={() => setModal("addDocs")}
+              className="w-full border border-line border-dashed px-4 py-10 text-center bg-surface/40 hover:border-accent/50 hover:bg-surface/60 transition-colors">
+              <div className="flex justify-center text-mute"><Icon name="doc" size={22} /></div>
               <div className="mt-2 text-[13px] text-text">No documents in this corpus</div>
-              <div className="mt-1 font-mono text-[10px] text-mute">drop .txt / .pdf / .md files to add</div>
-            </div>
+              <div className="mt-1 font-mono text-[10px] text-mute">click to add — .txt / .pdf / .md</div>
+            </button>
           )}
         </div>
       </div>
     </div>
+    <NewCorpusModal open={modal === "newCorpus"} onClose={() => setModal(null)} loadedEmbed={loadedEmbed} />
+    <AddDocumentsModal open={modal === "addDocs"} onClose={() => setModal(null)} corpora={corpora} defaultCorpus={activeCorpus} />
+    </React.Fragment>
+  );
+}
+
+function NewCorpusModal({ open, onClose, loadedEmbed }) {
+  const [name, setName] = useState("");
+  const [embModel, setEmbModel] = useState(loadedEmbed || MOCK_EMBED_MODELS[0]?.id);
+  useEffect(() => {
+    if (open) { setName(""); setEmbModel(loadedEmbed || MOCK_EMBED_MODELS[0]?.id); }
+  }, [open]);
+
+  return (
+    <Modal open={open} onClose={onClose} title="New corpus"
+      subtitle="A corpus groups documents under one embedding model" width="max-w-md">
+      <div className="p-4 space-y-4">
+        <div className="space-y-1">
+          <label className="font-mono text-[10px] text-mute uppercase tracking-widest">name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="e.g. Project docs"
+            className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[13px]" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="font-mono text-[10px] text-mute uppercase tracking-widest">embedding model</label>
+          {MOCK_EMBED_MODELS.map((m) => (
+            <button key={m.id} onClick={() => setEmbModel(m.id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 border text-left transition-colors ${
+                embModel === m.id ? "border-accent/60 bg-accent/5" : "border-line hover:border-lineHi"
+              }`}>
+              <BrandLogo brand={m.brand} size={18} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] text-text truncate">{m.name}</div>
+                <div className="font-mono text-[10px] text-mute">dim {m.dim} · {fmtMB(m.vram)}{m.cached ? " · cached" : ""}</div>
+              </div>
+              {embModel === m.id && <Dot tone="accent" />}
+            </button>
+          ))}
+          <div className="font-mono text-[10px] text-mute leading-relaxed">
+            The corpus is permanently tagged to this model. Changing it later requires re-embedding every document (D2).
+          </div>
+        </div>
+        <div className="flex items-center gap-2 border-t border-line pt-3">
+          <button onClick={onClose} disabled={!name.trim()}
+            className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30">
+            create corpus
+          </button>
+          {!name.trim() && <span className="font-mono text-[10px] text-mute">name required</span>}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AddDocumentsModal({ open, onClose, corpora, defaultCorpus }) {
+  const [corpusId, setCorpusId] = useState(defaultCorpus);
+  const [stage, setStage] = useState("pick"); // pick | ingesting | done
+  const [files, setFiles] = useState([]);
+  const [prog, setProg] = useState({ phase: "parsing", done: 0, total: 0 });
+
+  useEffect(() => {
+    if (open) { setCorpusId(defaultCorpus); setStage("pick"); setFiles([]); setProg({ phase: "parsing", done: 0, total: 0 }); }
+  }, [open, defaultCorpus]);
+
+  const corpus = corpora.find((c) => c.id === corpusId);
+  const embModel = corpus ? MOCK_EMBED_MODELS.find((m) => m.id === corpus.embeddingModel) : null;
+  const SAMPLE = [
+    { name: "architecture.pdf", kind: "pdf", size: 1.8 * 1024 ** 2 },
+    { name: "meeting-notes.txt", kind: "txt", size: 42 * 1024 },
+  ];
+
+  const ingest = () => {
+    const total = 96;
+    setStage("ingesting");
+    setProg({ phase: "parsing", done: 0, total });
+    setTimeout(() => setProg({ phase: "chunking", done: 0, total }), 550);
+    setTimeout(() => {
+      let done = 0;
+      const timer = setInterval(() => {
+        done += 6;
+        if (done >= total) {
+          clearInterval(timer);
+          setProg({ phase: "embedding", done: total, total });
+          setStage("done");
+        } else {
+          setProg({ phase: "embedding", done, total });
+        }
+      }, 80);
+    }, 1100);
+  };
+
+  const pct = prog.phase === "parsing" ? 5
+            : prog.phase === "chunking" ? 20
+            : prog.total ? 20 + Math.round(80 * (prog.done / prog.total)) : 20;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Add documents"
+      subtitle="Parsed, chunked and embedded locally — nothing leaves this device" width="max-w-lg">
+      <div className="p-4 space-y-4">
+        <div className="space-y-1.5">
+          <label className="font-mono text-[10px] text-mute uppercase tracking-widest">add to corpus</label>
+          <div className="flex flex-wrap gap-1.5">
+            {corpora.map((c) => (
+              <button key={c.id} onClick={() => stage === "pick" && setCorpusId(c.id)} disabled={stage !== "pick"}
+                className={`px-2.5 py-1 border font-mono text-[11px] ${corpusId === c.id ? "border-accent/60 bg-accent/5 text-accent" : "border-line text-mute hover:text-text"} disabled:opacity-50`}>
+                {c.name}
+              </button>
+            ))}
+          </div>
+          {embModel && (
+            <div className="font-mono text-[10px] text-mute flex items-center gap-1.5">
+              <BrandLogo brand={embModel.brand} size={12} />
+              embeds with {shortenId(embModel.id)} · dim {embModel.dim}
+            </div>
+          )}
+        </div>
+
+        {stage === "pick" && (
+          <React.Fragment>
+            {files.length === 0 ? (
+              <button onClick={() => setFiles(SAMPLE)}
+                className="w-full border border-line border-dashed px-4 py-8 text-center hover:border-accent/50 hover:bg-surface/40 transition-colors">
+                <div className="flex justify-center text-mute mb-2"><Icon name="doc" size={24} /></div>
+                <div className="text-[13px] text-text">Choose files or drop them here</div>
+                <div className="font-mono text-[10px] text-mute mt-1">.txt · .pdf · .md</div>
+              </button>
+            ) : (
+              <div className="space-y-1">
+                {files.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2.5 border border-line bg-surface px-3 py-2">
+                    <Icon name="doc" size={14} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] text-text truncate">{f.name}</div>
+                      <div className="font-mono text-[10px] text-mute">{f.kind.toUpperCase()} · {fmtBytes(f.size)}</div>
+                    </div>
+                    <button onClick={() => setFiles((arr) => arr.filter((_, j) => j !== i))} className="text-mute hover:text-err">
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 border-t border-line pt-3">
+              <button onClick={ingest} disabled={files.length === 0}
+                className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30">
+                parse, chunk &amp; embed →
+              </button>
+              <span className="font-mono text-[10px] text-mute">
+                {files.length === 0 ? "choose files first" : `${files.length} file${files.length > 1 ? "s" : ""} ready`}
+              </span>
+            </div>
+          </React.Fragment>
+        )}
+
+        {stage === "ingesting" && (
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2">
+              {["parsing", "chunking", "embedding"].map((ph, i) => {
+                const order = { parsing: 0, chunking: 1, embedding: 2 };
+                const cur = order[prog.phase];
+                const tone = i < cur ? "ok" : i === cur ? "accent" : "mute";
+                return (
+                  <React.Fragment key={ph}>
+                    {i > 0 && <div className="flex-1 h-px bg-line" />}
+                    <div className="flex items-center gap-1.5">
+                      <Dot tone={tone} />
+                      <span className={`font-mono text-[10px] ${i === cur ? "text-text" : i < cur ? "text-ok" : "text-mute"}`}>{ph}</span>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            <div className="h-1.5 bg-surface border border-line overflow-hidden">
+              <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="font-mono text-[11px] text-mute text-center">
+              {prog.phase === "embedding" ? `embedding ${prog.done}/${prog.total} chunks` : `${prog.phase}…`}
+            </div>
+          </div>
+        )}
+
+        {stage === "done" && (
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2 text-ok">
+              <Icon name="check" size={16} />
+              <span className="text-[13px]">{files.length} file{files.length > 1 ? "s" : ""} added · {prog.total} chunks embedded</span>
+            </div>
+            <div className="font-mono text-[10px] text-mute leading-relaxed">
+              Vectors stored in IndexedDB, tagged to {embModel ? shortenId(embModel.id) : "the corpus model"}.
+            </div>
+            <button onClick={onClose} className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10">done</button>
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -1989,7 +2186,7 @@ function KnowledgePage({ loadedEmbed, embedState, onOpenEmbedPicker }) {
 
         {mode === "search"
           ? <KnowledgeSearch corpora={MOCK_CORPORA} ready={ready} />
-          : <KnowledgeDocuments corpora={MOCK_CORPORA} docs={MOCK_DOCS} />}
+          : <KnowledgeDocuments corpora={MOCK_CORPORA} docs={MOCK_DOCS} loadedEmbed={loadedEmbed} />}
       </div>
     </div>
   );
