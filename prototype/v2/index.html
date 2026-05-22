@@ -147,6 +147,12 @@ const MOCK_MODELS = [
   { name: "DeepSeek R1 Distill Llama 8B", family: "DeepSeek", variants: [
     { id: "DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC", quant: "q4f16", vram: 5320, cached: false },
   ]},
+  { name: "Qwen2 VL 2B Instruct", family: "Qwen", vision: true, variants: [
+    { id: "Qwen2-VL-2B-Instruct-q4f16_1-MLC", quant: "q4f16", vram: 1817, cached: false },
+  ]},
+  { name: "Phi 3.5 Vision Instruct", family: "Phi", vision: true, variants: [
+    { id: "Phi-3.5-vision-instruct-q4f16_1-MLC", quant: "q4f16", vram: 3952, cached: false },
+  ]},
 ];
 
 // Embedding models — distinct from chat. Vectors are tagged to the model
@@ -252,6 +258,10 @@ function shortenId(id) {
 function familyOf(modelId) {
   const m = MOCK_MODELS.find((x) => x.variants.some((v) => v.id === modelId));
   return m ? m.family : null;
+}
+function isVisionModel(modelId) {
+  const m = MOCK_MODELS.find((x) => x.variants.some((v) => v.id === modelId));
+  return !!(m && m.vision);
 }
 function fitFor(vram, ramGB) {
   const budget = (ramGB || 4) * 1024 * 0.7;
@@ -1093,6 +1103,7 @@ function Composer({ modelReady, model, generating, templates, onSend, onStop, on
   const [input, setInput] = useState("");
   const [images, setImages] = useState(0);
   const taRef = useRef(null);
+  const visionOk = isVisionModel(model);
 
   useEffect(() => {
     const ta = taRef.current;
@@ -1138,8 +1149,10 @@ function Composer({ modelReady, model, generating, templates, onSend, onStop, on
               style={{ maxHeight: "180px" }}
             />
             {modelReady && (
-              <button onClick={() => setImages((n) => Math.min(n + 1, 3))} disabled={images >= 3} title="Attach image"
-                className="px-2.5 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30">
+              <button onClick={() => setImages((n) => Math.min(n + 1, 3))}
+                disabled={!visionOk || images >= 3}
+                title={visionOk ? "Attach image" : "Current model has no vision support — load a vision model to attach images"}
+                className="px-2.5 py-2 border border-line text-mute hover:text-text hover:bg-surface2 disabled:opacity-30 disabled:cursor-not-allowed">
                 <Icon name="image" size={16} />
               </button>
             )}
@@ -1278,6 +1291,7 @@ function ModelGridCard({ model, system, loadedId, recommended, engineState, onLo
           <div className="text-[12.5px] text-text truncate leading-tight">{model.name}</div>
           <div className="font-mono text-[10px] mt-0.5 flex items-center gap-1 whitespace-nowrap overflow-hidden">
             <span className="text-mute">{fmtMB(minVram)}{model.variants.length > 1 ? ` · ${model.variants.length} var` : ""}</span>
+            {model.vision && <span className="text-info">· vision</span>}
             {recommended && !anyLoaded && <span className="text-accent">· recommended</span>}
             {!fit.fits && !fit.tight && <span className="text-err">· too large</span>}
             {fit.tight && <span className="text-warn">· tight</span>}

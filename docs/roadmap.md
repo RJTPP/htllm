@@ -38,6 +38,15 @@ most visible quality gap, so markdown + syntax highlighting moves to Phase 2.
 Library choice favors a lightweight renderer over heavy ones (bundle cost);
 final pick deferred to implementation.
 
+### D4 — Vision capability is per-model, not per-provider
+
+WebLLM (one provider) runs both vision and non-vision models, so a
+provider-level `capabilities.vision` flag is the wrong granularity. `ModelInfo`
+gains a per-model `vision: boolean`, sourced from WebLLM's `model_type`
+(`ModelType.VLM`) with a model-id heuristic fallback. The model picker badges
+vision models; the composer's image attach is gated on the loaded model being
+vision-capable. Supersedes the SDD's provider-level `capabilities.vision`.
+
 ---
 
 ## Phase plan
