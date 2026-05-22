@@ -46,7 +46,7 @@ export function useChat(
       let finalUsage: UsageStats | undefined;
 
       try {
-        const trimmed = history.slice(-params.historyMsgs);
+        const trimmed = params.historyMsgs > 0 ? history.slice(-params.historyMsgs) : history;
         const sysMsg: Message | null = systemPrompt.trim()
           ? {
               id: '__system',

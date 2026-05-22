@@ -84,14 +84,35 @@ export function ParamControls({
         step={512}
         onChange={set('contextWindow')}
       />
-      <ParamSlider
-        label="history_msgs"
-        value={params.historyMsgs}
-        min={1}
-        max={32}
-        step={1}
-        onChange={set('historyMsgs')}
-      />
+      <div className="flex items-center gap-3">
+        <label className="font-mono text-[11px] text-mute w-28 shrink-0">history_msgs</label>
+        {params.historyMsgs === 0 ? (
+          <span className="flex-1 font-mono text-[11px] text-accent">all messages</span>
+        ) : (
+          <>
+            <input
+              type="range"
+              min={1}
+              max={128}
+              step={1}
+              value={params.historyMsgs}
+              onChange={(e) => onChange({ historyMsgs: parseInt(e.target.value) })}
+              className="flex-1 h-1 accent-accent"
+            />
+            <span className="font-mono text-[11px] text-text w-16 text-right">{params.historyMsgs}</span>
+          </>
+        )}
+        <button
+          onClick={() => onChange({ historyMsgs: params.historyMsgs === 0 ? 12 : 0 })}
+          className={`font-mono text-[10px] px-1.5 py-0.5 border ${
+            params.historyMsgs === 0
+              ? 'border-accent/60 text-accent bg-accent/10'
+              : 'border-line text-mute hover:text-text'
+          }`}
+        >
+          all
+        </button>
+      </div>
       <ParamSlider
         label="temperature"
         value={params.temperature}

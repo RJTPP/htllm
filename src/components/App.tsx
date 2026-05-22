@@ -174,9 +174,13 @@ export default function App() {
   );
 
   const handleCreateThread = useCallback(async () => {
+    if (activeThreadId && messages.length === 0) {
+      setPage('chat');
+      return;
+    }
     await createThread(provider.id, loadedModelId ?? '');
     setPage('chat');
-  }, [createThread, loadedModelId]);
+  }, [createThread, loadedModelId, activeThreadId, messages.length]);
 
   // Cmd/Ctrl + Shift + O — new chat.
   useEffect(() => {
