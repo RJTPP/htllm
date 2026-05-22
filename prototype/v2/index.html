@@ -784,7 +784,13 @@ function ModelSlot({ role, model, state, progress, onClick }) {
 function ThreadItem({ thread, active, onSelect, onDelete, onRename }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(thread.title);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const commit = () => { onRename(thread.id, draft.trim() || thread.title); setEditing(false); };
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
   return (
     <div
       onClick={() => onSelect(thread.id)}
@@ -825,13 +831,22 @@ function ThreadItem({ thread, active, onSelect, onDelete, onRename }) {
             >
               <Icon name="pencil" size={13} />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(thread.id); }}
-              className="p-1 text-mute hover:text-err"
-              title="Delete"
-            >
-              <Icon name="trash" size={13} />
-            </button>
+            {confirmDelete ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(thread.id); }}
+                className="font-mono text-[10px] px-1.5 py-0.5 border border-err/60 text-err hover:bg-err/10"
+              >
+                confirm
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                className="p-1 text-mute hover:text-err"
+                title="Delete thread"
+              >
+                <Icon name="trash" size={13} />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -839,7 +854,7 @@ function ThreadItem({ thread, active, onSelect, onDelete, onRename }) {
   );
 }
 
-function Sidebar({ threads, activeId, onSelect, onNew, onDelete, onRename, model, engineState, onOpenPicker }) {
+function Sidebar({ threads, activeId, onSelect, onNew, onDelete, onRename }) {
   return (
     <aside className="reveal reveal-2 w-[248px] shrink-0 border-r border-line bg-surface flex flex-col">
       <div className="px-3 py-2.5">
@@ -857,16 +872,6 @@ function Sidebar({ threads, activeId, onSelect, onNew, onDelete, onRename, model
         ))}
         {threads.length === 0 && <div className="px-2.5 py-6 font-mono text-[11px] text-mute text-center">No threads yet</div>}
       </div>
-      <button onClick={onOpenPicker} className="border-t border-line px-3 py-2.5 text-left hover:bg-surface2 transition-colors">
-        <div className="flex items-center justify-between">
-          <div className="font-mono text-[10px] text-mute uppercase tracking-widest">model</div>
-          <span className="font-mono text-[10px] text-mute">change ↗</span>
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          <Dot tone={engineState === "ready" ? "ok" : engineState === "loading" ? "accent" : "mute"} />
-          <div className="font-mono text-[12px] text-text truncate">{model ? shortenId(model) : "no model loaded"}</div>
-        </div>
-      </button>
     </aside>
   );
 }
@@ -2609,7 +2614,6 @@ function App() {
                   <Sidebar
                     threads={threads} activeId={activeThread} onSelect={setActiveThread}
                     onNew={newThread} onDelete={deleteThread} onRename={renameThread}
-                    model={loadedModel} engineState={engineState} onOpenPicker={() => { setPickerType("chat"); setModal("picker"); }}
                   />
                   {activeThread ? (
                     <ChatPage
