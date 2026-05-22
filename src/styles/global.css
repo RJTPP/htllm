@@ -2,20 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --tok-key: #c084fc;
-  --tok-fn: #93c5fd;
-  --tok-str: #86efac;
-  --tok-num: #fde047;
-  --tok-com: #6b7280;
-  --tok-typ: #fcd34d;
-  --tok-tag: #fb923c;
-  --tok-attr: #93c5fd;
-  --tok-punc: #a1a1aa;
-  --tok-op: #f0abfc;
-  --tok-bool: #fbbf24;
-}
-
 @keyframes pulseDot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -145,18 +131,6 @@
   .wm-glitch {
     animation: wmGlitch 0.42s steps(2, end) 1;
   }
-
-  .tok-key { color: var(--tok-key); }
-  .tok-fn { color: var(--tok-fn); }
-  .tok-str { color: var(--tok-str); }
-  .tok-num { color: var(--tok-num); }
-  .tok-com { color: var(--tok-com); font-style: italic; }
-  .tok-typ { color: var(--tok-typ); }
-  .tok-tag { color: var(--tok-tag); }
-  .tok-attr { color: var(--tok-attr); }
-  .tok-punc { color: var(--tok-punc); }
-  .tok-op { color: var(--tok-op); }
-  .tok-bool { color: var(--tok-bool); }
 }
 
 /* ── Markdown body styles (rendered by marked) ────────────────────── */
