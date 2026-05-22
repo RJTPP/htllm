@@ -1,5 +1,5 @@
 import { useRef, useEffect, useMemo } from 'react';
-import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate } from '../../providers/types';
+import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { SystemPromptBar } from './SystemPromptBar';
 import { MessageView } from './MessageView';
@@ -16,6 +16,8 @@ export function ChatPage({
   templates,
   defaultSystemPrompt,
   params,
+  reasoningCapability,
+  onReasoningChange,
   onSend,
   onStop,
   onRegenerate,
@@ -33,6 +35,8 @@ export function ChatPage({
   templates: PromptTemplate[];
   defaultSystemPrompt: string;
   params: ModelParams;
+  reasoningCapability?: ReasoningCapability;
+  onReasoningChange: (effort: ReasoningEffort) => void;
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onRegenerate: () => void;
@@ -113,6 +117,9 @@ export function ChatPage({
         templates={templates}
         contextUsed={contextUsed}
         contextTotal={params.contextWindow}
+        reasoningCapability={reasoningCapability}
+        reasoningEffort={params.reasoningEffort}
+        onReasoningChange={onReasoningChange}
         onSend={onSend}
         onStop={onStop}
         onParams={onParams}

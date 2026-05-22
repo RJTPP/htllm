@@ -6,6 +6,7 @@ import type {
   PromptTemplate,
   ModelParams,
   ChatProvider,
+  ReasoningEffort,
 } from '../providers/types';
 import { getProvider, getWebLLMProvider, getHttpProviders } from '../providers/registry';
 import { useSystem } from '../hooks/useSystem';
@@ -290,6 +291,17 @@ export default function App() {
     if (activeThreadId) updateThread(activeThreadId, { modelParams: undefined });
   }, [activeThreadId, updateThread]);
 
+  const handleReasoningChange = useCallback(
+    (effort: ReasoningEffort) => {
+      if (activeThreadId) {
+        updateThread(activeThreadId, {
+          modelParams: { ...params, reasoningEffort: effort },
+        });
+      }
+    },
+    [activeThreadId, params, updateThread],
+  );
+
   return (
     <div className="h-screen flex overflow-hidden bg-bg text-text font-sans">
       <NavRail page={page} setPage={setPage} onOpenSettings={() => setModal('settings')} />
@@ -342,6 +354,8 @@ export default function App() {
                   templates={templates}
                   defaultSystemPrompt={defaultSystemPrompt}
                   params={params}
+                  reasoningCapability={activeReasoningCapability}
+                  onReasoningChange={handleReasoningChange}
                   onSend={handleSend}
                   onStop={stop}
                   onRegenerate={regenerate}
