@@ -20,8 +20,11 @@ import {
   setSetting,
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_CODE_THEME,
+  DEFAULT_TITLE_MODE,
+  type TitleMode,
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
+import { generateTitle } from '../lib/title';
 import { detectReasoning, defaultEffort } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
@@ -77,6 +80,7 @@ export default function App() {
   const [modal, setModal] = useState<ModalId>(null);
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
+  const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
 
   useEffect(() => {
     webllmProvider.listModels().then(setModels);
@@ -96,6 +100,9 @@ export default function App() {
         setCodeTheme(v);
       }
     });
+    getSetting<string>('titleMode').then((v) => {
+      if (v === 'trim' || v === 'generate') setTitleModeState(v);
+    });
   }, []);
 
   const setDefaultSystemPrompt = useCallback(async (value: string) => {
@@ -109,13 +116,10 @@ export default function App() {
     await setSetting('codeTheme', value);
   }, []);
 
-  const handleAutoTitle = useCallback(
-    async (threadId: string, firstMessage: string) => {
-      const title = firstMessage.slice(0, 60) + (firstMessage.length > 60 ? '…' : '');
-      await updateThreadTitle(threadId, title);
-    },
-    [updateThreadTitle],
-  );
+  const setTitleMode = useCallback(async (value: TitleMode) => {
+    setTitleModeState(value);
+    await setSetting('titleMode', value);
+  }, []);
 
   const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
 
@@ -127,6 +131,26 @@ export default function App() {
   const activeProviderId = activeProvider.id;
   const isApiThread = !activeProvider.needsModelLoad;
   const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
+
+  // New threads get a title from the first message: a trimmed slice always
+  // (instant), then optionally upgraded to a model-generated title. If
+  // generation times out or fails, the trimmed title stays.
+  const handleAutoTitle = useCallback(
+    async (threadId: string, firstMessage: string) => {
+      const trimmed =
+        firstMessage.slice(0, 60) + (firstMessage.length > 60 ? '…' : '');
+      await updateThreadTitle(threadId, trimmed);
+      if (titleMode === 'generate') {
+        const generated = await generateTitle(
+          activeProvider,
+          activeModelId,
+          firstMessage,
+        );
+        if (generated) await updateThreadTitle(threadId, generated);
+      }
+    },
+    [titleMode, activeProvider, activeModelId, updateThreadTitle],
+  );
 
   const activeReasoningCapability = useMemo(
     () => (activeModelId ? detectReasoning(activeModelId) : undefined),
@@ -540,6 +564,8 @@ export default function App() {
         setDefaultSystemPrompt={setDefaultSystemPrompt}
         codeTheme={codeTheme}
         setCodeTheme={handleSetCodeTheme}
+        titleMode={titleMode}
+        setTitleMode={setTitleMode}
       />
 
       <ThreadParams

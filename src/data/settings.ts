@@ -18,6 +18,16 @@ export const DEFAULT_SYSTEM_PROMPT =
 /** Shiki theme used for code blocks. Persisted under the 'codeTheme' setting. */
 export const DEFAULT_CODE_THEME = 'vesper';
 
+/**
+ * How new thread titles are derived:
+ * - 'trim'     — slice of the first user message (instant, offline)
+ * - 'generate' — ask the model for a concise title, falling back to trim
+ */
+export type TitleMode = 'trim' | 'generate';
+
+/** Persisted under the 'titleMode' setting. */
+export const DEFAULT_TITLE_MODE: TitleMode = 'trim';
+
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDb();
   const entry = await db.get('settings', key);

@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { PromptTemplate, ModelParams } from '../../providers/types';
 import { createTemplate, deleteTemplate, updateTemplate } from '../../data/prompt-templates';
+import type { TitleMode } from '../../data/settings';
 import { resetEverything } from '../../data/reset';
 import { Modal } from '../ui/Modal';
 import { Badge } from '../ui/Badge';
@@ -65,6 +66,8 @@ export function SettingsModal({
   setDefaultSystemPrompt,
   codeTheme,
   setCodeTheme,
+  titleMode,
+  setTitleMode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -76,6 +79,8 @@ export function SettingsModal({
   setDefaultSystemPrompt: (value: string) => void;
   codeTheme: string;
   setCodeTheme: (value: string) => void;
+  titleMode: TitleMode;
+  setTitleMode: (value: TitleMode) => void;
 }) {
   const [tab, setTab] = useState<SettingsTab>('templates');
   const [draft, setDraft] = useState({ title: '', content: '', description: '' });
@@ -322,6 +327,35 @@ export function SettingsModal({
             <div className="font-mono text-[10px] text-mute mt-1">
               Applied to new threads. Each thread's system prompt can then be edited
               independently.
+            </div>
+          </div>
+          <div className="border-t border-line pt-4">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
+              thread naming
+            </div>
+            <div className="flex gap-1.5">
+              {(
+                [
+                  ['trim', 'Trim first message'],
+                  ['generate', 'Generate with model'],
+                ] as [TitleMode, string][]
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setTitleMode(mode)}
+                  className={`flex-1 font-mono text-[11px] px-3 py-1.5 border transition-colors ${
+                    titleMode === mode
+                      ? 'border-accent/60 text-accent bg-accent/10'
+                      : 'border-line text-mute hover:text-text'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="font-mono text-[10px] text-mute mt-2">
+              How new threads are named. “Generate with model” asks the model for a
+              concise title, falling back to the trimmed message if it times out.
             </div>
           </div>
           <div className="border-t border-line pt-4">
