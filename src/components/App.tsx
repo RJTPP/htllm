@@ -103,7 +103,7 @@ export default function App() {
   const isApiThread = !activeProvider.needsModelLoad;
   const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
 
-  const { messages, generating, send, regenerate, stop } = useChat(
+  const { messages, generating, send, regenerate, editAndResend, stop } = useChat(
     activeProvider,
     activeModelId,
     activeThreadId,
@@ -320,6 +320,7 @@ export default function App() {
                   onSend={handleSend}
                   onStop={stop}
                   onRegenerate={regenerate}
+                  onEditAndResend={editAndResend}
                   onOpenPicker={() => setModal('picker')}
                   onParams={() => setModal('params')}
                   onChangeSystemPrompt={handleChangeSystemPrompt}

@@ -7,7 +7,7 @@ import type {
   ChatProvider,
 } from '../providers/types';
 import type { ChatImage } from '../lib/image';
-import { addMessage, getMessages, updateMessage, deleteMessage } from '../data/messages';
+import { addMessage, getMessages, updateMessage, deleteMessage, deleteMessagesAfter } from '../data/messages';
 
 export function useChat(
   provider: ChatProvider,
@@ -166,9 +166,54 @@ export function useChat(
     await runGeneration(trimmed);
   }, [threadId, generating, messages, runGeneration]);
 
+  /** Edit a user message and re-generate from that point (truncate-and-replace). */
+  const editAndResend = useCallback(
+    async (messageId: string, newText: string) => {
+      if (!threadId || generating) return;
+
+      // Find the target message.
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx === -1) return;
+      const target = messages[idx]!;
+      if (target.role !== 'user') return;
+
+      // Build updated content — preserve images if the original had them.
+      let newContent: string | ContentPart[];
+      if (typeof target.content !== 'string') {
+        // Keep existing image parts, replace text.
+        const imageParts = target.content.filter((p) => p.type === 'image_url');
+        if (imageParts.length > 0) {
+          newContent = [{ type: 'text' as const, text: newText }, ...imageParts];
+        } else {
+          newContent = newText;
+        }
+      } else {
+        newContent = newText;
+      }
+
+      // Update the user message in DB.
+      await updateMessage(messageId, { content: newContent });
+
+      // Delete everything after this message.
+      const deletedIds = await deleteMessagesAfter(threadId, messageId);
+
+      // Update local state: keep messages up to and including the edited one.
+      const kept = messages.filter(
+        (_m, i) => i <= idx && !deletedIds.includes(_m.id),
+      );
+      const editedMsg: Message = { ...target, content: newContent };
+      kept[kept.length - 1] = editedMsg;
+      setMessages(kept);
+
+      // Re-generate from the updated history.
+      await runGeneration(kept);
+    },
+    [threadId, generating, messages, runGeneration],
+  );
+
   const stop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
-  return { messages, generating, send, regenerate, stop };
+  return { messages, generating, send, regenerate, editAndResend, stop };
 }

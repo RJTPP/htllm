@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Message, ModelInfo, ContentPart, UsageStats } from '../../providers/types';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
-import { Info, RefreshCw } from 'lucide-react';
+import { Info, RefreshCw, Pencil, X, Check } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MessageBody } from './MessageBody';
 
@@ -37,21 +37,66 @@ export function MessageView({
   models,
   streaming,
   isLast,
+  generating,
   onRegenerate,
+  onEditAndResend,
 }: {
   message: Message;
   modelId: string | null;
   models: ModelInfo[];
   streaming: boolean;
   isLast: boolean;
+  generating: boolean;
   onRegenerate: () => void;
+  onEditAndResend: (messageId: string, newText: string) => void;
 }) {
   const [showUsage, setShowUsage] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const isUser = message.role === 'user';
   const { text, images } = splitContent(message.content);
 
+  // Auto-focus and auto-size the textarea when entering edit mode.
+  useEffect(() => {
+    if (editing && editRef.current) {
+      const el = editRef.current;
+      el.focus();
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+      // Place cursor at end.
+      el.selectionStart = el.selectionEnd = el.value.length;
+    }
+  }, [editing]);
+
+  const startEditing = () => {
+    setEditText(text);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditText('');
+  };
+
+  const confirmEdit = () => {
+    const trimmed = editText.trim();
+    if (!trimmed) return;
+    setEditing(false);
+    onEditAndResend(message.id, trimmed);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      cancelEdit();
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      confirmEdit();
+    }
+  };
+
   return (
-    <div className="flex gap-3">
+    <div className="group flex gap-3">
       <Avatar role={message.role} modelId={modelId} models={models} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 overflow-hidden">
@@ -64,21 +109,78 @@ export function MessageView({
         </div>
 
         {isUser ? (
-          <div className="inline-block max-w-full bg-surface2 border border-line rounded-lg rounded-tl-sm px-3 py-2">
-            {images.length > 0 && (
-              <div className="flex gap-2 mb-2 flex-wrap">
-                {images.map((url, i) => (
-                  <img
-                    key={i}
-                    src={url}
-                    alt={`Attachment ${i + 1}`}
-                    className="w-24 h-24 object-cover border border-line"
-                  />
-                ))}
+          editing ? (
+            <div className="max-w-full space-y-2">
+              {images.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {images.map((url, i) => (
+                    <img
+                      key={i}
+                      src={url}
+                      alt={`Attachment ${i + 1}`}
+                      className="w-24 h-24 object-cover border border-line"
+                    />
+                  ))}
+                </div>
+              )}
+              <textarea
+                ref={editRef}
+                value={editText}
+                onChange={(e) => {
+                  setEditText(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={handleEditKeyDown}
+                className="w-full bg-bg border border-accent/60 focus:outline-none px-3 py-2 text-[13px] text-text resize-none font-sans"
+                rows={1}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={confirmEdit}
+                  disabled={!editText.trim()}
+                  className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
+                >
+                  <Check size={12} /> save & resend
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 border border-line text-mute hover:text-text"
+                >
+                  <X size={12} /> cancel
+                </button>
               </div>
-            )}
-            {text && <MessageBody content={text} />}
-          </div>
+            </div>
+          ) : (
+            <div>
+              <div className="inline-block max-w-full bg-surface2 border border-line rounded-lg rounded-tl-sm px-3 py-2">
+                {images.length > 0 && (
+                  <div className="flex gap-2 mb-2 flex-wrap">
+                    {images.map((url, i) => (
+                      <img
+                        key={i}
+                        src={url}
+                        alt={`Attachment ${i + 1}`}
+                        className="w-24 h-24 object-cover border border-line"
+                      />
+                    ))}
+                  </div>
+                )}
+                {text && <MessageBody content={text} />}
+              </div>
+              {!generating && (
+                <div className="mt-1.5">
+                  <button
+                    onClick={startEditing}
+                    className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border border-transparent text-mute opacity-0 group-hover:opacity-100 hover:text-text transition-opacity"
+                    title="Edit message"
+                  >
+                    <Pencil size={11} /> edit
+                  </button>
+                </div>
+              )}
+            </div>
+          )
         ) : (
           <div className="pr-2">
             <MessageBody content={text} />
