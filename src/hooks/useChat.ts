@@ -42,6 +42,9 @@ export function useChat(
       const controller = new AbortController();
       abortRef.current = controller;
 
+      let fullContent = '';
+      let finalUsage: UsageStats | undefined;
+
       try {
         const trimmed = history.slice(-params.historyMsgs);
         const sysMsg: Message | null = systemPrompt.trim()
@@ -54,9 +57,6 @@ export function useChat(
             }
           : null;
         const sendMessages = sysMsg ? [sysMsg, ...trimmed] : trimmed;
-
-        let fullContent = '';
-        let finalUsage: UsageStats | undefined;
 
         for await (const chunk of provider.chat({
           messages: sendMessages,
@@ -88,7 +88,12 @@ export function useChat(
           usage: finalUsage,
         });
       } catch (err) {
-        if (!controller.signal.aborted) {
+        if (controller.signal.aborted) {
+          await updateMessage(assistantMsg.id, {
+            content: fullContent,
+            usage: finalUsage,
+          });
+        } else {
           const errorContent = `[error] ${err instanceof Error ? err.message : String(err)}`;
           setMessages((prev) => {
             const copy = [...prev];

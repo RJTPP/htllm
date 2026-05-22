@@ -47,6 +47,14 @@ export function ChatPage({
 
   const visionOk = !!models.find((m) => m.id === loadedModelId)?.vision;
 
+  const handleRegenerate = () => {
+    if (!modelReady) {
+      onOpenPicker();
+      return;
+    }
+    onRegenerate();
+  };
+
   if (!thread) {
     return (
       <div className="reveal reveal-3 flex-1 overflow-y-auto grid-bg">
@@ -77,7 +85,7 @@ export function ChatPage({
                 models={models}
                 streaming={generating && i === messages.length - 1 && m.role === 'assistant'}
                 isLast={i === messages.length - 1}
-                onRegenerate={onRegenerate}
+                onRegenerate={handleRegenerate}
               />
             ))}
           </div>

@@ -111,41 +111,46 @@ export class WebLLMProvider implements ChatProvider {
       toOpenAIMessage(m.role, m.content),
     );
 
-    const stream = await this.engine.chat.completions.create({
-      messages: openaiMessages,
-      stream: true,
-      temperature: params.temperature,
-      top_p: params.topP,
-      max_tokens: params.maxTokens,
-      presence_penalty: params.presencePenalty,
-      frequency_penalty: params.frequencyPenalty,
-      stream_options: { include_usage: true },
-    });
+    const engine = this.engine;
+    const onAbort = () => engine.interruptGenerate();
+    params.signal?.addEventListener('abort', onAbort, { once: true });
 
-    for await (const chunk of stream) {
-      if (params.signal?.aborted) {
-        this.engine.interruptGenerate();
-        break;
+    try {
+      const stream = await this.engine.chat.completions.create({
+        messages: openaiMessages,
+        stream: true,
+        temperature: params.temperature,
+        top_p: params.topP,
+        max_tokens: params.maxTokens,
+        presence_penalty: params.presencePenalty,
+        frequency_penalty: params.frequencyPenalty,
+        stream_options: { include_usage: true },
+      });
+
+      for await (const chunk of stream) {
+        if (params.signal?.aborted) break;
+
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta?.content ?? '';
+        const finishReason = choice?.finish_reason as ChatChunk['finishReason'] | null;
+
+        const chatChunk: ChatChunk = { delta };
+        if (finishReason) {
+          chatChunk.finishReason = finishReason;
+        }
+        if (chunk.usage) {
+          chatChunk.usage = {
+            promptTokens: chunk.usage.prompt_tokens,
+            completionTokens: chunk.usage.completion_tokens,
+            prefillTokensPerSecond: chunk.usage.extra?.prefill_tokens_per_s,
+            decodeTokensPerSecond: chunk.usage.extra?.decode_tokens_per_s,
+          };
+        }
+
+        yield chatChunk;
       }
-
-      const choice = chunk.choices?.[0];
-      const delta = choice?.delta?.content ?? '';
-      const finishReason = choice?.finish_reason as ChatChunk['finishReason'] | null;
-
-      const chatChunk: ChatChunk = { delta };
-      if (finishReason) {
-        chatChunk.finishReason = finishReason;
-      }
-      if (chunk.usage) {
-        chatChunk.usage = {
-          promptTokens: chunk.usage.prompt_tokens,
-          completionTokens: chunk.usage.completion_tokens,
-          prefillTokensPerSecond: chunk.usage.extra?.prefill_tokens_per_s,
-          decodeTokensPerSecond: chunk.usage.extra?.decode_tokens_per_s,
-        };
-      }
-
-      yield chatChunk;
+    } finally {
+      params.signal?.removeEventListener('abort', onAbort);
     }
   }
 
