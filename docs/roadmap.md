@@ -128,6 +128,7 @@ experience before any new surface area.
 | File / document manager (full Storage page) | ✦ ☐ |
 | Conversation branching / tree view — pairs with edit-from-mid-conversation | ✦ ☐ |
 | Persistent memory — user-facts store injected into context | ✦ ☐ |
+| Context compression — summarize old turns when used context exceeds a trigger threshold; keeps recent turns verbatim (runs a local model call) | ✦ ☐ |
 
 ### Phase 4 — Agentic
 
