@@ -4,34 +4,35 @@
 
 htllm is organized in five layers. Dependencies flow strictly downward — upper layers may import from lower layers but never the reverse.
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Pages Layer                                        │
-│  Astro pages: index.astro, app/index.astro          │
-│  Static HTML shells that mount React islands        │
-├─────────────────────────────────────────────────────┤
-│  Component Layer                                    │
-│  React components: App, Sidebar, ChatPanel,         │
-│  ModelPicker, SystemRail, Composer, etc.            │
-│  Consumes hooks; never imports providers directly   │
-├─────────────────────────────────────────────────────┤
-│  Hooks Layer                                        │
-│  useSystem, useThreads, useChat, useModelParams     │
-│  Bridges components ↔ data layer ↔ providers        │
-├─────────────────────────────────────────────────────┤
-│  Provider Layer                                     │
-│  ChatProvider interface + registry                  │
-│  WebLLM provider (Phase 1)                          │
-│  Ollama, LM Studio, Groq, OpenRouter (Phase 2)     │
-├─────────────────────────────────────────────────────┤
-│  Data Layer                                         │
-│  IndexedDB via idb: threads, messages, keys,        │
-│  settings, promptTemplates                          │
-├─────────────────────────────────────────────────────┤
-│  Worker Layer                                       │
-│  Web Worker: WebLLM engine (MLCEngineWorkerHandler) │
-│  Communicates with Provider Layer via postMessage    │
-└─────────────────────────────────────────────────────┘
+```mermaid
+block-beta
+  columns 1
+  block:pages["Pages Layer"]
+    p1["Astro pages: index.astro, app/index.astro"]
+    p2["Static HTML shells that mount React islands"]
+  end
+  block:components["Component Layer"]
+    c1["React components: App, Sidebar, ChatPanel, ModelPicker, SystemRail, Composer"]
+    c2["Consumes hooks; never imports providers directly"]
+  end
+  block:hooks["Hooks Layer"]
+    h1["useSystem, useThreads, useChat, useModelParams"]
+    h2["Bridges components ↔ data layer ↔ providers"]
+  end
+  block:providers["Provider Layer"]
+    pr1["ChatProvider interface + registry"]
+    pr2["WebLLM (Phase 1) · Ollama, LM Studio, Groq, OpenRouter, Generic OpenAI (Phase 2)"]
+  end
+  block:data["Data Layer"]
+    d1["IndexedDB via idb: threads, messages, keys, settings, promptTemplates"]
+  end
+  block:worker["Worker Layer"]
+    w1["Web Worker: WebLLM engine (MLCEngineWorkerHandler)"]
+    w2["Communicates with Provider Layer via postMessage"]
+  end
+
+  pages --> components --> hooks --> providers --> data
+  providers --> worker
 ```
 
 **Layer rules:**
@@ -47,37 +48,32 @@ htllm is organized in five layers. Dependencies flow strictly downward — upper
 
 **Deployment:** Static files served from any HTTP host. No server process.
 
-```
-┌──────────────────────────────────────────────────────┐
-│  Static Host (GitHub Pages / Netlify / localhost)     │
-│  Serves: HTML, JS bundles, CSS, fonts                │
-│  No server logic, no API routes                      │
-└──────────────┬───────────────────────────────────────┘
-               │ HTTP GET (static files only)
-               ▼
-┌──────────────────────────────────────────────────────┐
-│  Browser (Chrome 113+ / Edge 113+)                   │
-│                                                      │
-│  ┌─────────────────┐    postMessage    ┌───────────┐ │
-│  │  Main Thread     │◄───────────────►│ Web Worker │ │
-│  │  Astro + React   │                 │ WebLLM     │ │
-│  │  UI + State      │                 │ Engine     │ │
-│  └────────┬─────────┘                 └─────┬──────┘ │
-│           │                                  │       │
-│           ▼                                  ▼       │
-│  ┌─────────────────┐              ┌─────────────────┐│
-│  │  IndexedDB       │              │  WebGPU         ││
-│  │  Threads, Msgs,  │              │  GPU inference  ││
-│  │  Keys, Settings  │              │                 ││
-│  └─────────────────┘              └─────────────────┘│
-│                                                      │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │  Network (outbound only, user-initiated)         │ │
-│  │  • HuggingFace CDN — model weight downloads      │ │
-│  │  • Google Fonts — font files                     │ │
-│  │  • Provider APIs (Phase 2) — BYOK, user-config'd│ │
-│  └─────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+  subgraph Host["Static Host (GitHub Pages / Netlify / localhost)"]
+    Files["HTML, JS bundles, CSS, fonts — no server logic"]
+  end
+
+  Host -->|"HTTP GET (static files)"| Browser
+
+  subgraph Browser["Browser (Chrome 113+ / Edge 113+)"]
+    Main["Main Thread\nAstro + React\nUI + State"]
+    Worker["Web Worker\nWebLLM Engine"]
+    IDB["IndexedDB\nThreads, Messages\nKeys, Settings"]
+    GPU["WebGPU\nGPU inference"]
+
+    Main <-->|postMessage| Worker
+    Main <-->|async IDB| IDB
+    Worker -->|GPU calls| GPU
+  end
+
+  subgraph Network["Network (outbound only, user-initiated)"]
+    HF["HuggingFace CDN"]
+    Fonts["Google Fonts"]
+    APIs["Provider APIs — Phase 2, BYOK"]
+  end
+
+  Browser -.-> Network
 ```
 
 **Runtime boundaries:**
@@ -91,23 +87,32 @@ htllm is organized in five layers. Dependencies flow strictly downward — upper
 
 **End-to-end: User sends a message with WebLLM provider**
 
-```
-1. User types message in Composer, presses Enter
-2. useChat hook:
-   a. Creates user Message record in IDB
-   b. Creates placeholder assistant Message in IDB (empty content)
-   c. Calls provider.chat({ messages, params }) → AsyncIterable<ChatChunk>
-3. WebLLMProvider:
-   a. Forwards to WebWorkerMLCEngine (built-in postMessage bridge)
-   b. Worker's MLCEngineWorkerHandler runs inference via WebGPU
-   c. Chunks stream back via postMessage as AsyncIterable
-4. useChat hook iterates chunks:
-   a. Appends delta to assistant message content (React state update)
-   b. Periodically persists accumulated content to IDB
-5. On stream end:
-   a. Final message with usage stats persisted to IDB
-   b. Thread.updatedAt updated
-   c. If first message in thread, auto-generate title from content
-6. UI reflects: message list scrolls, streaming cursor disappears,
-   throughput stats appear below assistant message
+```mermaid
+sequenceDiagram
+    actor User
+    participant Composer
+    participant useChat as useChat Hook
+    participant IDB as IndexedDB
+    participant Provider as WebLLMProvider
+    participant Worker as Web Worker
+    participant GPU as WebGPU
+
+    User->>Composer: Type message + Enter
+    Composer->>useChat: send(text, images?)
+    useChat->>IDB: addMessage(user)
+    useChat->>IDB: addMessage(assistant, empty)
+    useChat->>Provider: chat(params) → AsyncIterable
+    Provider->>Worker: postMessage (via WebWorkerMLCEngine)
+    Worker->>GPU: inference
+    loop Streaming chunks
+        GPU-->>Worker: tokens
+        Worker-->>Provider: ChatChunk (postMessage)
+        Provider-->>useChat: yield ChatChunk
+        useChat-->>Composer: setState (append delta)
+        useChat-->>IDB: periodic flush
+    end
+    Provider-->>useChat: stream end + usage stats
+    useChat->>IDB: updateMessage(final content + usage)
+    useChat->>IDB: updateThread(updatedAt)
+    Note over useChat: Auto-generate title if first message
 ```

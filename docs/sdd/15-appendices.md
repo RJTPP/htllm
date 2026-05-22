@@ -4,100 +4,90 @@
 
 #### Model Load Sequence
 
-```
-User            App.tsx          WebLLMProvider       Worker              WebGPU
- │                │                    │                │                   │
- │ click "load"   │                    │                │                   │
- │───────────────▶│                    │                │                   │
- │                │ loadModel(id, cb)  │                │                   │
- │                │───────────────────▶│                │                   │
- │                │                    │ new Worker()   │                   │
- │                │                    │───────────────▶│ (lazy init)       │
- │                │                    │                │                   │
- │                │                    │ engine.reload(id)                  │
- │                │                    │───────────────▶│                   │
- │                │                    │                │ requestAdapter()  │
- │                │                    │                │──────────────────▶│
- │                │                    │                │◀──────────────────│
- │                │                    │                │                   │
- │                │                    │ progress(10%)  │                   │
- │                │◀───────────────────│                │                   │
- │ (StatusPanel)  │                    │                │                   │
- │◀───────────────│                    │                │                   │
- │                │                    │ progress(50%)  │ (downloading)     │
- │                │◀───────────────────│                │                   │
- │                │                    │                │                   │
- │                │                    │ progress(100%) │ (ready)           │
- │                │◀───────────────────│                │                   │
- │                │ status = 'ready'   │                │                   │
- │◀───────────────│                    │                │                   │
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as App.tsx
+    participant Prov as WebLLMProvider
+    participant Worker as Web Worker
+    participant GPU as WebGPU
+
+    User->>App: click "load"
+    App->>Prov: loadModel(id, onProgress)
+    Prov->>Worker: new Worker() (lazy init)
+    Prov->>Worker: engine.reload(id)
+    Worker->>GPU: requestAdapter()
+    GPU-->>Worker: adapter
+
+    loop Download & compile
+        Worker-->>Prov: progress(10%)
+        Prov-->>App: onProgress → StatusPanel
+        App-->>User: progress bar update
+        Worker-->>Prov: progress(50%)
+        Prov-->>App: onProgress → StatusPanel
+    end
+
+    Worker-->>Prov: progress(100%) — ready
+    Prov-->>App: status = 'ready'
+    App-->>User: model loaded
 ```
 
 #### Chat Message Sequence
 
-```
-User         Composer      useChat       Provider       Worker         IDB
- │              │              │             │             │             │
- │ type + Enter │              │             │             │             │
- │─────────────▶│              │             │             │             │
- │              │ send(text)   │             │             │             │
- │              │─────────────▶│             │             │             │
- │              │              │ addMessage(user)           │             │
- │              │              │────────────────────────────────────────▶│
- │              │              │ addMessage(assistant,empty)             │
- │              │              │────────────────────────────────────────▶│
- │              │              │             │             │             │
- │              │              │ chat(params)│             │             │
- │              │              │────────────▶│             │             │
- │              │              │             │ postMessage  │             │
- │              │              │             │────────────▶│             │
- │              │              │             │             │ (inference) │
- │              │              │             │ chunk        │             │
- │              │              │◀────────────│◀────────────│             │
- │              │              │ setState    │             │             │
- │ (re-render)  │              │             │             │             │
- │◀─────────────│◀─────────────│             │             │             │
- │              │              │             │ chunk        │             │
- │              │              │◀────────────│◀────────────│             │
- │              │              │ setState    │             │             │
- │◀─────────────│◀─────────────│             │             │             │
- │              │              │             │ done+usage   │             │
- │              │              │◀────────────│◀────────────│             │
- │              │              │ updateMessage(final)       │             │
- │              │              │────────────────────────────────────────▶│
- │              │              │ updateThread(updatedAt)    │             │
- │              │              │────────────────────────────────────────▶│
+```mermaid
+sequenceDiagram
+    actor User
+    participant Comp as Composer
+    participant Hook as useChat
+    participant IDB as IndexedDB
+    participant Prov as Provider
+    participant Worker as Web Worker
+
+    User->>Comp: type + Enter
+    Comp->>Hook: send(text)
+    Hook->>IDB: addMessage(user)
+    Hook->>IDB: addMessage(assistant, empty)
+    Hook->>Prov: chat(params)
+    Prov->>Worker: postMessage
+
+    loop Streaming chunks
+        Worker-->>Prov: chunk
+        Prov-->>Hook: ChatChunk
+        Hook-->>Comp: setState (re-render)
+    end
+
+    Worker-->>Prov: done + usage
+    Prov-->>Hook: final chunk
+    Hook->>IDB: updateMessage(final content + usage)
+    Hook->>IDB: updateThread(updatedAt)
 ```
 
 ### 15.2 State Models
 
 #### Engine Status State Machine
 
-```
-States: idle, loading, ready, error
-
-Transitions:
-  idle    → loading   : user clicks "load model"
-  loading → ready     : model load completes successfully
-  loading → error     : model load fails (WebGPU error, network error, OOM)
-  ready   → idle      : user clicks "unload"
-  ready   → loading   : user loads a different model (unload current first)
-  error   → idle      : user acknowledges error / tries different model
-  error   → loading   : user retries same model
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Loading : user clicks "load model"
+    Loading --> Ready : load completes
+    Loading --> Error : WebGPU / network / OOM
+    Ready --> Idle : user clicks "unload"
+    Ready --> Loading : load different model
+    Error --> Idle : acknowledge / try different
+    Error --> Loading : retry same model
 ```
 
 #### Thread Lifecycle
 
-```
-States: empty (no messages), active (has messages), generating (streaming response)
-
-Transitions:
-  (created)  → empty       : user clicks "new thread"
-  empty      → active      : first message sent + response received
-  active     → generating  : user sends message
-  generating → active      : stream completes or is aborted
-  active     → (deleted)   : user deletes thread
-  empty      → (deleted)   : user deletes empty thread
+```mermaid
+stateDiagram-v2
+    [*] --> Empty : user clicks "new thread"
+    Empty --> Active : first message sent + response received
+    Active --> Generating : user sends message
+    Generating --> Active : stream completes or aborted
+    Active --> [*] : user deletes thread
+    Empty --> [*] : user deletes empty thread
 ```
 
 ### 15.3 Configuration Matrix

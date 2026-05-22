@@ -15,31 +15,22 @@
 
 ### 5.2 Context View
 
-```
-                        ┌──────────────────────┐
-                        │      End User        │
-                        │  (Browser)           │
-                        └──────────┬───────────┘
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │         htllm App           │
-                    │   (Static site in browser)  │
-                    │                             │
-                    │  ┌───────────────────────┐  │
-                    │  │ React UI + Hooks      │  │
-                    │  ├───────────────────────┤  │
-                    │  │ Provider Layer        │  │
-                    │  ├───────────────────────┤  │
-                    │  │ Data Layer (IDB)      │  │
-                    │  ├───────────────────────┤  │
-                    │  │ Web Worker (WebLLM)   │  │
-                    │  └───────────────────────┘  │
-                    └──────┬──────────┬───────────┘
-                           │          │
-              ┌────────────▼──┐  ┌────▼────────────┐
-              │ HuggingFace   │  │ Google Fonts     │
-              │ CDN (weights) │  │ (font files)     │
-              └───────────────┘  └─────────────────┘
+```mermaid
+graph TB
+    User["End User (Browser)"] --> App
+
+    subgraph App["htllm App (Static site in browser)"]
+        UI["React UI + Hooks"]
+        Prov["Provider Layer"]
+        Data["Data Layer (IDB)"]
+        Work["Web Worker (WebLLM)"]
+        UI --> Prov --> Data
+        Prov --> Work
+    end
+
+    App -.->|model weights| HF["HuggingFace CDN"]
+    App -.->|font files| GF["Google Fonts"]
+    App -.->|"BYOK API calls (Phase 2)"| ExtAPI["Provider APIs"]
 ```
 
 **Trust boundaries:**
@@ -273,58 +264,44 @@ deleteKey(providerId: string): Promise<void>
 
 **Model loading state machine:**
 
-```
-                    ┌──────┐
-                    │ Idle │◄──────────────────────────┐
-                    └──┬───┘                           │
-                       │ user clicks "load"            │ unload() or error
-                       ▼                               │
-                  ┌─────────┐                          │
-                  │ Loading  │──── progress events ────►│ (UI updates progress bar)
-                  └──┬──┬───┘                          │
-                     │  │                              │
-           success   │  │  error                       │
-                     │  └──────────────────────────────┘
-                     ▼
-                  ┌───────┐
-                  │ Ready  │
-                  └──┬────┘
-                     │ user clicks "unload" or loads different model
-                     └─────────────────────────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Loading : user clicks "load"
+    Loading --> Ready : model load success
+    Loading --> Error : WebGPU / network / OOM error
+    Ready --> Idle : user clicks "unload"
+    Ready --> Loading : user loads different model (unload first)
+    Error --> Idle : user acknowledges / tries different model
+    Error --> Loading : user retries same model
+
+    Loading --> Loading : progress events (UI updates bar)
 ```
 
 States: `idle` → `loading` → `ready` | `error`. Only one model loaded at a time. Loading a new model first unloads the current one.
 
 **Chat streaming flow:**
 
-```
-User presses Enter
-       │
-       ▼
-  [Validate: model ready? input non-empty?]
-       │ yes
-       ▼
-  [Create user Message in IDB]
-  [Create placeholder assistant Message in IDB (empty)]
-  [Set generating = true]
-       │
-       ▼
-  [Call provider.chat(params)]
-       │
-       ▼
-  [Iterate AsyncIterable<ChatChunk>] ◄─── abort? ──── [User clicks Stop]
-       │                                                      │
-       │ each chunk                                   [signal.abort()]
-       ▼                                              [provider stops]
-  [Append delta to assistant message]
-  [Update React state (re-render)]
-  [Periodically flush to IDB]
-       │
-       │ stream ends (finishReason = 'stop' | 'length')
-       ▼
-  [Final persist to IDB with usage stats]
-  [Set generating = false]
-  [Auto-generate thread title if first message]
+```mermaid
+flowchart TD
+    A[User presses Enter] --> B{Model ready?\nInput non-empty?}
+    B -->|no| Z[No action]
+    B -->|yes| C[Create user Message in IDB]
+    C --> D[Create placeholder assistant Message in IDB]
+    D --> E[Set generating = true]
+    E --> F["Call provider.chat(params)"]
+    F --> G["Iterate AsyncIterable‹ChatChunk›"]
+    G --> H{Aborted?}
+    H -->|"User clicks Stop\nsignal.abort()"| K
+    H -->|no| I[Append delta to assistant message\nUpdate React state]
+    I --> J[Periodically flush to IDB]
+    J --> G
+    G -->|"stream ends\nfinishReason = stop | length"| K[Final persist to IDB with usage stats]
+    K --> L[Set generating = false]
+    L --> M{First message\nin thread?}
+    M -->|yes| N[Auto-generate thread title]
+    M -->|no| O[Done]
+    N --> O
 ```
 
 **Image attachment algorithm:**
@@ -342,7 +319,7 @@ User presses Enter
 
 1. User types `/` as first character in composer
 2. Debounce 100ms
-3. If input length < 30 chars: search prompt templates by title substring (case-insensitive)
+3. If input length < 40 chars: search prompt templates by title substring (case-insensitive)
 4. Display matching templates in dropdown (PromptHints component)
 5. Arrow-key navigation, Enter to select
 6. On select: replace composer content with template content

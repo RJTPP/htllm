@@ -37,6 +37,7 @@ There is no server process. The static host is interchangeable and untrusted —
 | **LM Studio** (Phase 2) | Local LLM server on user's machine | User-controlled; accessed via `localhost` with CORS enabled. |
 | **Groq API** (Phase 2) | Cloud inference with user's API key | BYOK; key stored in IndexedDB, never in source. |
 | **OpenRouter API** (Phase 2) | Cloud inference with user's API key | BYOK; key stored in IndexedDB, never in source. |
+| **Generic OpenAI-compatible endpoint** (Phase 2) | Any server implementing `/v1/chat/completions` (user provides base URL + optional key) | User-configured; must be CORS-accessible from browser. Key in IDB if provided. Security: user is responsible for trusting their configured endpoint. |
 
 ### 2.3 Operating Constraints
 

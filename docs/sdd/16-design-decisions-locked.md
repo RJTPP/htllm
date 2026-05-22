@@ -30,3 +30,4 @@
 | **Thinking mode** (Qwen3 `<think>` tags) | Phase 2, when more models are supported | Strip `<think>` tags from history context; conditionally force temperature/top_p per web-llm-chat's pattern. |
 | **Cross-tab IDB synchronization** | Post-Phase 1, if users report issues with multiple tabs | BroadcastChannel API or storage event listener. |
 | **Model weight upload** | Phase 2+, secondary priority | Allow users to provide custom model weights instead of downloading from CDN. |
+| **Generic OpenAI-compatible endpoint** | Phase 2 | A provider that connects to any OpenAI-compatible `/v1/chat/completions` API. User provides base URL + optional API key. Must satisfy CORS (browser-initiated requests). Could potentially subsume Ollama/LM Studio/Groq/OpenRouter providers since all implement this format. Security constraint: user is explicitly trusting their configured endpoint with message content. Key stored in IDB. |

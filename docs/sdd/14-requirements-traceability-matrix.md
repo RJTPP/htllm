@@ -32,7 +32,7 @@
 |---|---|---|
 | **Covered** | 21 | All Phase 1 requirements mapped to design artifacts |
 | **Partial** | 1 | Accessibility (keyboard nav designed; screen reader testing deferred to post-implementation) |
-| **Deferred** | 6 | Phase 2 providers, Phase 3 RAG, Phase 4 agent, Phase 5 polish features |
+| **Deferred** | 7 | Phase 2 providers (incl. generic OpenAI-compatible endpoint), Phase 3 RAG, Phase 4 agent, Phase 5 polish features |
 
 **Open items:**
 

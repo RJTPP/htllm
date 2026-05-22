@@ -2,28 +2,41 @@
 
 ### 11.1 ERD Summary
 
-```
-┌──────────────┐       1:N       ┌──────────────┐
-│   Thread     │────────────────▶│   Message    │
-│              │                 │              │
-│ PK: id       │                 │ PK: id       │
-│ title        │                 │ FK: threadId │
-│ providerId   │                 │ role         │
-│ modelId      │                 │ content      │
-│ modelParams? │                 │ createdAt    │
-│ createdAt    │                 │ usage?       │
-│ updatedAt    │                 └──────────────┘
-└──────────────┘
-
-┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
-│   Key        │     │   Setting    │     │ PromptTemplate   │
-│              │     │              │     │                  │
-│ PK: providId │     │ PK: key      │     │ PK: id           │
-│ value        │     │ value (JSON) │     │ title            │
-└──────────────┘     └──────────────┘     │ content          │
-                                          │ isBuiltIn        │
-                                          │ createdAt        │
-                                          └──────────────────┘
+```mermaid
+erDiagram
+    Thread ||--o{ Message : "has many"
+    Thread {
+        string id PK
+        string title
+        string providerId
+        string modelId
+        json modelParams
+        number createdAt
+        number updatedAt
+    }
+    Message {
+        string id PK
+        string threadId FK
+        string role
+        json content
+        number createdAt
+        json usage
+    }
+    Key {
+        string providerId PK
+        string value
+    }
+    Setting {
+        string key PK
+        json value
+    }
+    PromptTemplate {
+        string id PK
+        string title
+        string content
+        boolean isBuiltIn
+        number createdAt
+    }
 ```
 
 **Relationships:**
