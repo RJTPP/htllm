@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
-import type { ModelParams, ReasoningEffort } from '../../providers/types';
+import type { ModelParams, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 
-const REASONING_LEVELS: { value: ReasoningEffort; label: string; description: string }[] = [
+const EFFORT_LEVELS: { value: ReasoningEffort; label: string; description: string }[] = [
   { value: 'off', label: 'OFF', description: 'No reasoning' },
   { value: 'low', label: 'LOW', description: 'Brief reasoning' },
   { value: 'medium', label: 'MED', description: 'Moderate reasoning' },
   { value: 'high', label: 'HIGH', description: 'Full reasoning' },
+];
+
+const TOGGLE_LEVELS: { value: ReasoningEffort; label: string; description: string }[] = [
+  { value: 'off', label: 'OFF', description: 'Thinking disabled' },
+  { value: 'high', label: 'ON', description: 'Thinking enabled' },
 ];
 
 function ParamSlider({
@@ -75,35 +80,55 @@ function ParamSlider({
 export function ParamControls({
   params,
   onChange,
+  reasoningCapability,
 }: {
   params: ModelParams;
   onChange: (patch: Partial<ModelParams>) => void;
+  /** Pass the active model's reasoning capability to show the right control.
+   *  Omit to always show the full control (e.g. in global defaults). */
+  reasoningCapability?: ReasoningCapability | null;
 }) {
+  // Determine which buttons to show:
+  // - In global defaults (no capability passed): show full effort levels
+  // - 'effort': show OFF/LOW/MED/HIGH
+  // - 'toggle': show OFF/ON
+  // - null/undefined when capability is explicitly null: hide control
+  const showReasoning = reasoningCapability !== null;
+  const levels = reasoningCapability === 'toggle' ? TOGGLE_LEVELS : EFFORT_LEVELS;
+
+  // For toggle mode, map any non-off value to 'high' for display purposes.
+  const activeValue =
+    reasoningCapability === 'toggle' && params.reasoningEffort !== 'off'
+      ? 'high'
+      : params.reasoningEffort;
+
   const set = (k: keyof ModelParams) => (v: number) =>
     onChange({ [k]: v } as Partial<ModelParams>);
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-3">
-        <label className="font-mono text-[11px] text-mute w-28 shrink-0">reasoning</label>
-        <div className="flex-1 flex gap-1">
-          {REASONING_LEVELS.map((level) => (
-            <button
-              key={level.value}
-              onClick={() => onChange({ reasoningEffort: level.value })}
-              className={`flex-1 font-mono text-[10px] px-2 py-1 border transition-colors ${
-                params.reasoningEffort === level.value
-                  ? level.value === 'off'
-                    ? 'border-line text-mute bg-surface'
-                    : 'border-accent/60 text-accent bg-accent/10'
-                  : 'border-line text-mute/60 hover:text-mute'
-              }`}
-              title={level.description}
-            >
-              {level.label}
-            </button>
-          ))}
+      {showReasoning && (
+        <div className="flex items-center gap-3">
+          <label className="font-mono text-[11px] text-mute w-28 shrink-0">reasoning</label>
+          <div className="flex-1 flex gap-1">
+            {levels.map((level) => (
+              <button
+                key={level.value}
+                onClick={() => onChange({ reasoningEffort: level.value })}
+                className={`flex-1 font-mono text-[10px] px-2 py-1 border transition-colors ${
+                  activeValue === level.value
+                    ? level.value === 'off'
+                      ? 'border-line text-mute bg-surface'
+                      : 'border-accent/60 text-accent bg-accent/10'
+                    : 'border-line text-mute/60 hover:text-mute'
+                }`}
+                title={level.description}
+              >
+                {level.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       <ParamSlider
         label="context_window"
         value={params.contextWindow}

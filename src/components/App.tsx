@@ -20,6 +20,7 @@ import {
   DEFAULT_CODE_THEME,
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
+import { detectReasoning } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
 import { ModelSlot } from './system/ModelSlot';
@@ -135,6 +136,11 @@ export default function App() {
   const modelReady = isApiThread
     ? !!activeThread?.modelId
     : engineStatus === 'ready';
+
+  const activeReasoningCapability = useMemo(
+    () => (activeModelId ? detectReasoning(activeModelId) : undefined),
+    [activeModelId],
+  );
 
   // Ensure there is always an active thread to type into — created on first
   // run (and after the last thread is deleted), independent of model state.
@@ -388,6 +394,7 @@ export default function App() {
         onClose={() => setModal(null)}
         params={params}
         defaults={globalDefaults}
+        reasoningCapability={activeReasoningCapability}
         onApply={handleThreadParamsApply}
         onReset={handleThreadParamsReset}
       />

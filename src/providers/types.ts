@@ -15,6 +15,14 @@ export interface ChatProvider {
   unload?(): Promise<void>;
 }
 
+/**
+ * Reasoning capability of a model:
+ * - `'effort'` — supports off/low/medium/high (OpenAI o-series)
+ * - `'toggle'` — supports on/off only (Qwen3, QwQ, DeepSeek-R1)
+ * - `undefined` — no reasoning support
+ */
+export type ReasoningCapability = 'effort' | 'toggle';
+
 export interface ModelInfo {
   id: string;
   displayName: string;
@@ -23,6 +31,7 @@ export interface ModelInfo {
   quantization: string;
   cached: boolean;
   vision?: boolean;
+  reasoning?: ReasoningCapability;
 }
 
 export interface ChatParams {

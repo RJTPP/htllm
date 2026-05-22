@@ -6,6 +6,7 @@ import type {
   ContentPart,
 } from '../types';
 import { ProviderError } from '../../lib/errors';
+import { detectReasoning } from '../../lib/reasoning';
 import { getKey, setKey, deleteKey } from '../../data/keys';
 import { getSetting, setSetting } from '../../data/settings';
 
@@ -175,6 +176,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
         quantization: '',
         cached: true,
         vision: false,
+        reasoning: detectReasoning(m.id),
       }));
   }
 
