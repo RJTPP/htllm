@@ -1,17 +1,33 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { ModelInfo, LoadProgress, EngineStatus, PromptTemplate } from '../providers/types';
+import type {
+  ModelInfo,
+  LoadProgress,
+  EngineStatus,
+  PromptTemplate,
+  ModelParams,
+} from '../providers/types';
 import { WebLLMProvider } from '../providers/webllm/index';
 import { useSystem } from '../hooks/useSystem';
 import { useThreads } from '../hooks/useThreads';
 import { useChat } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
+import { getSetting, setSetting, DEFAULT_SYSTEM_PROMPT } from '../data/settings';
+import { NavRail, type NavPage } from './nav/NavRail';
+import { SystemStats } from './system/SystemStats';
+import { ModelSlot } from './system/ModelSlot';
+import { WebGPUBlock } from './system/WebGPUBlock';
 import { Sidebar } from './sidebar/Sidebar';
-import { ChatPanel } from './chat/ChatPanel';
-import { SystemRail } from './system/SystemRail';
+import { ChatPage } from './chat/ChatPage';
+import { KnowledgeStub } from './knowledge/KnowledgeStub';
+import { StorageStub } from './storage/StorageStub';
 import { ModelPicker } from './providers/ModelPicker';
+import { SettingsModal } from './settings/SettingsModal';
+import { ThreadParams } from './providers/ThreadParams';
 
 const provider = new WebLLMProvider();
+
+type ModalId = 'picker' | 'settings' | 'params' | null;
 
 export default function App() {
   const system = useSystem();
@@ -23,6 +39,7 @@ export default function App() {
     deleteThread,
     updateThreadTitle,
     updateThreadTimestamp,
+    updateThread,
   } = useThreads();
 
   const activeThread = useMemo(
@@ -30,7 +47,7 @@ export default function App() {
     [threads, activeThreadId],
   );
 
-  const { params, setGlobalDefaults } = useModelParams(activeThread);
+  const { params, globalDefaults, setGlobalDefaults } = useModelParams(activeThread);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>('idle');
@@ -40,12 +57,24 @@ export default function App() {
     timeElapsed: 0,
   });
   const [loadedModelId, setLoadedModelId] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [page, setPage] = useState<NavPage>('chat');
+  const [modal, setModal] = useState<ModalId>(null);
+  const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
 
   useEffect(() => {
     provider.listModels().then(setModels);
-    seedBuiltInTemplates().then(() => listTemplates()).then(setTemplates);
+    seedBuiltInTemplates()
+      .then(() => listTemplates())
+      .then(setTemplates);
+    getSetting<string>('defaultSystemPrompt').then((v) => {
+      if (v != null) setDefaultSystemPromptState(v);
+    });
+  }, []);
+
+  const setDefaultSystemPrompt = useCallback(async (value: string) => {
+    setDefaultSystemPromptState(value);
+    await setSetting('defaultSystemPrompt', value);
   }, []);
 
   const handleAutoTitle = useCallback(
@@ -56,10 +85,13 @@ export default function App() {
     [updateThreadTitle],
   );
 
-  const { messages, generating, send, stop } = useChat(
+  const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
+
+  const { messages, generating, send, regenerate, stop } = useChat(
     provider,
     activeThreadId,
     params,
+    systemPrompt,
     updateThreadTimestamp,
     handleAutoTitle,
   );
@@ -67,7 +99,6 @@ export default function App() {
   const modelReady = engineStatus === 'ready';
 
   // Once a model is ready, ensure there is an active thread to chat in.
-  // The ref guards against double-creation from the async createThread window.
   const autoThreadRef = useRef(false);
   useEffect(() => {
     if (modelReady && activeThreadId === null && !autoThreadRef.current) {
@@ -83,15 +114,17 @@ export default function App() {
       setEngineStatus('loading');
       setLoadProgress({ progress: 0, text: 'Initializing engine…', timeElapsed: 0 });
       try {
-        await provider.loadModel(modelId, (report) => {
-          setLoadProgress(report);
-        });
+        await provider.loadModel(
+          modelId,
+          (report) => setLoadProgress(report),
+          globalDefaults.contextWindow,
+        );
         setLoadedModelId(modelId);
         setEngineStatus('ready');
         setModels((prev) =>
           prev.map((m) => (m.id === modelId ? { ...m, cached: true } : m)),
         );
-        setPickerOpen(false);
+        setModal(null);
       } catch (err) {
         setEngineStatus('error');
         setLoadProgress({
@@ -101,7 +134,7 @@ export default function App() {
         });
       }
     },
-    [],
+    [globalDefaults.contextWindow],
   );
 
   const handleUnload = useCallback(async () => {
@@ -125,56 +158,117 @@ export default function App() {
   );
 
   const handleCreateThread = useCallback(async () => {
-    await createThread(
-      provider.id,
-      loadedModelId ?? '',
-    );
+    await createThread(provider.id, loadedModelId ?? '');
+    setPage('chat');
   }, [createThread, loadedModelId]);
 
+  const handleChangeSystemPrompt = useCallback(
+    (value: string) => {
+      if (activeThreadId) updateThread(activeThreadId, { systemPrompt: value });
+    },
+    [activeThreadId, updateThread],
+  );
+
+  const handleThreadParamsChange = useCallback(
+    (patch: Partial<ModelParams>) => {
+      if (activeThreadId) {
+        updateThread(activeThreadId, { modelParams: { ...params, ...patch } });
+      }
+    },
+    [activeThreadId, params, updateThread],
+  );
+
+  const handleThreadParamsReset = useCallback(() => {
+    if (activeThreadId) updateThread(activeThreadId, { modelParams: undefined });
+  }, [activeThreadId, updateThread]);
+
   return (
-    <div className="flex h-screen bg-bg text-text font-sans">
-      <Sidebar
-        threads={threads}
-        activeThreadId={activeThreadId}
-        loadedModelId={loadedModelId}
-        onOpenPicker={() => setPickerOpen(true)}
-        onCreateThread={handleCreateThread}
-        onSelectThread={selectThread}
-        onDeleteThread={deleteThread}
-      />
+    <div className="h-screen flex overflow-hidden bg-bg text-text font-sans">
+      <NavRail page={page} setPage={setPage} onOpenSettings={() => setModal('settings')} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="px-4 py-2 border-b border-line flex items-center justify-between">
-          <SystemRail system={system} />
-        </div>
-
-        <div className="flex-1 min-h-0">
-          <ChatPanel
-            messages={messages}
-            generating={generating}
-            modelReady={modelReady}
-            visionSupported={provider.capabilities.vision}
-            loadedModelId={loadedModelId}
-            templates={templates}
-            onSend={send}
-            onStop={stop}
+        <header className="reveal reveal-1 border-b border-line bg-bg px-4 py-2 flex items-center justify-between gap-4">
+          <ModelSlot
+            model={loadedModelId}
+            models={models}
+            state={engineStatus}
+            progress={loadProgress}
+            onClick={() => setModal('picker')}
           />
-        </div>
+          {system && <SystemStats system={system} compact />}
+        </header>
+
+        {system && !system.webgpu ? (
+          <WebGPUBlock />
+        ) : (
+          <div className="flex-1 flex min-h-0">
+            {page === 'chat' && (
+              <>
+                <Sidebar
+                  threads={threads}
+                  activeId={activeThreadId}
+                  onSelect={selectThread}
+                  onNew={handleCreateThread}
+                  onDelete={deleteThread}
+                  onRename={updateThreadTitle}
+                />
+                <ChatPage
+                  thread={activeThread}
+                  messages={messages}
+                  models={models}
+                  loadedModelId={loadedModelId}
+                  modelReady={modelReady}
+                  generating={generating}
+                  templates={templates}
+                  defaultSystemPrompt={defaultSystemPrompt}
+                  onSend={send}
+                  onStop={stop}
+                  onRegenerate={regenerate}
+                  onOpenPicker={() => setModal('picker')}
+                  onParams={() => setModal('params')}
+                  onChangeSystemPrompt={handleChangeSystemPrompt}
+                />
+              </>
+            )}
+            {page === 'knowledge' && <KnowledgeStub />}
+            {page === 'storage' && <StorageStub />}
+          </div>
+        )}
       </div>
 
       <ModelPicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
+        open={modal === 'picker'}
+        onClose={() => setModal(null)}
         models={models}
         loadedModelId={loadedModelId}
         system={system}
-        params={params}
+        globalDefaults={globalDefaults}
         engineStatus={engineStatus}
         loadProgress={loadProgress}
         onLoad={handleLoad}
         onUnload={handleUnload}
         onEvict={handleEvict}
         onParamsChange={setGlobalDefaults}
+      />
+
+      <SettingsModal
+        open={modal === 'settings'}
+        onClose={() => setModal(null)}
+        templates={templates}
+        setTemplates={setTemplates}
+        globalDefaults={globalDefaults}
+        setGlobalDefaults={setGlobalDefaults}
+        defaultSystemPrompt={defaultSystemPrompt}
+        setDefaultSystemPrompt={setDefaultSystemPrompt}
+      />
+
+      <ThreadParams
+        open={modal === 'params'}
+        onClose={() => setModal(null)}
+        params={params}
+        defaults={globalDefaults}
+        onChange={handleThreadParamsChange}
+        onReset={handleThreadParamsReset}
       />
     </div>
   );

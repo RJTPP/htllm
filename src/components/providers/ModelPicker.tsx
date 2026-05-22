@@ -2,16 +2,45 @@ import { useState, useMemo } from 'react';
 import type {
   ModelInfo,
   SystemInfo,
-  ModelParams,
   EngineStatus,
   LoadProgress,
+  ModelParams,
 } from '../../providers/types';
+import { groupByModel, familyRank, brandForFamily, type GroupedModel } from '../../lib/model-meta';
 import { fitFor } from '../../lib/fit';
-import { groupByFamily } from '../../providers/webllm/model-list';
 import { Modal } from '../ui/Modal';
-import { ModelCard } from './ModelCard';
-import { ModelParamsPanel } from './ModelParams';
+import { Icon } from '../ui/Icon';
+import { BrandLogo } from '../ui/BrandLogo';
 import { StatusPanel } from './StatusPanel';
+import { ParamControls } from './ParamControls';
+import { ModelGridCard } from './ModelGridCard';
+
+function FamilyChip({
+  family,
+  active,
+  onClick,
+}: {
+  family: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-full border text-[12px] transition-colors ${
+        active
+          ? 'border-accent/60 bg-accent/10 text-text'
+          : 'border-line text-mute hover:border-line-hi hover:text-text'
+      }`}
+    >
+      <BrandLogo brand={brandForFamily(family)} size={17} />
+      {family}
+    </button>
+  );
+}
+
+const minVramOf = (g: GroupedModel): number =>
+  Math.min(...g.variants.map((v) => v.vramRequiredMB));
 
 export function ModelPicker({
   open,
@@ -19,7 +48,7 @@ export function ModelPicker({
   models,
   loadedModelId,
   system,
-  params,
+  globalDefaults,
   engineStatus,
   loadProgress,
   onLoad,
@@ -32,7 +61,7 @@ export function ModelPicker({
   models: ModelInfo[];
   loadedModelId: string | null;
   system: SystemInfo | null;
-  params: ModelParams;
+  globalDefaults: ModelParams;
   engineStatus: EngineStatus;
   loadProgress: LoadProgress;
   onLoad: (id: string) => void;
@@ -41,50 +70,88 @@ export function ModelPicker({
   onParamsChange: (patch: Partial<ModelParams>) => void;
 }) {
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [family, setFamily] = useState<string | null>(null);
   const [hideTooLarge, setHideTooLarge] = useState(true);
+  const [showParams, setShowParams] = useState(false);
+
+  const grouped = useMemo(() => groupByModel(models), [models]);
+  const mem = system?.deviceMemoryGB ?? null;
+
+  const families = useMemo(() => {
+    const set = new Set(grouped.map((g) => g.family));
+    return [...set].sort((a, b) => familyRank(a) - familyRank(b) || a.localeCompare(b));
+  }, [grouped]);
+
+  const recommendedName = useMemo(() => {
+    const sorted = [...grouped].sort((a, b) => minVramOf(a) - minVramOf(b));
+    const r = sorted.find((g) => fitFor(minVramOf(g), mem).fits);
+    return r ? r.name : null;
+  }, [grouped, mem]);
 
   const filtered = useMemo(() => {
-    let list = models;
+    let list = grouped;
+    if (family) list = list.filter((g) => g.family === family);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
-        (m) =>
-          m.id.toLowerCase().includes(q) ||
-          m.displayName.toLowerCase().includes(q) ||
-          m.family.toLowerCase().includes(q),
+        (g) => g.name.toLowerCase().includes(q) || g.family.toLowerCase().includes(q),
       );
     }
     if (hideTooLarge) {
-      list = list.filter((m) => {
-        const fit = fitFor(m.vramRequiredMB, system?.deviceMemoryGB ?? null);
-        return fit.fits || fit.tight || m.cached || m.id === loadedModelId;
-      });
+      list = list.filter((g) =>
+        g.variants.some((v) => {
+          const f = fitFor(v.vramRequiredMB, mem);
+          return f.fits || f.tight || v.cached || v.id === loadedModelId;
+        }),
+      );
     }
-    return list;
-  }, [models, search, hideTooLarge, system, loadedModelId]);
+    return [...list].sort((a, b) => minVramOf(a) - minVramOf(b));
+  }, [grouped, search, family, hideTooLarge, mem, loadedModelId]);
 
-  const recommendedId = useMemo(() => {
-    for (const m of models) {
-      const fit = fitFor(m.vramRequiredMB, system?.deviceMemoryGB ?? null);
-      if (fit.fits) return m.id;
-    }
-    return models[0]?.id ?? null;
-  }, [models, system]);
-
-  const families = useMemo(() => groupByFamily(filtered), [filtered]);
+  const subtitle = `${filtered.length} chat models · runs in-browser via WebLLM`;
 
   return (
-    <Modal open={open} onClose={onClose} title="Models">
-      <div className="px-4 py-3 border-b border-line space-y-3">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search models…"
-          className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-1.5 text-[13px] text-text placeholder:text-mute font-mono"
-        />
-        <div className="flex items-center gap-3">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Model selection"
+      subtitle={subtitle}
+      width="max-w-4xl"
+    >
+      <div className="px-4 pt-3 border-b border-line space-y-3 sticky top-0 bg-bg z-10">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-mute">
+            <Icon name="search" size={15} />
+          </span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search chat models…"
+            className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none pl-9 pr-3 py-2 text-[13px]"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setFamily(null)}
+            className={`px-3 py-1.5 border text-[12px] transition-colors ${
+              family === null
+                ? 'border-accent/60 bg-accent/10 text-text'
+                : 'border-line text-mute hover:text-text'
+            }`}
+          >
+            All
+          </button>
+          {families.map((f) => (
+            <FamilyChip
+              key={f}
+              family={f}
+              active={family === f}
+              onClick={() => setFamily(family === f ? null : f)}
+            />
+          ))}
+        </div>
+        <div className="flex items-center justify-between pb-3">
           <label className="flex items-center gap-2 font-mono text-[11px] text-mute cursor-pointer">
             <input
               type="checkbox"
@@ -92,58 +159,54 @@ export function ModelPicker({
               onChange={(e) => setHideTooLarge(e.target.checked)}
               className="accent-accent"
             />
-            hide too-large models
+            hide models too large for this device
           </label>
-          <span className="font-mono text-[11px] text-mute">
-            {filtered.length} / {models.length}
-          </span>
         </div>
-        <StatusPanel
-          status={engineStatus}
-          progress={loadProgress}
-          loadedModelId={loadedModelId}
-        />
+        <div className="pb-3">
+          <StatusPanel engineState={engineStatus} progress={loadProgress} />
+        </div>
       </div>
 
-      <div className="p-4 space-y-4">
-        {families.map((family) => (
-          <div key={family.name}>
-            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
-              {family.name}
-            </div>
-            <div className="space-y-1">
-              {family.models.map((model) => {
-                const fit = fitFor(
-                  model.vramRequiredMB,
-                  system?.deviceMemoryGB ?? null,
-                );
-                return (
-                  <ModelCard
-                    key={model.id}
-                    model={model}
-                    isSelected={selectedId === model.id}
-                    isLoaded={loadedModelId === model.id}
-                    isRecommended={recommendedId === model.id}
-                    fitStatus={fit}
-                    onSelect={setSelectedId}
-                    onLoad={onLoad}
-                    onUnload={onUnload}
-                    onEvict={onEvict}
-                    engineStatus={engineStatus}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ))}
-        {families.length === 0 && (
-          <div className="font-mono text-[12px] text-mute text-center py-8">
+      <div className="p-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 items-start">
+          {filtered.map((m) => (
+            <ModelGridCard
+              key={m.name}
+              model={m}
+              system={system}
+              loadedId={loadedModelId}
+              recommended={m.name === recommendedName}
+              engineState={engineStatus}
+              onLoad={onLoad}
+              onUnload={onUnload}
+              onEvict={onEvict}
+            />
+          ))}
+        </div>
+        {filtered.length === 0 && (
+          <div className="font-mono text-[12px] text-mute text-center py-12">
             No models match your search.
           </div>
         )}
       </div>
 
-      <ModelParamsPanel params={params} onChange={onParamsChange} />
+      <div className="border-t border-line">
+        <button
+          onClick={() => setShowParams((s) => !s)}
+          className="w-full flex items-center justify-between px-4 py-2.5 font-mono text-[11px] text-mute hover:text-text"
+        >
+          <span>default generation parameters</span>
+          <span>{showParams ? '−' : '+'}</span>
+        </button>
+        {showParams && (
+          <div className="px-4 pb-4">
+            <ParamControls params={globalDefaults} onChange={onParamsChange} />
+            <div className="font-mono text-[10px] text-mute mt-2.5">
+              Applied to new threads. Per-thread overrides live in thread parameters.
+            </div>
+          </div>
+        )}
+      </div>
     </Modal>
   );
 }

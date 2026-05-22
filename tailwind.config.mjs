@@ -15,6 +15,7 @@ export default {
         ok: '#22c55e',
         warn: '#eab308',
         err: '#ef4444',
+        info: '#60a5fa',
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],

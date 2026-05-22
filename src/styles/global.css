@@ -2,6 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --tok-key: #c084fc;
+  --tok-fn: #93c5fd;
+  --tok-str: #86efac;
+  --tok-num: #fde047;
+  --tok-com: #6b7280;
+  --tok-typ: #fcd34d;
+  --tok-tag: #fb923c;
+  --tok-attr: #93c5fd;
+  --tok-punc: #a1a1aa;
+  --tok-op: #f0abfc;
+  --tok-bool: #fbbf24;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+@keyframes grainShift {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-5%, 3%); }
+  50% { transform: translate(3%, -4%); }
+  75% { transform: translate(-3%, -2%); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes wmGlitch {
+  0%, 100% { clip-path: inset(0 0 0 0); transform: none; }
+  20% { clip-path: inset(22% 0 54% 0); transform: translateX(-3px); }
+  40% { clip-path: inset(60% 0 16% 0); transform: translateX(3px); }
+  60% { clip-path: inset(34% 0 40% 0); transform: translateX(-2px); }
+  80% { clip-path: inset(8% 0 72% 0); transform: translateX(2px); }
+}
+
 @layer base {
   * {
     box-sizing: border-box;
@@ -41,27 +85,84 @@
 }
 
 @layer utilities {
-  @keyframes pulse-dot {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
+  .font-mono.uppercase {
+    white-space: nowrap;
   }
 
-  .animate-pulse-dot {
-    animation: pulse-dot 1.4s ease-in-out infinite;
+  .pulse-dot {
+    animation: pulseDot 1.4s ease-in-out infinite;
   }
-
-  @keyframes spin-slow {
-    to {
-      transform: rotate(360deg);
-    }
+  .blink {
+    animation: blink 1s step-end infinite;
   }
-
   .animate-spin-slow {
     animation: spin-slow 0.9s linear infinite;
+  }
+
+  .reveal {
+    animation: reveal 0.2s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+  }
+  .reveal-1 { animation-delay: 0.05s; }
+  .reveal-2 { animation-delay: 0.1s; }
+  .reveal-3 { animation-delay: 0.15s; }
+  .reveal-4 { animation-delay: 0.2s; }
+  .reveal-5 { animation-delay: 0.25s; }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .stripe {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 7px,
+      rgba(245, 158, 11, 0.08) 7px,
+      rgba(245, 158, 11, 0.08) 14px
+    );
+  }
+
+  .scanlines {
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.5) 2px,
+      rgba(0, 0, 0, 0.5) 3px
+    );
+  }
+  .grain {
+    position: absolute;
+    inset: -8%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.05;
+  }
+  .grain-anim {
+    animation: grainShift 0.6s steps(2) infinite;
+  }
+  .wm-glitch {
+    animation: wmGlitch 0.42s steps(2, end) 1;
+  }
+
+  .tok-key { color: var(--tok-key); }
+  .tok-fn { color: var(--tok-fn); }
+  .tok-str { color: var(--tok-str); }
+  .tok-num { color: var(--tok-num); }
+  .tok-com { color: var(--tok-com); font-style: italic; }
+  .tok-typ { color: var(--tok-typ); }
+  .tok-tag { color: var(--tok-tag); }
+  .tok-attr { color: var(--tok-attr); }
+  .tok-punc { color: var(--tok-punc); }
+  .tok-op { color: var(--tok-op); }
+  .tok-bool { color: var(--tok-bool); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .wm-glitch,
+  .grain-anim {
+    animation: none;
   }
 }

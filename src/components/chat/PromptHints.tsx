@@ -1,68 +1,39 @@
-import { useState, useEffect, useCallback } from 'react';
 import type { PromptTemplate } from '../../providers/types';
 
 export function PromptHints({
   query,
   templates,
-  onSelect,
-  onDismiss,
+  onPick,
 }: {
   query: string;
   templates: PromptTemplate[];
-  onSelect: (content: string) => void;
-  onDismiss: () => void;
+  onPick: (template: PromptTemplate) => void;
 }) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
-  const filtered = templates.filter((t) =>
+  const matches = templates.filter((t) =>
     t.title.toLowerCase().includes(query.toLowerCase()),
   );
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  const handleKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex((i) => Math.max(i - 1, 0));
-      } else if (e.key === 'Enter' && filtered[selectedIndex]) {
-        e.preventDefault();
-        onSelect(filtered[selectedIndex].content);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        onDismiss();
-      }
-    },
-    [filtered, selectedIndex, onSelect, onDismiss],
-  );
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [handleKey]);
-
-  if (filtered.length === 0) return null;
-
+  if (matches.length === 0) return null;
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1 border border-line bg-surface max-h-48 overflow-y-auto z-20">
-      {filtered.map((t, i) => (
+    <div className="absolute bottom-full left-0 right-0 mb-1.5 border border-line bg-surface max-h-52 overflow-y-auto z-20">
+      <div className="px-3 py-1.5 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest">
+        prompt templates
+      </div>
+      {matches.map((t, i) => (
         <button
           key={t.id}
-          onClick={() => onSelect(t.content)}
-          className={`w-full text-left px-3 py-2 font-mono text-[12px] flex items-center justify-between ${
-            i === selectedIndex
-              ? 'bg-accent/10 text-text'
-              : 'text-mute hover:bg-surface2 hover:text-text'
+          onClick={() => onPick(t)}
+          className={`w-full text-left px-3 py-2 flex items-center justify-between ${
+            i === 0 ? 'bg-accent/5' : 'hover:bg-surface2'
           }`}
         >
-          <span>{t.title}</span>
+          <div className="min-w-0">
+            <div className="font-mono text-[12px] text-text">/{t.title}</div>
+            <div className="font-mono text-[10px] text-mute truncate">
+              {t.content.replace(/\n/g, ' ').trim()}
+            </div>
+          </div>
           {t.isBuiltIn && (
-            <span className="text-[10px] text-mute">built-in</span>
+            <span className="font-mono text-[9px] text-mute shrink-0 ml-2">built-in</span>
           )}
         </button>
       ))}

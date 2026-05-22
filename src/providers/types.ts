@@ -19,6 +19,7 @@ export interface ModelInfo {
   vramRequiredMB: number;
   quantization: string;
   cached: boolean;
+  vision?: boolean;
 }
 
 export interface ChatParams {
@@ -73,6 +74,7 @@ export interface Thread {
   providerId: string;
   modelId: string;
   modelParams?: ModelParams;
+  systemPrompt?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -83,6 +85,8 @@ export interface ModelParams {
   maxTokens: number;
   presencePenalty: number;
   frequencyPenalty: number;
+  contextWindow: number;
+  historyMsgs: number;
 }
 
 export interface PromptTemplate {

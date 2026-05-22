@@ -60,6 +60,7 @@ export class WebLLMProvider implements ChatProvider {
   async loadModel(
     modelId: string,
     onProgress: (report: LoadProgress) => void,
+    contextWindow?: number,
   ): Promise<void> {
     this.status = 'loading';
 
@@ -89,7 +90,10 @@ export class WebLLMProvider implements ChatProvider {
     });
 
     try {
-      await this.engine.reload(modelId);
+      await this.engine.reload(
+        modelId,
+        contextWindow ? { context_window_size: contextWindow } : undefined,
+      );
       this.loadedModelId = modelId;
       this.status = 'ready';
     } catch (err) {

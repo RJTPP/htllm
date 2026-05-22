@@ -1,4 +1,4 @@
-import { prebuiltAppConfig, hasModelInCache } from '@mlc-ai/web-llm';
+import { prebuiltAppConfig, hasModelInCache, ModelType } from '@mlc-ai/web-llm';
 import type { ModelInfo } from '../types';
 
 function parseFamily(modelId: string): string {
@@ -67,6 +67,7 @@ export async function getModelList(): Promise<ModelInfo[]> {
       vramRequiredMB: m.vram_required_MB ?? 0,
       quantization: parseQuantization(m.model_id),
       cached: await hasModelInCache(m.model_id).catch(() => false),
+      vision: m.model_type === ModelType.VLM || /-VL-|vision/i.test(m.model_id),
     })),
   );
 

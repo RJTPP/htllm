@@ -73,6 +73,13 @@ export function useThreads() {
     );
   }, []);
 
+  const patch = useCallback(async (id: string, changes: Partial<Thread>) => {
+    await updateThreadInDb(id, changes);
+    setThreads((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...changes } : t)),
+    );
+  }, []);
+
   return {
     threads,
     activeThreadId,
@@ -81,5 +88,6 @@ export function useThreads() {
     deleteThread: remove,
     updateThreadTitle: updateTitle,
     updateThreadTimestamp: updateTimestamp,
+    updateThread: patch,
   };
 }

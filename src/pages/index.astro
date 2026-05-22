@@ -1,36 +1,8 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Landing from '../components/landing/Landing';
 ---
 
 <BaseLayout title="htllm — Local LLM Chat">
-  <div class="min-h-screen bg-bg text-text font-sans flex items-center justify-center">
-    <div class="max-w-xl text-center px-6">
-      <h1 class="font-mono text-2xl mb-2">
-        ht<span class="text-accent">[LLM]</span>
-      </h1>
-      <p class="text-mute text-sm mb-6">
-        Fully client-side WebGPU chat. No server. No telemetry. Models run in your browser.
-      </p>
-      <a
-        href="/app"
-        class="inline-block font-mono text-[13px] px-6 py-2.5 border border-accent/60 text-accent hover:bg-accent/10 transition-colors"
-      >
-        Open App →
-      </a>
-      <div class="mt-8 grid grid-cols-3 gap-4 font-mono text-[11px]">
-        <div class="border border-line p-3">
-          <div class="text-accent mb-1">Private</div>
-          <div class="text-mute">All data stays in your browser</div>
-        </div>
-        <div class="border border-line p-3">
-          <div class="text-accent mb-1">Local</div>
-          <div class="text-mute">GPU inference via WebGPU</div>
-        </div>
-        <div class="border border-line p-3">
-          <div class="text-accent mb-1">Open</div>
-          <div class="text-mute">Bring your own models and keys</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <Landing client:only="react" />
 </BaseLayout>

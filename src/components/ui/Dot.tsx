@@ -1,6 +1,6 @@
-type Tone = 'mute' | 'ok' | 'warn' | 'err' | 'accent';
+type DotTone = 'mute' | 'ok' | 'warn' | 'err' | 'accent';
 
-const colorClasses: Record<Tone, string> = {
+const colors: Record<DotTone, string> = {
   mute: 'bg-mute',
   ok: 'bg-ok',
   warn: 'bg-warn',
@@ -8,6 +8,10 @@ const colorClasses: Record<Tone, string> = {
   accent: 'bg-accent',
 };
 
-export function Dot({ tone = 'mute' }: { tone?: Tone }) {
-  return <span className={`w-1.5 h-1.5 rounded-full ${colorClasses[tone]}`} />;
+export function Dot({ tone = 'mute', pulse = false }: { tone?: DotTone; pulse?: boolean }) {
+  return (
+    <span
+      className={`w-1.5 h-1.5 rounded-full shrink-0 ${colors[tone]} ${pulse ? 'pulse-dot' : ''}`}
+    />
+  );
 }
