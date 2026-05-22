@@ -6,6 +6,8 @@ export interface Command {
   id: string;
   /** Display label, shown in the list and matched against the query. */
   label: string;
+  /** Optional secondary line (e.g. the thread a message hit belongs to). */
+  sublabel?: string;
   /** Group heading — entries are rendered grouped in insertion order. */
   group: string;
   /** Optional keyboard-shortcut hint shown right-aligned. */
@@ -15,7 +17,8 @@ export interface Command {
 }
 
 /**
- * Cmd/Ctrl+K command palette. Fuzzy-free substring search, arrow-key
+ * Cmd/Ctrl+K command palette. Substring search over static commands, plus
+ * an optional async source (used for full-text message search). Arrow-key
  * navigation, Enter to run, Esc to close. Commands are supplied by the
  * caller (App) so the palette stays free of app wiring.
  */
@@ -23,13 +26,17 @@ export function CommandPalette({
   open,
   onClose,
   commands,
+  asyncCommands,
 }: {
   open: boolean;
   onClose: () => void;
   commands: Command[];
+  /** Resolves extra commands for a query — e.g. message-content search. */
+  asyncCommands?: (query: string) => Promise<Command[]>;
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
+  const [asyncResults, setAsyncResults] = useState<Command[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -38,6 +45,7 @@ export function CommandPalette({
     if (open) {
       setQuery('');
       setSelected(0);
+      setAsyncResults([]);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
@@ -52,10 +60,39 @@ export function CommandPalette({
     );
   }, [commands, query]);
 
-  // Keep the selection index within bounds as the filtered list shrinks.
+  // Debounced async search (message content). Guarded against stale results.
   useEffect(() => {
-    setSelected((s) => Math.min(s, Math.max(0, filtered.length - 1)));
-  }, [filtered.length]);
+    if (!open || !asyncCommands) {
+      setAsyncResults([]);
+      return;
+    }
+    const q = query.trim();
+    if (!q) {
+      setAsyncResults([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      asyncCommands(q).then((res) => {
+        if (!cancelled) setAsyncResults(res);
+      });
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [open, query, asyncCommands]);
+
+  // Static matches first, then async (message) results.
+  const items = useMemo(
+    () => [...filtered, ...asyncResults],
+    [filtered, asyncResults],
+  );
+
+  // Keep the selection index within bounds as the list changes.
+  useEffect(() => {
+    setSelected((s) => Math.min(s, Math.max(0, items.length - 1)));
+  }, [items.length]);
 
   // Scroll the active row into view on selection change.
   useEffect(() => {
@@ -74,13 +111,13 @@ export function CommandPalette({
         onClose();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelected((s) => Math.min(s + 1, filtered.length - 1));
+        setSelected((s) => Math.min(s + 1, items.length - 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setSelected((s) => Math.max(s - 1, 0));
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        const cmd = filtered[selected];
+        const cmd = items[selected];
         if (cmd) {
           onClose();
           cmd.run();
@@ -89,7 +126,7 @@ export function CommandPalette({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, filtered, selected, onClose]);
+  }, [open, items, selected, onClose]);
 
   if (!open) return null;
 
@@ -108,7 +145,7 @@ export function CommandPalette({
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command or search threads…"
+            placeholder="Search commands, threads, messages…"
             className="flex-1 bg-transparent focus:outline-none text-[13px] text-text placeholder:text-mute"
           />
           <kbd className="font-mono text-[10px] text-mute border border-line px-1.5 py-0.5">
@@ -117,13 +154,13 @@ export function CommandPalette({
         </div>
 
         <div ref={listRef} className="overflow-y-auto py-1">
-          {filtered.length === 0 ? (
+          {items.length === 0 ? (
             <div className="px-3 py-6 text-center font-mono text-[11px] text-mute">
-              no matching commands
+              no matches
             </div>
           ) : (
-            filtered.map((cmd, i) => {
-              const showHeader = i === 0 || filtered[i - 1]!.group !== cmd.group;
+            items.map((cmd, i) => {
+              const showHeader = i === 0 || items[i - 1]!.group !== cmd.group;
               return (
                 <div key={cmd.id}>
                   {showHeader && (
@@ -141,10 +178,17 @@ export function CommandPalette({
                         : 'text-text hover:text-text'
                     }`}
                   >
-                    <span className="flex-1 truncate">{cmd.label}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate">{cmd.label}</span>
+                      {cmd.sublabel && (
+                        <span className="block truncate font-mono text-[10px] text-mute">
+                          {cmd.sublabel}
+                        </span>
+                      )}
+                    </span>
                     {cmd.hint && (
                       <kbd
-                        className={`font-mono text-[10px] border px-1.5 py-0.5 ${
+                        className={`font-mono text-[10px] border px-1.5 py-0.5 shrink-0 ${
                           selected === i
                             ? 'border-accent/40 text-accent'
                             : 'border-line text-mute'
