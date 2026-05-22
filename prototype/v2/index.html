@@ -176,9 +176,7 @@ const PROVIDERS = [
   { id: "webllm", name: "WebLLM", kind: "local", desc: "In-browser inference. Runs on this device's GPU via WebGPU.", builtIn: true, status: "ready", needsKey: false },
   { id: "ollama", name: "Ollama", kind: "local-host", desc: "Local Ollama daemon on localhost:11434.", builtIn: false, status: "detected", url: "http://localhost:11434", needsKey: false, phase: 2 },
   { id: "lmstudio", name: "LM Studio", kind: "local-host", desc: "Local LM Studio server, OpenAI-compatible.", builtIn: false, status: "not-detected", url: "http://localhost:1234/v1", needsKey: false, phase: 2 },
-  { id: "groq", name: "Groq", kind: "byok", desc: "BYOK · groq.com/keys.", builtIn: false, status: "no-key", needsKey: true, phase: 2 },
-  { id: "openrouter", name: "OpenRouter", kind: "byok", desc: "BYOK · openrouter.ai/keys.", builtIn: false, status: "no-key", needsKey: true, phase: 2 },
-  { id: "generic", name: "Generic OpenAI-compat", kind: "byok", desc: "Any endpoint exposing /v1/chat/completions.", builtIn: false, status: "no-key", needsKey: true, urlEditable: true, phase: 2 },
+  { id: "openai-compat", name: "OpenAI-compatible API", kind: "byok", desc: "Any /v1/chat/completions endpoint — Groq, OpenRouter, Together, or a custom server. Base URL + key.", builtIn: false, status: "no-key", needsKey: true, urlEditable: true, phase: 2 },
 ];
 
 const MOCK_TEMPLATES = [
@@ -671,7 +669,7 @@ function WebGPUBlock() {
           still partial; mobile is unsupported.
         </p>
         <div className="mt-4 font-mono text-[11px] text-mute border-t border-line pt-3">
-          External providers (Ollama, Groq, OpenRouter — Phase 2) will work without WebGPU.
+          External providers (Ollama, LM Studio, OpenAI-compatible APIs — Phase 2) will work without WebGPU.
         </div>
       </div>
     </div>
@@ -1730,7 +1728,7 @@ function SettingsModal({ open, onClose, templates, setTemplates, defaultParams, 
           <div className="font-mono text-[11px] border-t border-line pt-3 space-y-1">
             <div><span className="text-mute">runtime</span> · WebLLM · WebGPU</div>
             <div><span className="text-mute">storage</span> · IndexedDB (local only)</div>
-            <div><span className="text-mute">providers</span> · WebLLM now · Ollama / LM Studio / Groq / OpenRouter next</div>
+            <div><span className="text-mute">providers</span> · WebLLM now · Ollama / LM Studio / OpenAI-compatible next</div>
             <div><span className="text-mute">planned</span> · Functions (P4) · Agents (P4) · Artifact preview (P5) · Vector-map (P5)</div>
           </div>
         </div>

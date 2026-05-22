@@ -47,6 +47,15 @@ gains a per-model `vision: boolean`, sourced from WebLLM's `model_type`
 vision models; the composer's image attach is gated on the loaded model being
 vision-capable. Supersedes the SDD's provider-level `capabilities.vision`.
 
+### D5 — Cloud API providers collapse into one OpenAI-compatible provider
+
+Groq, OpenRouter and other hosted APIs all speak the OpenAI
+`/v1/chat/completions` format, so they ship as a single BYOK provider —
+"OpenAI-compatible API" with a user-supplied base URL + key — rather than one
+provider each. Ollama and LM Studio stay as distinct localhost providers
+(they keep auto-detection). Supersedes the SDD's separate Groq / OpenRouter /
+generic-endpoint entries.
+
 ---
 
 ## Phase plan
@@ -82,8 +91,7 @@ experience before any new surface area.
 | Feature | Status |
 |---|---|
 | Ollama, LM Studio providers (localhost) | ☐ |
-| Groq, OpenRouter providers (BYOK) | ☐ |
-| Generic OpenAI-compatible endpoint provider | ☐ |
+| OpenAI-compatible API provider — BYOK, base URL + key (covers Groq / OpenRouter / custom) | ✦ ☐ |
 | Markdown rendering + code block syntax highlighting | ✦ ☐ (D3) |
 | Prompt-template management UI (create / edit / delete) | ◐ data layer exists; no UI |
 | Storage manager — basic (model cache list, IDB usage, clear data) | ✦ ☐ |
