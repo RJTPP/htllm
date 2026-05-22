@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { PromptTemplate, ModelParams } from '../../providers/types';
-import { createTemplate, deleteTemplate } from '../../data/prompt-templates';
+import { createTemplate, deleteTemplate, updateTemplate } from '../../data/prompt-templates';
 import { resetEverything } from '../../data/reset';
 import { Modal } from '../ui/Modal';
 import { Badge } from '../ui/Badge';
@@ -79,6 +79,8 @@ export function SettingsModal({
 }) {
   const [tab, setTab] = useState<SettingsTab>('templates');
   const [draft, setDraft] = useState({ title: '', content: '' });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ title: '', content: '' });
   const [resetArmed, setResetArmed] = useState(false);
   const [resetText, setResetText] = useState('');
 
@@ -96,6 +98,28 @@ export function SettingsModal({
   const removeTemplate = async (id: string) => {
     await deleteTemplate(id);
     setTemplates((prev) => prev.filter((x) => x.id !== id));
+  };
+
+  const startEdit = (t: PromptTemplate) => {
+    setEditingId(t.id);
+    setEditDraft({ title: t.title, content: t.content });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft({ title: '', content: '' });
+  };
+
+  const saveEdit = async (id: string) => {
+    const title = editDraft.title.trim();
+    if (!title) return;
+    await updateTemplate(id, { title, content: editDraft.content });
+    setTemplates((prev) =>
+      prev.map((t) =>
+        t.id === id ? { ...t, title, content: editDraft.content } : t,
+      ),
+    );
+    cancelEdit();
   };
 
   const doReset = async () => {
@@ -128,21 +152,67 @@ export function SettingsModal({
                 key={t.id}
                 className="group flex items-center gap-2 border border-line bg-surface px-3 py-2"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="font-mono text-[12px] text-text">/{t.title}</div>
-                  <div className="font-mono text-[10px] text-mute truncate">
-                    {t.content.replace(/\n/g, ' ').trim()}
+                {editingId === t.id ? (
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <input
+                      value={editDraft.title}
+                      onChange={(e) =>
+                        setEditDraft((d) => ({ ...d, title: e.target.value }))
+                      }
+                      placeholder="Title (used as /trigger)"
+                      className="w-full bg-bg border border-accent/50 focus:outline-none px-2 py-1 text-[12px] font-mono"
+                    />
+                    <textarea
+                      value={editDraft.content}
+                      onChange={(e) =>
+                        setEditDraft((d) => ({ ...d, content: e.target.value }))
+                      }
+                      rows={3}
+                      className="w-full bg-bg border border-line focus:border-accent/60 focus:outline-none px-2 py-1.5 text-[12px] resize-none"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => saveEdit(t.id)}
+                        disabled={!editDraft.title.trim()}
+                        className="font-mono text-[10px] px-2 py-1 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
+                      >
+                        save
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="font-mono text-[10px] px-2 py-1 border border-line text-mute hover:text-text"
+                      >
+                        cancel
+                      </button>
+                    </div>
                   </div>
-                </div>
-                {t.isBuiltIn ? (
-                  <span className="font-mono text-[9px] text-mute shrink-0">built-in</span>
                 ) : (
-                  <button
-                    onClick={() => removeTemplate(t.id)}
-                    className="opacity-0 group-hover:opacity-100 font-mono text-[11px] text-mute hover:text-err shrink-0"
-                  >
-                    delete
-                  </button>
+                  <>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-[12px] text-text">/{t.title}</div>
+                      <div className="font-mono text-[10px] text-mute truncate">
+                        {t.content.replace(/\n/g, ' ').trim()}
+                      </div>
+                    </div>
+                    {t.isBuiltIn ? (
+                      <span className="font-mono text-[9px] text-mute shrink-0">built-in</span>
+                    ) : (
+                      <div className="opacity-0 group-hover:opacity-100 flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => startEdit(t)}
+                          className="font-mono text-[11px] text-mute hover:text-text"
+                        >
+                          edit
+                        </button>
+                        <button
+                          onClick={() => removeTemplate(t.id)}
+                          className="font-mono text-[11px] text-mute hover:text-err"
+                        >
+                          delete
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}
