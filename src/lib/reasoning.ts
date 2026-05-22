@@ -5,7 +5,7 @@
  * with the right level of reasoning control support.
  */
 
-import type { ReasoningCapability } from '../providers/types';
+import type { ReasoningCapability, ReasoningEffort } from '../providers/types';
 
 /** Models that support granular reasoning effort (off/low/medium/high). */
 const EFFORT_PATTERNS: RegExp[] = [
@@ -37,4 +37,17 @@ export function detectReasoning(modelId: string): ReasoningCapability | undefine
     if (re.test(modelId)) return 'toggle';
   }
   return undefined;
+}
+
+/**
+ * The default reasoning effort for a model with the given capability.
+ * - effort models (o-series, gpt-oss): 'low' — reason, but cheaply by default
+ * - toggle models (Qwen3, QwQ): 'off' — thinking disabled by default
+ * - unknown: 'off' — don't force reasoning on a model that may not support it
+ */
+export function defaultEffort(
+  capability: ReasoningCapability | undefined,
+): ReasoningEffort {
+  if (capability === 'effort') return 'low';
+  return 'off';
 }

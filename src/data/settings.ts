@@ -9,7 +9,7 @@ export const DEFAULT_MODEL_PARAMS: ModelParams = {
   frequencyPenalty: 0,
   contextWindow: 4096,
   historyMsgs: 12,
-  reasoningEffort: 'high',
+  reasoningEffort: 'low',
 };
 
 export const DEFAULT_SYSTEM_PROMPT =

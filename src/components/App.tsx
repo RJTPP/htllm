@@ -21,7 +21,7 @@ import {
   DEFAULT_CODE_THEME,
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
-import { detectReasoning } from '../lib/reasoning';
+import { detectReasoning, defaultEffort } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
 import { ModelSlot } from './system/ModelSlot';
@@ -57,7 +57,7 @@ export default function App() {
     [threads, activeThreadId],
   );
 
-  const { params, globalDefaults, setGlobalDefaults } = useModelParams(activeThread);
+  const { params: rawParams, globalDefaults, setGlobalDefaults } = useModelParams(activeThread);
 
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>('idle');
@@ -124,6 +124,19 @@ export default function App() {
   const isApiThread = !activeProvider.needsModelLoad;
   const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
 
+  const activeReasoningCapability = useMemo(
+    () => (activeModelId ? detectReasoning(activeModelId) : undefined),
+    [activeModelId],
+  );
+
+  // When a thread hasn't been customized, the reasoning effort default
+  // depends on model capability: 'low' for effort models, 'off' for toggle
+  // models. Customized threads keep their explicit stored value.
+  const params = useMemo<ModelParams>(() => {
+    if (activeThread?.modelParams) return rawParams;
+    return { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
+  }, [rawParams, activeThread?.modelParams, activeReasoningCapability]);
+
   const { messages, generating, send, regenerate, editAndResend, stop } = useChat(
     activeProvider,
     activeModelId,
@@ -137,11 +150,6 @@ export default function App() {
   const modelReady = isApiThread
     ? !!activeThread?.modelId
     : engineStatus === 'ready';
-
-  const activeReasoningCapability = useMemo(
-    () => (activeModelId ? detectReasoning(activeModelId) : undefined),
-    [activeModelId],
-  );
 
   // Vision capability: API providers support image_url parts natively, so use
   // the provider capability. WebLLM models vary — look up the loaded model.
