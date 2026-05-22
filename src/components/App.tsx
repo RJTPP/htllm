@@ -185,15 +185,17 @@ export default function App() {
       <NavRail page={page} setPage={setPage} onOpenSettings={() => setModal('settings')} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="reveal reveal-1 border-b border-line bg-bg px-4 py-2 flex items-center justify-between gap-4">
-          <ModelSlot
-            model={loadedModelId}
-            models={models}
-            state={engineStatus}
-            progress={loadProgress}
-            onClick={() => setModal('picker')}
-          />
+        <header className="reveal reveal-1 border-b border-line bg-bg px-4 py-2 flex items-center gap-4">
           {system && <SystemStats system={system} compact />}
+          <div className="ml-auto">
+            <ModelSlot
+              model={loadedModelId}
+              models={models}
+              state={engineStatus}
+              progress={loadProgress}
+              onClick={() => setModal('picker')}
+            />
+          </div>
         </header>
 
         {system && !system.webgpu ? (
