@@ -71,6 +71,13 @@ export function OpenAICompatConfig() {
           byok
         </span>
         <span
+          className="inline-flex items-center gap-1 font-mono text-[9px] border border-warn/50 text-warn px-1.5 py-0.5"
+          title="Your messages and key are sent to a third-party endpoint — inference happens off this device."
+        >
+          <TriangleAlert size={9} />
+          off-device
+        </span>
+        <span
           className={`font-mono text-[10px] ${configured ? 'text-ok' : 'text-mute'}`}
         >
           {configured ? 'configured' : 'not configured'}
