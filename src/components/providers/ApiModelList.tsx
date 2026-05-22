@@ -13,10 +13,13 @@ export function ApiModelList({
   provider,
   apiModelId,
   onSelect,
+  onConfigure,
 }: {
   provider: OpenAICompatibleProvider;
   apiModelId: string | null;
   onSelect: (modelId: string) => void;
+  /** Jump to Settings → Providers to configure this endpoint. */
+  onConfigure: () => void;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [search, setSearch] = useState('');
@@ -67,10 +70,16 @@ export function ApiModelList({
 
   if (state.kind === 'unconfigured') {
     return (
-      <div className="p-8 text-center font-mono text-[12px] text-mute leading-relaxed">
-        No endpoint configured.
-        <br />
-        Add a base URL and key in Settings → Providers to load API models.
+      <div className="p-8 flex flex-col items-center gap-3">
+        <div className="text-center font-mono text-[12px] text-mute leading-relaxed">
+          No endpoint configured for {provider.displayName}.
+        </div>
+        <button
+          onClick={onConfigure}
+          className="font-mono text-[11px] px-3 py-1.5 border border-accent/60 text-accent hover:bg-accent/10"
+        >
+          Configure provider →
+        </button>
       </div>
     );
   }
@@ -83,8 +92,16 @@ export function ApiModelList({
 
   if (state.kind === 'error') {
     return (
-      <div className="p-8 text-center font-mono text-[11px] text-err leading-relaxed break-all">
-        {state.msg}
+      <div className="p-8 flex flex-col items-center gap-3">
+        <div className="text-center font-mono text-[11px] text-err leading-relaxed break-all">
+          {state.msg}
+        </div>
+        <button
+          onClick={onConfigure}
+          className="font-mono text-[11px] px-3 py-1.5 border border-line text-mute hover:text-text"
+        >
+          Check provider settings →
+        </button>
       </div>
     );
   }

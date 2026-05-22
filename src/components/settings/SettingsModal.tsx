@@ -23,7 +23,7 @@ const THEME_PREVIEW_SAMPLE = [
   '```',
 ].join('\n');
 
-type SettingsTab = 'templates' | 'providers' | 'params' | 'about';
+export type SettingsTab = 'templates' | 'providers' | 'params' | 'about';
 
 const TABS: [SettingsTab, string][] = [
   ['templates', 'Prompt templates'],
@@ -68,6 +68,8 @@ export function SettingsModal({
   setCodeTheme,
   titleMode,
   setTitleMode,
+  tab,
+  onTabChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -81,8 +83,9 @@ export function SettingsModal({
   setCodeTheme: (value: string) => void;
   titleMode: TitleMode;
   setTitleMode: (value: TitleMode) => void;
+  tab: SettingsTab;
+  onTabChange: (tab: SettingsTab) => void;
 }) {
-  const [tab, setTab] = useState<SettingsTab>('templates');
   const [draft, setDraft] = useState({ title: '', content: '', description: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState({ title: '', content: '', description: '' });
@@ -147,7 +150,7 @@ export function SettingsModal({
         {TABS.map(([id, label]) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => onTabChange(id)}
             className={`font-mono text-[11px] px-4 py-2.5 border-r border-line ${
               tab === id ? 'text-accent bg-accent/5' : 'text-mute hover:text-text'
             }`}
