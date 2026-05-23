@@ -35,7 +35,11 @@ export async function generateTitle(
       ],
       modelId,
       temperature: 0.3,
-      maxTokens: 64,
+      // Generous budget: the visible title is short, but reasoning models
+      // (DeepSeek-R1, OpenAI o-series, Qwen3 with thinking) burn tokens on
+      // internal chain-of-thought before emitting any output content. A tight
+      // cap silently truncates them mid-think and leaves the title empty.
+      maxTokens: 1024,
       reasoningEffort: 'off',
       signal: controller.signal,
     })) {
