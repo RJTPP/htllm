@@ -1,7 +1,7 @@
 import { useState, memo, type Dispatch, type SetStateAction } from 'react';
 import type { PromptTemplate, ModelParams } from '../../providers/types';
 import { createTemplate, deleteTemplate, updateTemplate } from '../../data/prompt-templates';
-import type { TitleMode } from '../../data/settings';
+import { type TitleMode, type AccentColor, ACCENT_PRESETS } from '../../data/settings';
 import { resetEverything } from '../../data/reset';
 import { Modal } from '../ui/Modal';
 import { Badge } from '../ui/Badge';
@@ -32,12 +32,13 @@ const ThemePreview = memo(function ThemePreview() {
   );
 });
 
-export type SettingsTab = 'templates' | 'providers' | 'params' | 'about';
+export type SettingsTab = 'templates' | 'providers' | 'params' | 'appearance' | 'about';
 
 const TABS: [SettingsTab, string][] = [
   ['templates', 'Prompt templates'],
   ['providers', 'Providers'],
   ['params', 'Chat defaults'],
+  ['appearance', 'Appearance'],
   ['about', 'About'],
 ];
 
@@ -77,6 +78,8 @@ export function SettingsModal({
   setCodeTheme,
   titleMode,
   setTitleMode,
+  accentColor,
+  setAccentColor,
   tab,
   onTabChange,
 }: {
@@ -92,6 +95,8 @@ export function SettingsModal({
   setCodeTheme: (value: string) => void;
   titleMode: TitleMode;
   setTitleMode: (value: TitleMode) => void;
+  accentColor: AccentColor;
+  setAccentColor: (value: AccentColor) => void;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
 }) {
@@ -377,6 +382,40 @@ export function SettingsModal({
             <ParamControls params={globalDefaults} onChange={setGlobalDefaults} />
             <div className="font-mono text-[10px] text-mute mt-2">
               New threads inherit these. Each thread can override them independently.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'appearance' && (
+        <div className="p-4 space-y-6">
+          <div>
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
+              accent color
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(Object.entries(ACCENT_PRESETS) as [AccentColor, (typeof ACCENT_PRESETS)[AccentColor]][]).map(
+                ([key, preset]) => (
+                  <button
+                    key={key}
+                    onClick={() => setAccentColor(key)}
+                    className={`flex items-center gap-2 px-3 py-1.5 border transition-colors ${
+                      accentColor === key
+                        ? 'border-accent/60 bg-accent/10'
+                        : 'border-line hover:border-line-hi'
+                    }`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: `rgb(${preset.rgb})` }}
+                    />
+                    <span className="font-mono text-[10px] text-text">{preset.label}</span>
+                  </button>
+                ),
+              )}
+            </div>
+            <div className="font-mono text-[10px] text-mute mt-2">
+              UI accent color. Changes apply immediately.
             </div>
           </div>
           <div className="border-t border-line pt-4">

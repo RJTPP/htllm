@@ -33,6 +33,10 @@
 }
 
 @layer base {
+  :root {
+    --accent: 245 158 11;
+  }
+
   * {
     box-sizing: border-box;
   }
@@ -105,8 +109,8 @@
       45deg,
       transparent,
       transparent 7px,
-      rgba(245, 158, 11, 0.08) 7px,
-      rgba(245, 158, 11, 0.08) 14px
+      rgba(var(--accent) / 0.08) 7px,
+      rgba(var(--accent) / 0.08) 14px
     );
   }
 
@@ -148,7 +152,7 @@
 .markdown-body li > ul, .markdown-body li > ol { margin: 0.125rem 0; }
 .markdown-body hr { border: none; border-top: 1px solid #262626; margin: 0.75rem 0; }
 .markdown-body blockquote {
-  border-left: 2px solid #f59e0b80;
+  border-left: 2px solid rgb(var(--accent) / 0.5);
   padding-left: 0.75rem;
   margin: 0.5rem 0;
   color: #a3a3a3;
@@ -160,7 +164,7 @@
   border: 1px solid #262626;
   border-radius: 3px;
   padding: 0.125rem 0.25rem;
-  color: #f59e0b;
+  color: rgb(var(--accent));
 }
 .markdown-body pre code {
   background: none;
@@ -170,12 +174,13 @@
   color: inherit;
 }
 .markdown-body a {
-  color: #f59e0b;
+  color: rgb(var(--accent));
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .markdown-body a:hover {
-  color: #fbbf24;
+  color: rgb(var(--accent));
+  filter: brightness(1.15);
 }
 .markdown-body strong { font-weight: 600; color: #e5e5e5; }
 .markdown-body em { font-style: italic; }

@@ -28,6 +28,26 @@ export type TitleMode = 'trim' | 'generate';
 /** Persisted under the 'titleMode' setting. */
 export const DEFAULT_TITLE_MODE: TitleMode = 'trim';
 
+/** Accent color preset keys. Persisted under the 'accentColor' setting. */
+export type AccentColor = 'amber' | 'soft-amber' | 'cyan' | 'tokyo-blue' | 'violet' | 'emerald';
+
+export interface AccentPreset {
+  label: string;
+  /** Space-separated RGB channels for CSS variable (e.g. '245 158 11'). */
+  rgb: string;
+}
+
+export const ACCENT_PRESETS: Record<AccentColor, AccentPreset> = {
+  'amber':      { label: 'Amber',      rgb: '245 158 11' },
+  'soft-amber': { label: 'Soft Amber', rgb: '217 119 6' },
+  'cyan':       { label: 'Cyan',       rgb: '86 207 225' },
+  'tokyo-blue': { label: 'Tokyo Blue', rgb: '122 162 247' },
+  'violet':     { label: 'Violet',     rgb: '167 139 250' },
+  'emerald':    { label: 'Emerald',    rgb: '52 211 153' },
+};
+
+export const DEFAULT_ACCENT_COLOR: AccentColor = 'amber';
+
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDb();
   const entry = await db.get('settings', key);

@@ -11,7 +11,7 @@ export default {
         'line-hi': '#404040',
         text: '#e5e5e5',
         mute: '#737373',
-        accent: '#f59e0b',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
         ok: '#22c55e',
         warn: '#eab308',
         err: '#ef4444',

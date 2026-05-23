@@ -21,7 +21,10 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_CODE_THEME,
   DEFAULT_TITLE_MODE,
+  DEFAULT_ACCENT_COLOR,
+  ACCENT_PRESETS,
   type TitleMode,
+  type AccentColor,
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
 import { generateTitle } from '../lib/title';
@@ -81,6 +84,7 @@ export default function App() {
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
   const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
+  const [accentColor, setAccentColorState] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('templates');
 
   useEffect(() => {
@@ -104,6 +108,12 @@ export default function App() {
     getSetting<string>('titleMode').then((v) => {
       if (v === 'trim' || v === 'generate') setTitleModeState(v);
     });
+    getSetting<AccentColor>('accentColor').then((v) => {
+      if (v != null && ACCENT_PRESETS[v]) {
+        setAccentColorState(v);
+        document.documentElement.style.setProperty('--accent', ACCENT_PRESETS[v].rgb);
+      }
+    });
   }, []);
 
   const setDefaultSystemPrompt = useCallback(async (value: string) => {
@@ -120,6 +130,12 @@ export default function App() {
   const setTitleMode = useCallback(async (value: TitleMode) => {
     setTitleModeState(value);
     await setSetting('titleMode', value);
+  }, []);
+
+  const handleSetAccentColor = useCallback(async (value: AccentColor) => {
+    setAccentColorState(value);
+    document.documentElement.style.setProperty('--accent', ACCENT_PRESETS[value].rgb);
+    await setSetting('accentColor', value);
   }, []);
 
   const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
@@ -619,6 +635,8 @@ export default function App() {
         setCodeTheme={handleSetCodeTheme}
         titleMode={titleMode}
         setTitleMode={setTitleMode}
+        accentColor={accentColor}
+        setAccentColor={handleSetAccentColor}
         tab={settingsTab}
         onTabChange={setSettingsTab}
       />

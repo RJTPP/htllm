@@ -23,7 +23,7 @@ const ContextRing = memo(function ContextRing({
   const center = size / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - pct);
-  const color = pct > 0.9 ? '#ef4444' : pct > 0.7 ? '#eab308' : '#f59e0b';
+  const color = pct > 0.9 ? '#ef4444' : pct > 0.7 ? '#eab308' : 'rgb(var(--accent))';
   const label = `${(used / 1000).toFixed(1)}k / ${(total / 1000).toFixed(1)}k (${Math.round(pct * 100)}%)`;
 
   return (
