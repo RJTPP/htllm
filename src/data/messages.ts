@@ -32,12 +32,17 @@ export async function deleteMessage(id: string): Promise<void> {
 /** Delete all messages in a thread created after the given message (exclusive). */
 export async function deleteMessagesAfter(threadId: string, afterMessageId: string): Promise<string[]> {
   const db = await getDb();
-  const all = await db.getAllFromIndex('messages', 'byThread', threadId);
-  const anchor = all.find((m) => m.id === afterMessageId);
+  const anchor = await db.get('messages', afterMessageId);
   if (!anchor) return [];
-  const toDelete = all.filter(
-    (m) => m.id !== afterMessageId && m.createdAt >= anchor.createdAt,
+  // Use compound index to fetch only messages at or after the anchor time,
+  // avoiding a full-thread scan.
+  const range = IDBKeyRange.bound(
+    [threadId, anchor.createdAt],
+    [threadId, Infinity],
   );
+  const candidates = await db.getAllFromIndex('messages', 'byThreadCreated', range);
+  const toDelete = candidates.filter((m) => m.id !== afterMessageId);
+  if (toDelete.length === 0) return [];
   const tx = db.transaction('messages', 'readwrite');
   for (const m of toDelete) {
     await tx.store.delete(m.id);
@@ -88,6 +93,9 @@ export async function searchMessages(
   const db = await getDb();
 
   // Cursor-based scan — only matching hits are kept in memory.
+  // Cap the collected hits to avoid unbounded memory growth; we over-collect
+  // slightly to ensure we can sort newest-first and still return `limit` results.
+  const collectCap = limit * 4;
   const tx = db.transaction('messages', 'readonly');
   interface HitWithTime extends MessageSearchHit { createdAt: number }
   const hits: HitWithTime[] = [];
@@ -105,6 +113,7 @@ export async function searchMessages(
           snippet: snippetAround(text, idx, q.length),
           createdAt: m.createdAt,
         });
+        if (hits.length >= collectCap) break;
       }
     }
     cursor = await cursor.continue();
