@@ -161,7 +161,7 @@ export const MessageView = memo(function MessageView({
       <Avatar role={message.role} modelId={modelId} models={models} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 overflow-hidden">
-          <span className="text-[11px] font-mono text-text/80 whitespace-nowrap">
+          <span className="text-[11px] font-mono text-accent whitespace-nowrap">
             {isUser ? 'You' : (modelId && shortenModelId(modelId)) || 'Assistant'}
           </span>
           <span className="text-[10px] font-mono text-mute/60 shrink-0">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ShaderBackdrop } from './ShaderBackdrop';
+import { getSetting, ACCENT_PRESETS, type AccentColor } from '../../data/settings';
 
 const VISITED_KEY = 'htllm:visited';
 
@@ -32,6 +33,15 @@ export default function Landing() {
   const booted = step >= BOOT_LINES.length;
 
   useEffect(() => {
+    // Apply the user's persisted accent color so the landing page matches
+    // the rest of the app (returning visitors who cleared localStorage but
+    // kept IndexedDB data, or anyone manually visiting /).
+    getSetting<AccentColor>('accentColor').then((v) => {
+      if (v != null && ACCENT_PRESETS[v]) {
+        document.documentElement.style.setProperty('--accent', ACCENT_PRESETS[v].rgb);
+      }
+    });
+
     let visited = false;
     try {
       visited = localStorage.getItem(VISITED_KEY) != null;

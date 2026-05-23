@@ -29,7 +29,7 @@ export type TitleMode = 'trim' | 'generate';
 export const DEFAULT_TITLE_MODE: TitleMode = 'trim';
 
 /** Accent color preset keys. Persisted under the 'accentColor' setting. */
-export type AccentColor = 'amber' | 'soft-amber' | 'cyan' | 'tokyo-blue' | 'violet' | 'emerald';
+export type AccentColor = 'amber' | 'soft-amber' | 'cyan' | 'tokyo-blue' | 'violet' | 'emerald' | 'rose' | 'gray';
 
 export interface AccentPreset {
   label: string;
@@ -44,6 +44,8 @@ export const ACCENT_PRESETS: Record<AccentColor, AccentPreset> = {
   'tokyo-blue': { label: 'Tokyo Blue', rgb: '122 162 247' },
   'violet':     { label: 'Violet',     rgb: '167 139 250' },
   'emerald':    { label: 'Emerald',    rgb: '52 211 153' },
+  'rose':       { label: 'Rose',       rgb: '244 63 94' },
+  'gray':       { label: 'Gray',       rgb: '163 163 163' },
 };
 
 export const DEFAULT_ACCENT_COLOR: AccentColor = 'amber';
