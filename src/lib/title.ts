@@ -14,7 +14,10 @@ export async function generateTitle(
   modelId: string,
   firstMessage: string,
 ): Promise<string | null> {
-  if (!modelId) return null;
+  if (!modelId) {
+    console.warn('[title] skipped — no modelId');
+    return null;
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TITLE_TIMEOUT_MS);
@@ -32,14 +35,23 @@ export async function generateTitle(
       ],
       modelId,
       temperature: 0.3,
-      maxTokens: 32,
+      maxTokens: 64,
       reasoningEffort: 'off',
       signal: controller.signal,
     })) {
       out += chunk.delta;
     }
-    return cleanTitle(out);
-  } catch {
+    const cleaned = cleanTitle(out);
+    if (!cleaned) {
+      console.warn('[title] model returned empty/unusable output:', JSON.stringify(out));
+    }
+    return cleaned;
+  } catch (err) {
+    if (controller.signal.aborted) {
+      console.warn(`[title] timed out after ${TITLE_TIMEOUT_MS}ms`);
+    } else {
+      console.warn('[title] generation failed:', err);
+    }
     return null;
   } finally {
     clearTimeout(timer);

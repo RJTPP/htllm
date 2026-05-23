@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react'; // useRef used in CopyButton
 import { Marked, type Tokens } from 'marked';
 import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
 import { Check, Copy } from 'lucide-react';
@@ -15,6 +15,9 @@ function buildMarked(): Marked {
   const m = new Marked();
   m.use({
     renderer: {
+      link(token: Tokens.Link): string {
+        return `<a href="${token.href}" target="_blank" rel="noopener noreferrer">${token.text}</a>`;
+      },
       code(token: Tokens.Code): string {
         const lang = (token.lang ?? '').trim();
         const html = highlightToHtml(token.text, lang || undefined);
@@ -98,7 +101,7 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
 
 // ── Main component ──────────────────────────────────────────────────
 
-export function MessageBody({ content, streaming }: { content: string; streaming?: boolean }) {
+export function MessageBody({ content }: { content: string }) {
   const [highlighterVersion, setHighlighterVersion] = useState(0);
 
   // Re-render when the highlighter finishes loading or an on-demand grammar
@@ -110,18 +113,6 @@ export function MessageBody({ content, streaming }: { content: string; streaming
       setHighlighterVersion((n) => n + 1);
     });
   }, []);
-
-  // When streaming ends, force a re-parse so any on-demand grammars that
-  // loaded mid-stream get applied. Without this, the cached fallback HTML
-  // from streaming renders persists even though the grammar is now available.
-  const prevStreamingRef = useRef(streaming);
-  useEffect(() => {
-    if (prevStreamingRef.current && !streaming) {
-      markedInstance = null;
-      setHighlighterVersion((n) => n + 1);
-    }
-    prevStreamingRef.current = streaming;
-  }, [streaming]);
 
   const segments = useMemo(() => {
     const marked = getMarked();

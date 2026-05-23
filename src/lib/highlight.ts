@@ -50,6 +50,13 @@ const PRELOAD: BundledLanguage[] = [
 
 let highlighter: HighlighterGeneric<BundledLanguage, BundledTheme> | null = null;
 
+/** Cache highlighted HTML keyed by `theme:lang:code` to avoid re-running shiki
+ *  on identical code blocks during streaming re-renders. Cleared on theme/lang
+ *  change. Fallback (themed-text) results are NOT cached so they don't block
+ *  upgrades when a lazily-loaded grammar finishes. */
+const highlightCache = new Map<string, string>();
+const CACHE_MAX = 128;
+
 /** All bundled language/theme ids — populated once the shiki module loads. */
 let bundledLangSet = new Set<string>();
 let bundledThemeSet = new Set<string>();
@@ -121,9 +128,15 @@ function ensureLanguage(lang: string): void {
     .loadLanguage(lang as BundledLanguage)
     .then(() => {
       loadingLangs.delete(lang);
+      // Clear stale fallback cache entries for this lang so re-renders
+      // produce real highlighted HTML instead of cached themed-text.
+      for (const key of [...highlightCache.keys()]) {
+        if (key.includes(`:${lang}:`)) highlightCache.delete(key);
+      }
       notify();
     })
-    .catch(() => {
+    .catch((err) => {
+      console.warn(`[highlight] failed to load language "${lang}":`, err);
       loadingLangs.delete(lang);
     });
 }
@@ -179,11 +192,6 @@ export function setCodeTheme(theme: string): void {
  * - For an unloaded bundled language: kicks off an on-demand load and returns
  *   a themed plain-text block in the meantime (upgraded on the next render).
  */
-/** Cache highlighted HTML keyed by `theme:lang:code` to avoid re-running shiki
- *  on identical code blocks during streaming re-renders. Cleared on theme change. */
-const highlightCache = new Map<string, string>();
-const CACHE_MAX = 128;
-
 export function highlightToHtml(code: string, langRaw?: string): string {
   const raw = (langRaw ?? '').trim().toLowerCase();
   const lang = ALIAS[raw] ?? raw;

@@ -158,12 +158,16 @@ export default function App() {
         firstMessage.slice(0, 60) + (firstMessage.length > 60 ? '…' : '');
       await updateThreadTitle(threadId, trimmed);
       if (titleMode === 'generate') {
+        console.debug('[title] generating via', activeProvider.id, activeModelId);
         const generated = await generateTitle(
           activeProvider,
           activeModelId,
           firstMessage,
         );
-        if (generated) await updateThreadTitle(threadId, generated);
+        if (generated) {
+          console.debug('[title] generated:', generated);
+          await updateThreadTitle(threadId, generated);
+        }
       }
     },
     [titleMode, activeProvider, activeModelId, updateThreadTitle],
