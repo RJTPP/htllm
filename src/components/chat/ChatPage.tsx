@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useCallback } from 'react';
 import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { SystemPromptBar } from './SystemPromptBar';
@@ -63,13 +63,13 @@ export function ChatPage({
     return 0;
   }, [messages]);
 
-  const handleRegenerate = () => {
+  const handleRegenerate = useCallback(() => {
     if (!modelReady) {
       onOpenPicker();
       return;
     }
     onRegenerate();
-  };
+  }, [modelReady, onOpenPicker, onRegenerate]);
 
   if (!thread) {
     return (

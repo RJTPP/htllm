@@ -1,4 +1,3 @@
-import { prebuiltAppConfig, hasModelInCache, ModelType } from '@mlc-ai/web-llm';
 import type { ModelInfo } from '../types';
 import { detectReasoning } from '../../lib/reasoning';
 
@@ -40,6 +39,8 @@ function parseDisplayName(modelId: string): string {
 }
 
 export async function getModelList(): Promise<ModelInfo[]> {
+  // Dynamic import keeps @mlc-ai/web-llm out of the initial main-thread bundle.
+  const { prebuiltAppConfig, hasModelInCache, ModelType } = await import('@mlc-ai/web-llm');
   const list = prebuiltAppConfig.model_list ?? [];
   // Include every LLM/VLM; exclude only embedding models. Name-based filtering
   // missed models without an "-Instruct" suffix (e.g. the Qwen3 series).

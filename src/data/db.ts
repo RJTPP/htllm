@@ -4,11 +4,12 @@ export interface HtllmDB {
   threads: {
     key: string;
     value: import('../providers/types').Thread;
+    indexes: { byUpdatedAt: number };
   };
   messages: {
     key: string;
     value: import('../providers/types').Message;
-    indexes: { byThread: string };
+    indexes: { byThread: string; byThreadCreated: [string, number] };
   };
   keys: {
     key: string;
@@ -29,7 +30,7 @@ export interface HtllmDB {
 }
 
 const DB_NAME = 'htllm';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<HtllmDB>> | null = null;
 
@@ -38,7 +39,7 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
     dbPromise = openDB<HtllmDB>(DB_NAME, DB_VERSION, {
       // Version-aware migration: each block runs for databases below that
       // version, so both fresh installs and v1 upgrades reach the same shape.
-      upgrade(db, oldVersion) {
+      upgrade(db, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
           db.createObjectStore('threads', { keyPath: 'id' });
 
@@ -51,6 +52,12 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
         }
         if (oldVersion < 2) {
           db.createObjectStore('folders', { keyPath: 'id' });
+        }
+        if (oldVersion < 3) {
+          const threadStore = tx.objectStore('threads');
+          threadStore.createIndex('byUpdatedAt', 'updatedAt');
+          const messageStore = tx.objectStore('messages');
+          messageStore.createIndex('byThreadCreated', ['threadId', 'createdAt']);
         }
       },
     });

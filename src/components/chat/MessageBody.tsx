@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Marked, type Tokens } from 'marked';
 import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
 import { Check, Copy } from 'lucide-react';
@@ -11,13 +11,19 @@ import { Check, Copy } from 'lucide-react';
 
 const CODE_DELIM = '<!--shiki-code-->';
 
-function buildMarked(): Marked {
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildMarked(useHighlighting: boolean): Marked {
   const m = new Marked();
   m.use({
     renderer: {
       code(token: Tokens.Code): string {
         const lang = (token.lang ?? '').trim();
-        const html = highlightToHtml(token.text, lang || undefined);
+        const html = useHighlighting
+          ? highlightToHtml(token.text, lang || undefined)
+          : `<pre><code>${escapeHtml(token.text)}</code></pre>`;
         // Encode for safe splitting: base64 the inner HTML.
         const payload = btoa(
           encodeURIComponent(
@@ -31,16 +37,23 @@ function buildMarked(): Marked {
   return m;
 }
 
-let markedInstance: Marked | null = null;
-function getMarked(): Marked {
-  if (!markedInstance) markedInstance = buildMarked();
-  return markedInstance;
+let markedFull: Marked | null = null;
+let markedPlain: Marked | null = null;
+function getMarked(useHighlighting: boolean): Marked {
+  if (useHighlighting) {
+    if (!markedFull) markedFull = buildMarked(true);
+    return markedFull;
+  }
+  if (!markedPlain) markedPlain = buildMarked(false);
+  return markedPlain;
 }
 
 // ── Code block component ────────────────────────────────────────────
 
 function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: string }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const copy = () => {
     try {
@@ -49,7 +62,8 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
       // clipboard unavailable
     }
     setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1200);
   };
 
   // If html came from shiki it's a full <pre><code>…</code></pre> block.
@@ -95,7 +109,7 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
 
 // ── Main component ──────────────────────────────────────────────────
 
-export function MessageBody({ content }: { content: string }) {
+export function MessageBody({ content, streaming }: { content: string; streaming?: boolean }) {
   const [highlighterVersion, setHighlighterVersion] = useState(0);
 
   // Re-render when the highlighter finishes loading or an on-demand grammar
@@ -103,13 +117,15 @@ export function MessageBody({ content }: { content: string }) {
   useEffect(() => {
     return subscribeHighlight(() => {
       // Rebuild the marked instance so the renderer picks up the new state.
-      markedInstance = null;
+      markedFull = null;
       setHighlighterVersion((n) => n + 1);
     });
   }, []);
 
+  // Skip expensive shiki highlighting during streaming — use plain-text
+  // code blocks instead. A single highlight pass fires when streaming ends.
   const segments = useMemo(() => {
-    const marked = getMarked();
+    const marked = getMarked(!streaming);
     const rawHtml = marked.parse(content, { async: false }) as string;
 
     // Split on our code-block placeholders.
@@ -131,7 +147,7 @@ export function MessageBody({ content }: { content: string }) {
       return { kind: 'html' as const, html: part };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- highlighterVersion forces reparse when shiki loads
-  }, [content, highlighterVersion]);
+  }, [content, streaming, highlighterVersion]);
 
   return (
     <div className="text-[13.5px] text-text leading-relaxed prose-custom">

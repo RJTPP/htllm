@@ -76,7 +76,7 @@ export function CommandPalette({
       asyncCommands(q).then((res) => {
         if (!cancelled) setAsyncResults(res);
       });
-    }, 150);
+    }, 250);
     return () => {
       cancelled = true;
       clearTimeout(t);

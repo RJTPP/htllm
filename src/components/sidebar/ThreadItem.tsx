@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import type { Thread, Folder } from '../../providers/types';
 import { Pencil, Trash2, FolderInput } from 'lucide-react';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
 
-export function ThreadItem({
+export const ThreadItem = memo(function ThreadItem({
   thread,
   folders,
   active,
@@ -183,4 +183,4 @@ export function ThreadItem({
       )}
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, memo, type ReactNode } from 'react';
 import type { Folder } from '../../providers/types';
 import { ChevronRight, Trash2 } from 'lucide-react';
 
@@ -6,7 +6,7 @@ import { ChevronRight, Trash2 } from 'lucide-react';
  * A collapsible sidebar section for one folder. The threads themselves are
  * passed as children so this component only owns the folder header.
  */
-export function FolderSection({
+export const FolderSection = memo(function FolderSection({
   folder,
   count,
   collapsed,
@@ -107,4 +107,4 @@ export function FolderSection({
       )}
     </div>
   );
-}
+});

@@ -22,13 +22,26 @@ export function useChat(
   const [messages, setMessages] = useState<Message[]>([]);
   const [generating, setGenerating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Ref keeps the latest messages accessible from callbacks without adding
+  // `messages` to their dependency arrays (which would destabilize them).
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
+  // Abort any in-flight stream on unmount to prevent stale setState calls.
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
+
+  // Load messages when thread changes; cancelled flag prevents race condition
+  // if the user switches threads before the prior load resolves.
   useEffect(() => {
     if (!threadId) {
       setMessages([]);
       return;
     }
-    getMessages(threadId).then(setMessages);
+    let cancelled = false;
+    getMessages(threadId).then((msgs) => {
+      if (!cancelled) setMessages(msgs);
+    });
+    return () => { cancelled = true; };
   }, [threadId]);
 
   // Streams an assistant reply for the given visible history. The history is
@@ -88,6 +101,24 @@ export function useChat(
           : null;
         const sendMessages = sysMsg ? [sysMsg, ...cleaned] : cleaned;
 
+        // Throttle UI updates to ~60 fps via requestAnimationFrame.
+        // Token chunks arrive at 100+ per second from fast models; flushing
+        // on every chunk causes unnecessary React reconciliation work.
+        let rafPending = false;
+        const flushToState = () => {
+          rafPending = false;
+          setMessages((prev) => {
+            const copy = [...prev];
+            copy[copy.length - 1] = {
+              ...assistantMsg,
+              content: fullContent,
+              reasoning: fullReasoning || undefined,
+              usage: finalUsage,
+            };
+            return copy;
+          });
+        };
+
         for await (const chunk of provider.chat({
           messages: sendMessages,
           modelId,
@@ -102,20 +133,13 @@ export function useChat(
           fullContent += chunk.delta;
           if (chunk.reasoning) fullReasoning += chunk.reasoning;
           if (chunk.usage) finalUsage = chunk.usage;
-          const currentContent = fullContent;
-          const currentReasoning = fullReasoning;
-          const currentUsage = finalUsage;
-          setMessages((prev) => {
-            const copy = [...prev];
-            copy[copy.length - 1] = {
-              ...assistantMsg,
-              content: currentContent,
-              reasoning: currentReasoning || undefined,
-              usage: currentUsage,
-            };
-            return copy;
-          });
+          if (!rafPending) {
+            rafPending = true;
+            requestAnimationFrame(flushToState);
+          }
         }
+        // Final flush — ensure the last chunk (with usage/finishReason) is rendered.
+        flushToState();
 
         await updateMessage(assistantMsg.id, {
           content: fullContent,
@@ -151,7 +175,8 @@ export function useChat(
     async (text: string, images?: ChatImage[]) => {
       if (!threadId || generating) return;
 
-      const isFirstMessage = messages.length === 0;
+      const currentMessages = messagesRef.current;
+      const isFirstMessage = currentMessages.length === 0;
 
       let userContent: string | ContentPart[];
       if (images && images.length > 0) {
@@ -175,36 +200,39 @@ export function useChat(
       });
       setMessages((prev) => [...prev, userMsg]);
 
-      await runGeneration([...messages, userMsg]);
+      await runGeneration([...currentMessages, userMsg]);
 
       if (isFirstMessage) {
         onAutoTitle?.(threadId, text);
       }
     },
-    [threadId, generating, messages, runGeneration, onAutoTitle],
+    [threadId, generating, runGeneration, onAutoTitle],
   );
 
   const regenerate = useCallback(async () => {
     if (!threadId || generating) return;
-    const last = messages[messages.length - 1];
+    const currentMessages = messagesRef.current;
+    const last = currentMessages[currentMessages.length - 1];
     if (!last || last.role !== 'assistant') return;
 
     await deleteMessage(last.id);
-    const trimmed = messages.slice(0, -1);
+    const trimmed = currentMessages.slice(0, -1);
     setMessages(trimmed);
 
     await runGeneration(trimmed);
-  }, [threadId, generating, messages, runGeneration]);
+  }, [threadId, generating, runGeneration]);
 
   /** Edit a user message and re-generate from that point (truncate-and-replace). */
   const editAndResend = useCallback(
     async (messageId: string, newText: string) => {
       if (!threadId || generating) return;
 
+      const currentMessages = messagesRef.current;
+
       // Find the target message.
-      const idx = messages.findIndex((m) => m.id === messageId);
+      const idx = currentMessages.findIndex((m) => m.id === messageId);
       if (idx === -1) return;
-      const target = messages[idx]!;
+      const target = currentMessages[idx]!;
       if (target.role !== 'user') return;
 
       // Build updated content — preserve images if the original had them.
@@ -228,7 +256,7 @@ export function useChat(
       const deletedIds = await deleteMessagesAfter(threadId, messageId);
 
       // Update local state: keep messages up to and including the edited one.
-      const kept = messages.filter(
+      const kept = currentMessages.filter(
         (_m, i) => i <= idx && !deletedIds.includes(_m.id),
       );
       const editedMsg: Message = { ...target, content: newContent };
@@ -238,7 +266,7 @@ export function useChat(
       // Re-generate from the updated history.
       await runGeneration(kept);
     },
-    [threadId, generating, messages, runGeneration],
+    [threadId, generating, runGeneration],
   );
 
   const stop = useCallback(() => {

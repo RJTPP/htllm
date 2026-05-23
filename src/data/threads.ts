@@ -11,8 +11,11 @@ export async function createThread(data: Omit<Thread, 'id'>): Promise<Thread> {
 
 export async function listThreads(): Promise<Thread[]> {
   const db = await getDb();
-  const threads = await db.getAll('threads');
-  return threads.sort((a, b) => b.updatedAt - a.updatedAt);
+  // Use the byUpdatedAt index to get threads pre-sorted ascending, then
+  // reverse for newest-first without an in-memory sort.
+  const threads = await db.getAllFromIndex('threads', 'byUpdatedAt');
+  threads.reverse();
+  return threads;
 }
 
 export async function getThread(id: string): Promise<Thread | undefined> {
