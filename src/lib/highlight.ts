@@ -46,6 +46,11 @@ const PRELOAD: BundledLanguage[] = [
   'css',
   'markdown',
   'diff',
+  'java',
+  'go',
+  'rust',
+  'sql',
+  'yaml',
 ];
 
 let highlighter: HighlighterGeneric<BundledLanguage, BundledTheme> | null = null;
