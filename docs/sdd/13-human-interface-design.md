@@ -5,7 +5,7 @@
 **Primary user journey: First-time use**
 
 ```
-1. User opens htllm → Landing page (zero JS)
+1. User opens htllm → Landing page with animated boot sequence and shader backdrop
 2. Clicks "Open App" → App page loads
 3. System rail probes hardware → badges appear in header
 4. If no WebGPU → block screen with explanation
@@ -19,6 +19,9 @@
 12. User types message → sends → streaming response appears
 13. Thread title auto-generated → sidebar shows thread
 14. User can create new threads, switch between them, adjust params
+15. User presses Cmd+K → Command palette for search and thread navigation
+16. User creates folders → organizes threads into collapsible groups
+17. User opens Settings → Appearance → selects accent color
 ```
 
 **Secondary flows:**
@@ -28,6 +31,13 @@
 - **Prompt template:** Type `/` → dropdown appears → arrow-key navigate → Enter to insert
 - **Export data:** Settings/menu → Export All → JSON file downloaded
 - **Import data:** Settings/menu → Import → file picker → confirmation → data restored
+- **Command palette:** Cmd+K → type query → see threads + matching messages → select to navigate
+- **Folder organization:** Right-click sidebar area → create folder → drag threads into folder → collapse/expand
+- **Edit & resend:** Hover user message → click edit → modify text → save & resend → new response from that point
+- **Copy message:** Hover any message → click copy → text copied to clipboard
+- **Regenerate:** Hover last assistant message → click regenerate → new response for same prompt
+- **Storage management:** Nav rail → Storage page → view model cache sizes → delete individual caches → view IDB stats
+- **Accent color:** Settings → Appearance → click color swatch → accent updates globally including landing page
 
 ### 13.2 Key Screens/Wireframes
 
@@ -51,7 +61,7 @@
 └──────────────────────────────────────────────────────────┘
 ```
 
-Zero JavaScript. Static HTML only. Dark theme applied via CSS.
+Interactive React landing page with animated boot sequence, WebGL shader backdrop, and persisted accent color from IndexedDB. First-time visitors see the boot animation; returning visitors redirect to /app.
 
 #### Screen 2: App — No Model Loaded
 
@@ -164,6 +174,67 @@ Dismiss via backdrop click or Escape.
 │                │  [/general                             ]       │
 ```
 
+#### Screen 7: Command Palette (Cmd+K overlay)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│          ┌──────────────────────────────────────┐            │
+│  (dim    │ 🔍 Search threads and messages...    │            │
+│   back-  │                                      │            │
+│   drop)  │ THREADS                              │            │
+│          │ ● Thread: Capital of France           │ ◄ active  │
+│          │   Thread: React hooks                 │            │
+│          │   Thread: Python sorting              │            │
+│          │                                      │            │
+│          │ MESSAGES                              │            │
+│          │   "The capital of France is..."       │            │
+│          │   — in Capital of France              │            │
+│          └──────────────────────────────────────┘            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+#### Screen 8: Storage Manager
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ NAV   │ STORAGE                                              │
+│       │                                                      │
+│ chat  │ Browser Storage                                      │
+│ *stor*│ [████████████░░░░░] 2.1 GB / 8.0 GB                │
+│ know  │                                                      │
+│       │ Model Weights (Cache API)                            │
+│       │ ┌──────────────────────────────────────────┐         │
+│       │ │ Llama-3.2-1B q4f32  │ 1.1 GB  [delete] │         │
+│       │ │ Qwen3-0.6B q4f16    │ 0.4 GB  [delete] │         │
+│       │ └──────────────────────────────────────────┘         │
+│       │                                                      │
+│       │ IndexedDB                                            │
+│       │ threads: 12  messages: 847  keys: 2  ...            │
+│       │                                                      │
+│       │ Reset? → Go to Settings → About                      │
+└───────┴──────────────────────────────────────────────────────┘
+```
+
+#### Screen 9: Settings — Appearance Tab
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ SETTINGS                                          [✕ close] │
+│                                                              │
+│ Templates | Providers | Chat defaults | *Appearance* | About │
+│──────────────────────────────────────────────────────────────│
+│                                                              │
+│ ACCENT COLOR                                                 │
+│ ● Amber   ● Soft Amber   ● Cyan   ● Tokyo Blue             │
+│ ● Violet  ● Emerald      ● Rose   ● Gray                   │
+│                                                              │
+│ CODE BLOCK THEME                                             │
+│ [vesper ▾]                                                   │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
 ### 13.3 Interaction Constraints
 
 **Keyboard navigation:**
@@ -178,6 +249,14 @@ Dismiss via backdrop click or Escape.
 | Prompt hints | `Escape` | Dismiss |
 | Modal (any) | `Escape` | Close modal |
 | Chat (generating) | Stop button | Abort generation |
+| Global | `Cmd+K` / `Ctrl+K` | Open command palette |
+| Command palette | `↑`/`↓` | Navigate results |
+| Command palette | `Enter` | Select result |
+| Command palette | `Escape` | Close palette |
+| Chat (message hover) | — | Show copy/edit/regenerate buttons |
+| Edit mode | `Enter` | Save & resend |
+| Edit mode | `Shift+Enter` | New line in edit |
+| Edit mode | `Escape` | Cancel edit |
 
 **Responsiveness:**
 
@@ -186,6 +265,14 @@ Dismiss via backdrop click or Escape.
 | ≥1024px (desktop) | Sidebar visible (280px), chat fills remainder |
 | 768–1023px (tablet) | Sidebar collapsible via toggle button |
 | <768px (mobile) | Sidebar hidden by default, toggle to show. Model picker full-screen instead of centered popup. Note: WebGPU inference is unlikely to work on mobile, but external providers (Phase 2) will. |
+
+**Page navigation:**
+
+| Page | Nav Rail Item | Content |
+|---|---|---|
+| Chat | Default | Thread sidebar + chat panel |
+| Storage | Second item | Storage manager (model weights + IDB) |
+| Knowledge | Third item | Phase 3 placeholder |
 
 **Accessibility:**
 
@@ -199,6 +286,8 @@ Dismiss via backdrop click or Escape.
 
 - All font sizes use the design system scale: `10px` (labels), `11px` (mono UI), `13px` (body mono), `14px` (body sans)
 - All colors from the Tailwind theme — no inline hex values
-- All borders 1px solid, no border-radius (sharp corners, terminal aesthetic)
-- Animations: only `pulse-dot` (1.4s ease-in-out) and `spin` (0.9s linear) — no gratuitous transitions
+- All borders 1px solid. Rounded corners only on user message bubbles (`rounded-lg rounded-tl-sm`).
+- Accent color is runtime-switchable via CSS custom property `--accent` (8 presets). Persisted to IDB.
+- All font sizes, border styles, and spacing follow the design system.
+- Animations: `pulse-dot`, `spin`, `blink` cursor, `reveal` cascade on landing page, `wm-glitch` on boot complete, `scanlines` overlay, `grain` film effect — all respect `prefers-reduced-motion: reduce`.
 - Model IDs, status text, and assistant output in JetBrains Mono; UI chrome and user text in Geist

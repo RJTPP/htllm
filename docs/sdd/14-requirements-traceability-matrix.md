@@ -25,19 +25,31 @@
 | P1-12 | Throughput display | `UsageStats` in `ChatChunk`, displayed in `MessageView.tsx` | 5.7, 11.3, 12.1 | Covered |
 | P1-13 | Data import/export | `export.ts`, `ImportExport.tsx` | 6.1, 12.1 | Covered |
 | P1-14 | Model family grouping + search | `model-list.ts`, `ModelPicker.tsx` | 6.1, 12.1, 13.2 | Covered |
+| P2-1 | BYOK OpenAI-compatible providers | `OpenAICompatibleProvider`, provider registry, `ProviderConfig.tsx` | 6.1, 12.1 | Covered |
+| P2-2 | Markdown rendering + code highlighting | `MessageBody.tsx`, `highlight.ts` (Shiki) | 6.1, 12.1 | Covered |
+| P2-3 | Edit & resend user messages | `MessageView.tsx` edit mode, `useChat.editAndResend()` | 12.1, 12.2 | Covered |
+| P2-4 | Thinking/reasoning mode | `ThinkingBlock.tsx`, `thinking.ts`, `reasoning.ts`, `ChatChunk.reasoning` | 5.8, 6.1, 12.1 | Covered |
+| P2-5 | Command palette (Cmd+K) | `CommandPalette.tsx`, `searchMessages()` | 6.1, 12.1, 13.2 | Covered |
+| P2-6 | Chat folders | `FolderSection.tsx`, `useFolders`, `folders` IDB store | 5.6, 6.1, 11.1, 12.1 | Covered |
+| P2-7 | Model-generated titles | `title.ts`, `titleMode` setting | 6.1, 11.3 | Covered |
+| P2-8 | Copy message button | `MessageView.tsx` CopyButton | 12.1 | Covered |
+| P2-9 | Storage manager | `StorageManager.tsx`, `storage-stats.ts` | 6.1, 12.1, 13.2 | Covered |
+| P2-10 | Accent color presets | CSS `--accent` variable, `SettingsModal.tsx` Appearance tab, 8 presets | 6.1, 11.3, 13.2 | Covered |
+| P2-11 | API timing stats (TTFT) | `UsageStats.timeToFirstTokenMs`, `OpenAICompatibleProvider` | 5.7, 6.1, 11.3 | Covered |
+| P2-12 | Performance/memory audit | rAF throttle, React.memo, highlight cache, lazy imports | 5.10, 12.1 | Covered |
+| P2-13 | Regenerate response | `MessageView.tsx` regenerate button, `useChat.regenerate()` | 12.1, 12.2 | Covered |
 
 ### 14.2 Coverage Status and Open Items
 
 | Status | Count | Items |
 |---|---|---|
-| **Covered** | 21 | All Phase 1 requirements mapped to design artifacts |
-| **Partial** | 1 | Accessibility (keyboard nav designed; screen reader testing deferred to post-implementation) |
-| **Deferred** | 7 | Phase 2 providers (incl. generic OpenAI-compatible endpoint), Phase 3 RAG, Phase 4 agent, Phase 5 polish features |
+| **Covered** | 34 | All Phase 1 + Phase 2 requirements mapped |
+| **Partial** | 1 | Accessibility |
+| **Deferred** | 3 | Phase 3 RAG, Phase 4 agent, Phase 5 (voice, i18n, branching) |
 
 **Open items:**
 
 | Item | Owner | Next Action |
 |---|---|---|
-| Built-in prompt template content | Developer | Curate 3–5 starter templates during implementation |
 | Image compression quality vs. model accuracy | Developer | Test with WebLLM vision models; adjust target if needed |
 | Accessibility screen reader audit | Developer | Conduct after Phase 1 UI implementation |

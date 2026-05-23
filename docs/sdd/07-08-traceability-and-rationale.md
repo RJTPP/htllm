@@ -16,15 +16,19 @@
 | C10 — Data portability | JSON export/import of all IDB stores | 6.1 (Export/Import), 12.1 |
 | C11 — Vision support | Multimodal `ContentPart[]`, image compression, paste support | 5.4, 5.8, 13.3 |
 | C12 — Model parameters | Per-thread `ModelParams` overrides + global defaults in settings | 5.4, 6.1, 11.1 |
+| C13 — Streaming performance | rAF batching in useChat, React.memo on message/thread components | 5.10, 12.1 |
+| C14 — Code highlighting perf | Shiki cache in highlight.ts, lazy init | 5.10, 6.1 (Highlight) |
+| C15 — IDB schema evolution | Versioned upgrade in db.ts, non-destructive migrations | 6.2, 11.2 |
+| C16 — UX consistency | CSS variable `--accent`, 8 presets, persisted to IDB | 6.1, 13.3 |
 
 ### 7.2 Coverage and Gaps
 
 | Gap | Status | Owner | Next Action |
 |---|---|---|---|
+| Markdown rendering in messages | Covered | Phase 2 | Implemented with `marked` + `shiki` for code blocks |
 | Offline capability (Service Worker caching) | Deferred | Phase 5 | Design service worker strategy after core is stable |
-| Markdown rendering in messages | Deferred | Phase 5 | Add `marked` + `shiki` for code blocks |
 | Accessibility audit | Partial | Phase 1 | Keyboard navigation designed; screen reader testing needed post-implementation |
-| Model-specific param recommendations | Partial | Phase 1 | Use WebLLM's `recommended_config` where available; may need manual overrides |
+| Virtual scrolling for long threads | Deferred | Phase 3+ | Investigate virtualized list for threads with 1000+ messages |
 | Image compression quality validation | Open | Phase 1 | Test 256KB target with various vision models; adjust if quality insufficient |
 
 ---
@@ -44,6 +48,11 @@
 | **Config diffing for model reload** (ref: web-llm-chat) | Only reload model when model ID changes; param changes (temperature, etc.) passed at inference time | Avoids expensive re-downloads when user tweaks params |
 | **Image compression to 256KB** (ref: web-llm-chat) | Keeps IDB storage manageable; vision models work at this resolution | May lose detail for complex images; user can adjust in future |
 | **Static-only Astro** (no SSR) | Enforces the "no server" constraint at framework level; can't accidentally add API routes | Limits dynamic routing; acceptable for this app shape |
+| **rAF-throttled streaming flushes** | Per-chunk React setState caused render storms at high token rates (>100 tok/s). Accumulating deltas in a ref and flushing via rAF caps re-renders at ≤60/s. | Slightly delayed UI update (max 16ms); negligible for perceived UX |
+| **Highlight cache over streaming skip** | Considered skipping highlighting during streaming. Instead, cache results so re-renders of completed blocks are instant. | Map grows with unique code blocks; cleared on tab close |
+| **Lock thread switching during generation** | Prevent switching threads while streaming to avoid race conditions in useChat state | User must stop generation before switching; small UX friction |
+| **CSS variable for accent color** | Hardcoded amber in Tailwind config replaced with `rgb(var(--accent) / <alpha-value>)` consumed via CSS custom property | All existing `text-accent`, `bg-accent/10` classes work unchanged; runtime-switchable |
+| **Sample-based cache size estimation** | Cloning all Cache API responses (multi-GB) is too slow. Sample 5 entries, extrapolate. | Size shown is approximate; acceptable for a management UI |
 
 ### 8.2 Alternatives Considered
 
@@ -56,6 +65,9 @@
 | **Service Worker for inference** (web-llm-chat supports this) | More complex lifecycle management, heartbeat monitoring needed. Web Worker is simpler and sufficient for Phase 1. Can revisit for offline support later. |
 | **Callback-based streaming** (web-llm-chat pattern: `onUpdate/onFinish`) | Less composable than AsyncIterable. Can't use `for await...of`, harder to pipe through transforms. |
 | **Flat model list** (no family grouping) | Doesn't scale to 50+ models in WebLLM catalog. Family grouping with search is essential UX. |
+| **Skip highlighting during streaming** | Would cause visual "flash" when highlighting activates after stream ends. Cache approach gives best of both worlds. |
+| **Server-side syntax highlighting** | Violates no-server constraint. Shiki runs fully client-side. |
+| **Abort-and-resume on thread switch** | More complex than lock-switch. Lock approach is simpler and prevents data corruption. |
 
 ### 8.3 Tradeoff Analysis
 

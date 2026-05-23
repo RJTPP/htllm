@@ -4,6 +4,7 @@
 
 ```mermaid
 erDiagram
+    Folder ||--o{ Thread : "groups"
     Thread ||--o{ Message : "has many"
     Thread {
         string id PK
@@ -11,6 +12,8 @@ erDiagram
         string providerId
         string modelId
         json modelParams
+        string folderId
+        string systemPrompt
         number createdAt
         number updatedAt
     }
@@ -19,8 +22,14 @@ erDiagram
         string threadId FK
         string role
         json content
+        string reasoning
         number createdAt
         json usage
+    }
+    Folder {
+        string id PK
+        string name
+        number createdAt
     }
     Key {
         string providerId PK
@@ -34,6 +43,7 @@ erDiagram
         string id PK
         string title
         string content
+        string description
         boolean isBuiltIn
         number createdAt
     }
@@ -42,20 +52,22 @@ erDiagram
 **Relationships:**
 
 - Thread → Message: one-to-many via `threadId` index. Deleting a thread cascades to delete all its messages.
+- Folder → Thread: one-to-many via `folderId`. Threads with no folder are ungrouped.
 - Key, Setting, PromptTemplate: standalone stores, no foreign key relationships.
 
 ### 11.2 Data Description
 
 **Database:** `htllm` (IndexedDB)
-**Schema version:** 1
+**Schema version:** 3
 
 | Store | Purpose | Consistency | Read Pattern | Write Pattern |
 |---|---|---|---|---|
 | `threads` | Conversation metadata | Eventual (UI state updates async) | Full scan on app load; single read on thread switch | Create on new thread; update title/timestamps on message send |
-| `messages` | Conversation content | Eventual (streaming writes batch) | Index scan by `threadId` on thread switch | Create on send; update during streaming (batched); delete on thread delete |
+| `messages` | Conversation content | Eventual (streaming writes batch) | Index scan by `threadId` on thread switch. Compound index `[threadId, createdAt]` for ordered retrieval and `deleteMessagesAfter` operations. | Create on send; update during streaming (batched); delete on thread delete |
 | `keys` | Provider API credentials | Strong (immediate persist) | Single read on provider initialization | User sets via UI; rare writes |
 | `settings` | User preferences | Eventual | Full scan on app load | User changes via UI; rare writes |
 | `promptTemplates` | Reusable prompt snippets | Eventual | Full scan on `/` trigger | User CRUD; built-in templates seeded on first run |
+| `folders` | Thread organizational groups | Eventual | Full scan on app load | User creates/renames/deletes; rare writes |
 
 ### 11.3 Data Dictionary
 
@@ -70,6 +82,8 @@ erDiagram
 | `modelParams` | `ModelParams \| undefined` | Optional | Per-thread parameter overrides (temperature, topP, etc.) |
 | `createdAt` | `number` | Required | Unix timestamp (ms) |
 | `updatedAt` | `number` | Required | Unix timestamp (ms), updated on each message |
+| `systemPrompt` | `string \| undefined` | Optional | Custom system prompt for this thread |
+| `folderId` | `string \| undefined` | Optional, FK to Folder | Folder this thread belongs to; undefined means ungrouped |
 
 #### Message
 
@@ -81,6 +95,7 @@ erDiagram
 | `content` | `string \| ContentPart[]` | Required | Text content or multimodal array (text + images) |
 | `createdAt` | `number` | Required | Unix timestamp (ms) |
 | `usage` | `UsageStats \| undefined` | Optional | Token counts and throughput (assistant messages only) |
+| `reasoning` | `string \| undefined` | Optional | Structured reasoning/thinking content from API providers |
 
 #### ContentPart (union type, not a store)
 
@@ -97,6 +112,7 @@ erDiagram
 | `completionTokens` | `number` | Tokens generated |
 | `prefillTokensPerSecond` | `number \| undefined` | Prefill throughput |
 | `decodeTokensPerSecond` | `number \| undefined` | Decode throughput |
+| `timeToFirstTokenMs` | `number \| undefined` | Time to first token in ms, measured client-side for API providers |
 
 #### Key
 
@@ -116,9 +132,12 @@ erDiagram
 
 | Key | Value Type | Default | Description |
 |---|---|---|---|
-| `defaultModelParams` | `ModelParams` | `{ temperature: 1.0, topP: 1.0, maxTokens: 4000, presencePenalty: 0, frequencyPenalty: 0 }` | Global defaults for model parameters |
+| `defaultModelParams` | `ModelParams` | `{ temperature: 1.0, topP: 1.0, maxTokens: 4000, presencePenalty: 0, frequencyPenalty: 0, contextWindow: 4096, historyMsgs: 12, reasoningEffort: 'low' }` | Global defaults for model parameters |
 | `lastProviderId` | `string` | `'webllm'` | Last used provider |
 | `lastModelId` | `string \| null` | `null` | Last loaded model |
+| `accentColor` | `AccentColor` | `'amber'` | Selected accent color preset |
+| `codeTheme` | `string` | `'vesper'` | Shiki theme for code blocks |
+| `titleMode` | `TitleMode` | `'trim'` | How thread titles are derived: 'trim' or 'generate' |
 
 #### PromptTemplate
 
@@ -129,10 +148,19 @@ erDiagram
 | `content` | `string` | Required | Template text inserted into composer |
 | `isBuiltIn` | `boolean` | Required | True for system-provided templates |
 | `createdAt` | `number` | Required | Unix timestamp (ms) |
+| `description` | `string \| undefined` | Optional | Short description shown in the / menu instead of content |
+
+#### Folder
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `string` | PK, UUID v4 | Unique folder identifier |
+| `name` | `string` | Required | Display name |
+| `createdAt` | `number` | Required | Unix timestamp (ms) |
 
 ### 11.4 Client-side Cache/Storage Model
 
-**Model weight cache:** Managed entirely by `@mlc-ai/web-llm` using the browser's Cache API or IndexedDB (configurable). htllm does not manage this cache directly — it uses `hasModelInCache()` and `deleteModelAllInfoInCache()` from the library.
+**Model weight cache:** Managed by `@mlc-ai/web-llm` using the browser's Cache API. The `StorageManager` component provides visibility into cached models and per-cache delete controls via `storage-stats.ts`. Functions: `getCacheEntries()` enumerates caches with sample-based size estimation, `deleteCache(name)` removes a specific cache.
 
 **IDB data cache:** No application-level caching of IDB data. Reads go directly to IDB. React state serves as the in-memory working copy. On thread switch, messages are re-read from IDB.
 
@@ -140,4 +168,4 @@ erDiagram
 
 **Offline behavior:** After initial page load, the app works offline for in-browser inference (WebLLM with cached models). External providers (Phase 2) require network. IDB data persists across sessions.
 
-**Future evolution note:** Phase 3 will add an `embeddings` store for RAG vector data (document chunks + embedding vectors). Phase 4 may add `toolResults` for agent loop state. The IDB migration system (`db.ts` with version bumps) supports these additions without data loss. The `ModelParams` type may also grow to include model-specific fields (e.g., `enableThinking` for Qwen3).
+**Future evolution note:** Phase 3 will add an `embeddings` store for RAG vector data (document chunks + embedding vectors). The IDB migration system (`db.ts` with version bumps) supports these additions without data loss. The `ModelParams` type may also grow to include model-specific fields (e.g., `enableThinking` for Qwen3).

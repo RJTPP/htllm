@@ -16,6 +16,13 @@
 | **AD-10** | **Per-thread model params with global defaults** | Two levels: global defaults in `settings` store, per-thread overrides in thread record. Active config = merge (thread wins). | Slightly more complex param resolution. But enables different temperature/topP per conversation, which is valuable for experimentation. |
 | **AD-11** | **Named exports only** in `src/lib/`, `src/providers/`, `src/data/` | Improves tree-shaking discoverability. Default exports make it harder to track usage and refactor. | Components may still use default exports (React convention). The rule applies to non-component code only. |
 | **AD-12** | **Conventional Commits** | Structured commit messages enable automated changelog, version bumps, and clear history. | Requires discipline. Enforced by convention, not tooling in Phase 1. |
+| **AD-13** | **rAF-throttled streaming state flushes** | Per-chunk setState at >100 tok/s causes React render storms. Accumulate deltas in a ref, flush via requestAnimationFrame. Caps UI updates at ≤60/s. | Max 16ms delay in token display; imperceptible. Proven approach from high-throughput UIs. |
+| **AD-14** | **Highlight cache (Map) over streaming skip** | Considered skipping code highlighting during streaming. Cache approach: highlight once per unique code block, reuse on re-renders. | Memory grows with unique blocks; acceptable for tab lifetime. No visual flash when streaming completes. |
+| **AD-15** | **Lock thread switching during generation** | Prevent thread switch while streaming to avoid race conditions in useChat state (refs, abort controller, message array). | Small UX friction; user must stop before switching. Eliminates a class of subtle state bugs. |
+| **AD-16** | **CSS custom property for accent color** | `--accent` in `:root` consumed via `rgb(var(--accent) / <alpha-value>)` in Tailwind config. Runtime-switchable without rebuild. | All Tailwind opacity modifiers (`text-accent/60`, `bg-accent/10`) work unchanged. 8 presets persisted to IDB. |
+| **AD-17** | **Sample-based Cache API size estimation** | Cloning all responses in multi-GB caches is prohibitively slow. Sample 5 entries, compute average size, multiply by total count. | Displayed size is approximate; acceptable for management UI. |
+| **AD-18** | **Dynamic import for @mlc-ai/web-llm** | Static import pulls multi-MB WASM module into main bundle. Dynamic `import()` in provider code loads only when WebLLM is used. | First model load pays import cost; negligible since model download dominates. |
+| **AD-19** | **OpenAICompatibleProvider subsumes all HTTP providers** | Instead of separate Ollama/LM Studio/Groq/OpenRouter classes, one spec-driven provider handles all OpenAI-compatible endpoints. Registry specs define per-provider defaults. | Single codebase for all HTTP providers. Provider-specific quirks handled via spec flags. |
 
 ### 16.2 Deferred Decisions
 
@@ -24,10 +31,10 @@
 | **Service Worker for offline caching** | Phase 5, or user demand for offline mode | web-llm-chat has a Service Worker with Serwist-based caching. We can adopt a similar approach. |
 | **Virtual scrolling for long message lists** | Performance testing with 1000+ messages | If IDB read + render is slow, add virtual scrolling (react-window or similar). |
 | **State management library** | If state complexity exceeds React built-ins in Phase 4+ | Zustand would be the likely choice (small, hook-based). |
-| **Markdown rendering library** | Phase 5 | `marked` for markdown, `shiki` for syntax highlighting. |
+| **Markdown rendering library** | Resolved | Resolved: Shiki for syntax highlighting, custom markdown parser (no `marked` dependency) |
 | **Voice input** | Phase 5 | Web Speech API. Availability varies by browser. |
 | **i18n framework** | Phase 5 | Likely a lightweight solution; web-llm-chat uses a custom i18n system with per-locale TypeScript files. |
-| **Thinking mode** (Qwen3 `<think>` tags) | Phase 2, when more models are supported | Strip `<think>` tags from history context; conditionally force temperature/top_p per web-llm-chat's pattern. |
+| **Thinking mode** (Qwen3 `<think>` tags) | Resolved | Resolved: Dual-path — structured `reasoning` field from API + `<think>` tag parsing for local models |
 | **Cross-tab IDB synchronization** | Post-Phase 1, if users report issues with multiple tabs | BroadcastChannel API or storage event listener. |
 | **Model weight upload** | Phase 2+, secondary priority | Allow users to provide custom model weights instead of downloading from CDN. |
-| **Generic OpenAI-compatible endpoint** | Phase 2 | A provider that connects to any OpenAI-compatible `/v1/chat/completions` API. User provides base URL + optional API key. Must satisfy CORS (browser-initiated requests). Could potentially subsume Ollama/LM Studio/Groq/OpenRouter providers since all implement this format. Security constraint: user is explicitly trusting their configured endpoint with message content. Key stored in IDB. |
+| **Generic OpenAI-compatible endpoint** | Resolved | Resolved: `OpenAICompatibleProvider` with spec-driven registry |

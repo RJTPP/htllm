@@ -12,19 +12,22 @@ block-beta
     p2["Static HTML shells that mount React islands"]
   end
   block:components["Component Layer"]
-    c1["React components: App, Sidebar, ChatPanel, ModelPicker, SystemRail, Composer"]
+    c1["React components: App, Sidebar, ChatPage, ModelPicker, NavRail, CommandPalette, StorageManager, SettingsModal"]
     c2["Consumes hooks; never imports providers directly"]
   end
   block:hooks["Hooks Layer"]
-    h1["useSystem, useThreads, useChat, useModelParams"]
+    h1["useSystem, useThreads, useChat, useModelParams, useFolders"]
     h2["Bridges components ↔ data layer ↔ providers"]
   end
   block:providers["Provider Layer"]
     pr1["ChatProvider interface + registry"]
-    pr2["WebLLM (Phase 1) · Ollama, LM Studio, Groq, OpenRouter, Generic OpenAI (Phase 2)"]
+    pr2["WebLLM · OpenAI-compatible (Ollama, LM Studio, Groq, OpenRouter, Generic)"]
   end
   block:data["Data Layer"]
-    d1["IndexedDB via idb: threads, messages, keys, settings, promptTemplates"]
+    d1["IndexedDB via idb: threads, messages, keys, settings, promptTemplates, folders"]
+  end
+  block:lib["Lib Layer"]
+    l1["Pure utilities: highlight, thinking, title, format, image, fit, system-detect, model-meta, export"]
   end
   block:worker["Worker Layer"]
     w1["Web Worker: WebLLM engine (MLCEngineWorkerHandler)"]
@@ -32,6 +35,7 @@ block-beta
   end
 
   pages --> components --> hooks --> providers --> data
+  hooks --> lib
   providers --> worker
 ```
 
@@ -43,6 +47,7 @@ block-beta
 | Components never call IndexedDB directly | All IDB access through `src/data/` repositories and `src/hooks/` |
 | Provider implementations are isolated in `src/providers/<name>/` | One folder per provider; registered via single line in `registry.ts` |
 | Web Worker never imports React or DOM APIs | Worker file imports only `@mlc-ai/web-llm` |
+| @mlc-ai/web-llm lazily imported | Dynamic import() in provider code; main thread never imports the module synchronously |
 
 ### 4.2 Deployment and Runtime Topology
 
@@ -62,15 +67,18 @@ graph TB
     IDB["IndexedDB\nThreads, Messages\nKeys, Settings"]
     GPU["WebGPU\nGPU inference"]
 
+    Cache["Cache API\nModel weights"]
+
     Main <-->|postMessage| Worker
     Main <-->|async IDB| IDB
+    Main <-->|Cache API| Cache
     Worker -->|GPU calls| GPU
   end
 
   subgraph Network["Network (outbound only, user-initiated)"]
     HF["HuggingFace CDN"]
     Fonts["Google Fonts"]
-    APIs["Provider APIs — Phase 2, BYOK"]
+    APIs["Provider APIs — BYOK"]
   end
 
   Browser -.-> Network
@@ -80,8 +88,9 @@ graph TB
 
 - Main thread ↔ Worker: `postMessage` (structured clone). No shared memory.
 - Main thread ↔ IndexedDB: async IDB transactions via `idb` wrapper.
+- Main thread ↔ Cache API: used by storage manager to enumerate and delete cached model weights.
 - Worker ↔ WebGPU: synchronous GPU calls within the worker context.
-- Browser ↔ Network: only for model downloads (HuggingFace CDN) and fonts. No telemetry. Phase 2 adds provider API calls (BYOK, user-initiated only).
+- Browser ↔ Network: model downloads (HuggingFace CDN), fonts, and BYOK provider API calls (user-initiated only).
 
 ### 4.3 Critical Flow Summary
 
@@ -109,10 +118,27 @@ sequenceDiagram
         Worker-->>Provider: ChatChunk (postMessage)
         Provider-->>useChat: yield ChatChunk
         useChat-->>Composer: setState (append delta)
+        Note over useChat: rAF-throttled flush (≤60 updates/s)
         useChat-->>IDB: periodic flush
     end
     Provider-->>useChat: stream end + usage stats
     useChat->>IDB: updateMessage(final content + usage)
     useChat->>IDB: updateThread(updatedAt)
     Note over useChat: Auto-generate title if first message
+```
+
+**Command palette search:**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CP as CommandPalette
+    participant IDB as IndexedDB
+
+    User->>CP: Cmd+K → type query
+    CP->>IDB: searchMessages(query) via cursor
+    IDB-->>CP: matching messages (paginated)
+    CP-->>User: results with thread context
+    User->>CP: select result
+    CP-->>User: navigate to thread + scroll to message
 ```

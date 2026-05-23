@@ -10,6 +10,7 @@
 | **Information** | C4 (persistence), C5 (secret safety), C10 (portability) | 5.6 |
 | **Interface** | C2 (provider contract), C3 (worker protocol) | 5.7 |
 | **Interaction/State** | C3 (main thread responsiveness), C6 (model fit), C7 (streaming) | 5.8 |
+| **Process** | C13 (streaming perf), C3 (main thread) | 5.10 |
 | **Dependency** | C8 (static deploy), C3 (WebGPU requirement) | 5.5 |
 | **Resource** | N/A — no server resources. Client resource constraints handled by system detection (C6). | — |
 
@@ -62,26 +63,53 @@ src/components/
 ├── App.tsx                    # Root island, state orchestration
 ├── ui/
 │   ├── Badge.tsx              # Tone-variant label
+│   ├── BrandLogo.tsx          # Model family brand icons
+│   ├── Chevron.tsx            # Collapsible section arrow
 │   ├── Dot.tsx                # Status indicator
-│   └── Modal.tsx              # Reusable modal shell
+│   ├── Icon.tsx               # Icon wrapper
+│   ├── Modal.tsx              # Reusable modal shell
+│   ├── ProviderLogo.tsx       # Provider brand icons
+│   └── Tooltip.tsx            # Hover tooltip
 ├── system/
-│   └── SystemRail.tsx         # WebGPU/RAM/CPU/storage badges
+│   ├── ModelSlot.tsx           # Model status in nav rail
+│   ├── SystemStats.tsx         # WebGPU/RAM/CPU/storage badges
+│   └── WebGPUBlock.tsx         # WebGPU unavailable block screen
+├── nav/
+│   └── NavRail.tsx             # Left navigation rail
 ├── sidebar/
-│   ├── Sidebar.tsx            # Shell: thread list + model footer
-│   └── ThreadList.tsx         # Thread CRUD list
+│   ├── Sidebar.tsx            # Thread list + folder tree
+│   ├── ThreadItem.tsx         # Individual thread entry
+│   └── FolderSection.tsx      # Folder with nested threads
+├── command/
+│   └── CommandPalette.tsx     # Cmd+K global search + navigation
 ├── providers/
+│   ├── ApiModelList.tsx       # API provider model list
+│   ├── ModelGridCard.tsx      # Individual model card
 │   ├── ModelPicker.tsx        # Modal: search, family groups, params
-│   ├── ModelCard.tsx          # Individual model card
-│   ├── ModelParams.tsx        # Temperature, top_p, etc. controls
-│   └── StatusPanel.tsx        # Loading progress
+│   ├── ParamControls.tsx      # Temperature, top_p, etc. controls
+│   ├── StatusPanel.tsx        # Loading progress
+│   └── ThreadParams.tsx       # Per-thread parameter override
 ├── chat/
-│   ├── ChatPanel.tsx          # Message list + composer
-│   ├── MessageView.tsx        # Single message (text + images + stats)
-│   ├── Composer.tsx           # Input + image attach + send/stop
+│   ├── Avatar.tsx             # User/assistant avatar
+│   ├── ChatPage.tsx           # Message list + composer + system bar
+│   ├── Composer.tsx           # Input + image attach + /-hints + send/stop
+│   ├── EmptyState.tsx         # Welcome screen
+│   ├── MessageBody.tsx        # Markdown + code highlighting
+│   ├── MessageView.tsx        # Single message (text + images + thinking + stats + copy + edit)
 │   ├── PromptHints.tsx        # /command dropdown
-│   └── EmptyState.tsx         # Welcome screen
+│   ├── SystemPromptBar.tsx    # System prompt editor bar
+│   └── ThinkingBlock.tsx      # Collapsible reasoning/thinking display
+├── landing/
+│   ├── Landing.tsx            # Animated landing page
+│   └── ShaderBackdrop.tsx     # WebGL shader background
+├── knowledge/
+│   └── KnowledgeStub.tsx      # Phase 3 placeholder
+├── storage/
+│   └── StorageManager.tsx     # Model cache + IDB data management
 └── settings/
-    └── ImportExport.tsx       # Data export/import UI
+    ├── ImportExport.tsx       # Data export/import UI
+    ├── ProviderConfig.tsx     # BYOK provider configuration
+    └── SettingsModal.tsx      # Settings modal (Templates, Providers, Chat defaults, Appearance, About)
 ```
 
 ### 5.4 Logical View
@@ -91,7 +119,8 @@ src/components/
 ```
 ChatProvider ─────────── implements ────────── WebLLMProvider
      │                                              │
-     │ listModels() → ModelInfo[]                   │ uses WebWorkerMLCEngine
+     │ needsModelLoad: boolean                      │ uses WebWorkerMLCEngine
+     │ listModels() → ModelInfo[]                   │
      │ chat(ChatParams) → AsyncIterable<ChatChunk>  │
      │ unload?()                                    │
      │                                              │
@@ -102,7 +131,9 @@ ModelInfo                                    prebuiltAppConfig
   ├── family: string
   ├── vramRequiredMB: number
   ├── quantization: string
-  └── cached: boolean
+  ├── cached: boolean
+  ├── vision?: boolean
+  └── reasoning?: ReasoningCapability
 
 Thread ──────── has many ──────── Message
   ├── id: string                   ├── id: string
@@ -110,8 +141,10 @@ Thread ──────── has many ──────── Message
   ├── providerId: string           ├── role: 'user' | 'assistant' | 'system'
   ├── modelId: string              ├── content: string | ContentPart[]
   ├── modelParams?: ModelParams    ├── createdAt: number
-  ├── createdAt: number            └── usage?: UsageStats
-  └── updatedAt: number
+  ├── createdAt: number            ├── usage?: UsageStats
+  ├── updatedAt: number            └── reasoning?: string
+  ├── systemPrompt?: string
+  └── folderId?: string
 
 ContentPart = TextPart | ImagePart
   TextPart:  { type: 'text', text: string }
@@ -122,7 +155,10 @@ ModelParams
   ├── topP: number              (0–1, default 1.0)
   ├── maxTokens: number         (default 4000)
   ├── presencePenalty: number   (−2 to 2, default 0)
-  └── frequencyPenalty: number  (−2 to 2, default 0)
+  ├── frequencyPenalty: number  (−2 to 2, default 0)
+  ├── contextWindow: number     (default 4096)
+  ├── historyMsgs: number       (default 12)
+  └── reasoningEffort: ReasoningEffort  (default 'low')
 
 PromptTemplate
   ├── id: string
@@ -130,6 +166,16 @@ PromptTemplate
   ├── content: string
   ├── isBuiltIn: boolean
   └── createdAt: number
+
+Folder
+  ├── id: string
+  ├── name: string
+  └── createdAt: number
+
+AccentColor = 'amber' | 'soft-amber' | 'cyan' | 'tokyo-blue' | 'violet' | 'emerald' | 'rose' | 'gray'
+
+ReasoningCapability = 'effort' | 'toggle'
+ReasoningEffort = 'off' | 'low' | 'medium' | 'high'
 
 SystemInfo
   ├── webgpu: boolean
@@ -153,6 +199,8 @@ SystemInfo
 | `@mlc-ai/web-llm` | In-browser LLM inference | Yes (worker only) | 1 |
 | `idb` | IndexedDB wrapper | Yes | 1 |
 | `tailwindcss`, `postcss`, `autoprefixer` | Styling | No (build only) | 1 |
+| `shiki` | Syntax highlighting for code blocks | Yes | 2 |
+| `lucide-react` | Icon library | Yes | 2 |
 | `typescript` | Type checking | No (build only) | 1 |
 
 **Browser API dependencies:**
@@ -164,6 +212,7 @@ SystemInfo
 | **IndexedDB** | For all persistence | None — required |
 | **Clipboard API** | For image paste | Graceful degradation (no paste support) |
 | **Storage API** (`navigator.storage.estimate()`) | For free space display | Show "unknown" |
+| **Cache API** (`caches`) | For model weight management in StorageManager | Show "unknown" for cache size |
 
 **Coupling constraints:**
 
@@ -200,6 +249,7 @@ SystemInfo
 interface ChatProvider {
   id: string;
   displayName: string;
+  needsModelLoad: boolean;
   authMode: 'none' | 'byok-local';
   capabilities: {
     streaming: boolean;
@@ -219,17 +269,20 @@ interface ChatParams {
   maxTokens?: number;
   presencePenalty?: number;
   frequencyPenalty?: number;
+  reasoningEffort?: ReasoningEffort;
   signal?: AbortSignal;
 }
 
 interface ChatChunk {
   delta: string;
+  reasoning?: string;
   finishReason?: 'stop' | 'length' | 'error';
   usage?: {
     promptTokens: number;
     completionTokens: number;
     prefillTokensPerSecond?: number;
     decodeTokensPerSecond?: number;
+    timeToFirstTokenMs?: number;
   };
 }
 ```
@@ -323,6 +376,34 @@ flowchart TD
 4. Display matching templates in dropdown (PromptHints component)
 5. Arrow-key navigation, Enter to select
 6. On select: replace composer content with template content
+
+**Thinking/reasoning pipeline:**
+
+1. Check if message has structured `reasoning` field (from API providers like DeepSeek, OpenAI o-series)
+2. If yes: display reasoning in collapsible ThinkingBlock, content is already clean
+3. If no: parse content for `<think>...</think>` tags (WebLLM Qwen3, DeepSeek-R1 local)
+4. If tags found: extract thinking content for ThinkingBlock, strip tags from reply
+5. During streaming: show "thinking" state if reasoning exists but no content yet
+
+### 5.10 Process View
+
+**rAF-throttled streaming:**
+
+During token generation, the provider yields chunks faster than React can render. To prevent render storms:
+
+1. `useChat` accumulates deltas in a ref (not state)
+2. A `requestAnimationFrame` callback flushes accumulated deltas to React state
+3. This limits re-renders to ≤60/s regardless of token throughput
+4. On stream end, a final flush ensures no deltas are lost
+
+**Shiki highlight cache:**
+
+Code block highlighting is expensive. To avoid redundant work:
+
+1. Each code block's HTML is cached in a `Map<string, string>` keyed by `theme:lang:code`
+2. On re-render, cached HTML is returned immediately
+3. Cache persists for tab lifetime (no IDB persistence needed)
+4. Shiki instance is lazily initialized on first highlight call
 
 ### 5.9 Resource View (as applicable)
 

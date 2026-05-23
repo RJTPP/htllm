@@ -14,11 +14,12 @@
 #### WebLLMProvider
 
 - **Component:** `WebLLMProvider`
-- **Responsibility:** Implements `ChatProvider` using `@mlc-ai/web-llm`. Creates a Web Worker, manages model lifecycle (load/unload), translates between `ChatProvider` types and WebLLM's OpenAI-compatible API.
+- **Responsibility:** Implements `ChatProvider` using `@mlc-ai/web-llm`. Creates a Web Worker, manages model lifecycle (load/unload), translates between `ChatProvider` types and WebLLM's OpenAI-compatible API. `@mlc-ai/web-llm` is lazily imported via dynamic `import()` to keep it out of the main bundle.
 - **Inputs:** `ChatParams` from hooks layer
 - **Outputs:** `AsyncIterable<ChatChunk>` via WebWorkerMLCEngine; `ModelInfo[]` from `prebuiltAppConfig`
-- **Dependencies:** `@mlc-ai/web-llm` (`WebWorkerMLCEngine`), `src/workers/webllm-worker.ts`, `src/providers/webllm/model-list.ts`
+- **Dependencies:** `@mlc-ai/web-llm` (`WebWorkerMLCEngine`, lazily imported), `src/workers/webllm-worker.ts`, `src/providers/webllm/model-list.ts`
 - **Public Functions:** `listModels()`, `chat(params)`, `unload()`, `loadModel(modelId, onProgress)`, `getLoadedModelId()`
+- **Note:** `unload()` now terminates the worker and nulls the engine reference, ensuring full GPU memory release.
 
 #### WebLLM Worker
 
@@ -32,11 +33,11 @@
 #### Provider Registry
 
 - **Component:** `registry.ts`
-- **Responsibility:** Discovers available providers and returns the default. Phase 1 returns only WebLLM. Phase 2+ adds more providers via single-line additions.
+- **Responsibility:** Discovers available providers and returns the default. Phase 1 returns only WebLLM. Phase 2 supports Ollama, LM Studio, Groq, OpenRouter, Generic OpenAI-compatible via `OpenAICompatibleProvider`.
 - **Inputs:** None
 - **Outputs:** `ChatProvider[]`, default `ChatProvider`
-- **Dependencies:** `WebLLMProvider`
-- **Public Functions:** `getProviders()`, `getDefaultProvider()`
+- **Dependencies:** `WebLLMProvider`, `OpenAICompatibleProvider`
+- **Public Functions:** `getProviders()`, `getDefaultProvider()`, `getProvider(id)`
 
 #### IDB Database
 
@@ -63,7 +64,7 @@
 - **Inputs:** Message data (threadId, role, content, usage)
 - **Outputs:** `Message` objects
 - **Dependencies:** `db.ts`
-- **Public Functions:** `addMessage()`, `getMessages()`, `updateMessage()`, `deleteMessagesForThread()`
+- **Public Functions:** `addMessage()`, `getMessages()`, `updateMessage()`, `deleteMessagesForThread()`, `deleteMessagesAfter(threadId, afterTimestamp)`, `searchMessages(query)`
 
 #### Key Store
 
@@ -110,13 +111,94 @@
 - **Dependencies:** All hooks, Sidebar, ChatPanel, SystemRail, ModelPicker
 - **Public Functions:** None (React component)
 
+#### Settings Repository (updated)
+
+- **Component:** `settings.ts`
+- **Responsibility:** Reads and writes user preferences in IDB. Now also stores `accentColor`, `codeTheme`, and `titleMode` settings in addition to model parameter defaults.
+- **Inputs:** Settings key-value pairs
+- **Outputs:** Settings object
+- **Dependencies:** `db.ts`
+- **Public Functions:** `getSettings()`, `updateSettings()`
+
+#### OpenAICompatibleProvider
+
+- **Component:** `OpenAICompatibleProvider`
+- **Responsibility:** Implements `ChatProvider` for any OpenAI-compatible `/v1/chat/completions` endpoint. Supports BYOK authentication, streaming via SSE, client-side TTFT and decode speed measurement, and structured reasoning fields.
+- **Inputs:** `ChatParams` from hooks layer; base URL and API key from IDB
+- **Outputs:** `AsyncIterable<ChatChunk>` with timing stats; `ModelInfo[]` from provider spec
+- **Dependencies:** `src/data/keys.ts`, provider spec in `registry.ts`
+- **Public Functions:** `listModels()`, `chat(params)`
+
+#### Command Palette
+
+- **Component:** `CommandPalette.tsx`
+- **Responsibility:** Global Cmd+K overlay for thread navigation and full-text message search. Uses cursor-based IDB query for search.
+- **Inputs:** Keyboard shortcut (Cmd+K / Ctrl+K), user query text
+- **Outputs:** Filtered thread list, matching messages with context
+- **Dependencies:** `data/messages.ts` (searchMessages), `data/threads.ts`
+- **Public Functions:** None (React component)
+
+#### Folder Repository
+
+- **Component:** `folders.ts`
+- **Responsibility:** CRUD operations for folder records in IndexedDB. Folders organize threads into collapsible groups.
+- **Inputs:** Folder data (name)
+- **Outputs:** `Folder` objects
+- **Dependencies:** `db.ts`
+- **Public Functions:** `createFolder()`, `listFolders()`, `renameFolder()`, `deleteFolder()`
+
+#### Storage Stats
+
+- **Component:** `storage-stats.ts`
+- **Responsibility:** Enumerates IndexedDB store record counts and Cache API entries with size estimation. Provides clear/delete operations for both.
+- **Inputs:** IDB stores, Cache API
+- **Outputs:** `StoreStats[]`, `CacheEntry[]`
+- **Dependencies:** `db.ts`, Cache API
+- **Public Functions:** `getStoreStats()`, `getCacheEntries()`, `deleteCache(cacheName)`, `clearStore(storeName)`
+
+#### Highlight
+
+- **Component:** `highlight.ts`
+- **Responsibility:** Shiki-based syntax highlighting with result caching. Lazily initializes Shiki on first call. Caches HTML output keyed by `theme:lang:code` to avoid redundant highlighting.
+- **Inputs:** Code string, language identifier, theme name
+- **Outputs:** HTML string with syntax highlighting
+- **Dependencies:** `shiki`
+- **Public Functions:** `highlightCode(code, lang, theme)`, `resetHighlighter()`
+
+#### Thinking Parser
+
+- **Component:** `thinking.ts`
+- **Responsibility:** Parses `<think>...</think>` tags from model output (used by Qwen3, DeepSeek-R1 in local mode). Extracts thinking content and clean reply text. Also provides `stripThinking()` for cleaning history context.
+- **Inputs:** Raw model output string
+- **Outputs:** `{ thinking: string, reply: string, isThinking: boolean }`
+- **Dependencies:** None (pure function)
+- **Public Functions:** `parseThinking(text)`, `stripThinking(text)`
+
+#### Title Generator
+
+- **Component:** `title.ts`
+- **Responsibility:** Generates concise conversation titles by prompting the model. Falls back to trimming the first message on timeout (10s) or error.
+- **Inputs:** `ChatProvider`, model ID, first message text
+- **Outputs:** Title string or null (caller falls back to trim)
+- **Dependencies:** `ChatProvider` (for inference)
+- **Public Functions:** `generateTitle(provider, modelId, firstMessage)`
+
+#### Reset
+
+- **Component:** `reset.ts`
+- **Responsibility:** Full application data reset — clears all IDB stores and Cache API caches. Used by Settings → About → Reset.
+- **Inputs:** None
+- **Outputs:** Void (all data cleared)
+- **Dependencies:** `db.ts`, Cache API
+- **Public Functions:** `resetAll()`
+
 ### 6.2 Interfaces and Data Structures
 
 See Section 5.7 for full interface definitions (`ChatProvider`, `ChatParams`, `ChatChunk`, repository functions).
 
 Key data structures are defined in Section 5.4 (Logical View): `Thread`, `Message`, `ContentPart`, `ModelParams`, `PromptTemplate`, `SystemInfo`, `ModelInfo`.
 
-**Versioning:** The IDB schema uses version numbers for migrations. Phase 1 is version 1. Each phase increment may bump the version and add migration logic in `db.ts`.
+**Versioning:** The IDB schema uses version numbers for migrations. Phase 1 started at version 1; Phase 2 is at version 3 (v2 added `folders` store, v3 added `byUpdatedAt` and `byThreadCreated` compound indexes).
 
 **Error types:**
 
@@ -152,7 +234,17 @@ WebLLMProvider ──uses──▶ WebWorkerMLCEngine ──postMessage──▶
 WebLLMProvider ──reads──▶ prebuiltAppConfig (model catalog)
 
 Provider Registry ──instantiates──▶ WebLLMProvider (Phase 1)
-Provider Registry ──instantiates──▶ OllamaProvider, GroqProvider, ... (Phase 2+)
+Provider Registry ──instantiates──▶ OpenAICompatibleProvider (Phase 2)
+
+App ──uses──▶ useFolders ──calls──▶ Folder Repository ──uses──▶ IDB
+App ──renders──▶ CommandPalette ──calls──▶ searchMessages ──uses──▶ IDB
+App ──renders──▶ Sidebar ──renders──▶ FolderSection ──renders──▶ ThreadItem
+App ──renders──▶ SettingsModal ──reads/writes──▶ Settings Repository
+App ──renders──▶ StorageManager ──calls──▶ Storage Stats ──uses──▶ IDB + Cache API
+
+MessageBody ──calls──▶ highlightCode ──uses──▶ Shiki (lazy)
+useChat ──calls──▶ parseThinking / stripThinking
+useChat ──calls──▶ generateTitle (via onAutoTitle callback)
 ```
 
 ### 6.4 Constraints and Assumptions
@@ -167,6 +259,8 @@ Provider Registry ──instantiates──▶ OllamaProvider, GroqProvider, ... 
 | Lock dependency versions (no ranges) | Stability | Unexpected breakage from upstream changes |
 | CSP meta tag in every page | Security | XSS attack surface expands |
 | WebGPU required for WebLLM | Runtime | Users without WebGPU cannot use in-browser inference (Phase 2 external providers are the workaround) |
+| CSS accent color via variable | Visual design | Accent color hardcoded in multiple places if variable not applied |
+| `@mlc-ai/web-llm` dynamic import only | Bundle size | Static import would include multi-MB module in main bundle |
 
 **Assumptions:**
 
@@ -181,8 +275,8 @@ Provider Registry ──instantiates──▶ OllamaProvider, GroqProvider, ... 
 
 | Category | Contents |
 |---|---|
-| **Persistent data (IndexedDB)** | Threads, messages, provider keys, settings, prompt templates |
-| **Runtime state (React)** | Current thread ID, loaded model ID, engine status, system info, generating flag, input text, attached images, model picker open/closed |
+| **Persistent data (IndexedDB)** | Threads, messages, provider keys, settings, prompt templates, folders |
+| **Runtime state (React)** | Current thread ID, loaded model ID, engine status, system info, generating flag, input text, attached images, model picker open/closed, accent color, folders, command palette query, active page (chat/storage/knowledge), generating lock |
 | **Configuration** | Tailwind theme (build-time), CSP policy (build-time), IDB schema version (code constant) |
 
-**Future evolution note:** Phase 3 will add an `embeddings` store to IndexedDB for RAG vector data. Phase 4 may add a `toolResults` store for agent loop state. The IDB migration system in `db.ts` supports version bumps for these additions.
+**Future evolution note:** Phase 3 will add an `embeddings` store to IndexedDB for RAG vector data. The IDB migration system in `db.ts` supports version bumps for these additions.

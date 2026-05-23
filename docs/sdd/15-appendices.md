@@ -95,20 +95,24 @@ stateDiagram-v2
 | Config Surface | Where Defined | Mutable at Runtime? | Default |
 |---|---|---|---|
 | Astro output mode | `astro.config.mjs` | No (build-time) | `'static'` |
-| Tailwind theme colors | `tailwind.config.mjs` | No (build-time) | See design system in spec |
+| Tailwind theme colors | `tailwind.config.mjs` | No (build-time) | Build-time base palette; accent color overridden at runtime via CSS variable `--accent` |
 | CSP policy | `BaseLayout.astro` `<meta>` | No (build-time) | Allow `self`, `esm.run`, `huggingface.co`, `fonts.googleapis.com`, `blob:` |
 | TypeScript strict mode | `tsconfig.json` | No (build-time) | `strict: true` |
-| IDB schema version | `src/data/db.ts` | No (code constant) | `1` |
+| IDB schema version | `src/data/db.ts` | No (code constant) | `3` |
 | Default model params | `src/data/settings.ts` | Yes (user setting) | temp 1.0, topP 1.0, maxTokens 4000, penalties 0 |
 | Per-thread model params | Thread record in IDB | Yes (user setting) | Inherits global defaults |
+| Accent color preset | IDB `settings` store | Yes (user setting) | `'amber'` |
+| Code block theme | IDB `settings` store | Yes (user setting) | `'vesper'` |
+| Title generation mode | IDB `settings` store | Yes (user setting) | `'trim'` |
 
 ### 15.4 Cache Policy
 
 | Cache Layer | Content | TTL | Invalidation | Ownership |
 |---|---|---|---|---|
-| **Browser Cache API** (managed by WebLLM) | Model weights (WASM, params) | Indefinite until evicted | User clicks "evict" in model picker; browser storage pressure | `@mlc-ai/web-llm` |
+| **Browser Cache API** (managed by WebLLM) | Model weights (WASM, params) | Indefinite until evicted | User clicks "delete" in Storage Manager; browser storage pressure | `@mlc-ai/web-llm` |
 | **IndexedDB** (managed by htllm) | Threads, messages, keys, settings, templates | Indefinite | User deletes data; import overwrites | htllm data layer |
 | **React state** (in-memory) | Current thread messages, system info, engine status | Tab lifetime | Page reload clears; re-hydrated from IDB on mount | React hooks |
+| **Shiki highlight cache** (in-memory Map) | Highlighted code block HTML | Tab lifetime | Page reload clears | `lib/highlight.ts` |
 
 No cross-tab synchronization in Phase 1. Each tab maintains independent React state but shares the same IDB.
 
@@ -137,7 +141,7 @@ default-src 'self';
 script-src 'self' blob:;
 style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
 font-src 'self' https://fonts.gstatic.com;
-connect-src 'self' https://huggingface.co https://*.huggingface.co https://esm.run;
+connect-src 'self' https://huggingface.co https://*.huggingface.co https://esm.run http://localhost:* http://127.0.0.1:* https://*;
 img-src 'self' data: blob:;
 worker-src 'self' blob:;
 ```
@@ -147,6 +151,8 @@ Notes:
 - `blob:` for scripts and workers is required for Web Worker creation.
 - `data:` for images is required for inline image previews (compressed images stored as data URLs).
 - No `'unsafe-eval'` — no runtime code generation.
+- Phase 2 widened `connect-src` to allow BYOK providers on localhost and any HTTPS endpoint.
+- The `https://*` wildcard is required for BYOK cloud providers (Groq, OpenRouter, user-configured endpoints). This is intentional — the user explicitly configures these endpoints and accepts the trust boundary.
 
 ### 15.6 Testing Strategy
 

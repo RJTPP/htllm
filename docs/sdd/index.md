@@ -4,16 +4,17 @@ IEEE 1016-inspired internal guidance, unofficial.
 
 ## Document Control
 
-- **Title:** htllm Phase 1 Foundation — Software Design Description
-- **Version:** 0.1.0
+- **Title:** htllm — Software Design Description
+- **Version:** 0.2.0
 - **Status:** Draft
-- **Date of Issue:** 2026-05-22
-- **Doc Baseline Commit:** e122a68b233dda7e7c1e8a52d4a5980599745511
-- **Last Reviewed On:** 2026-05-22
+- **Date of Issue:** 2026-05-23
+- **Doc Baseline Commit:** 5282806
+- **Last Reviewed On:** 2026-05-23
 - **Issuing Organization:** htllm (personal project)
 - **Authors:** @RJTPP, Claude Code
 - **Body Organization:** Canonical multi-file SDD, implementation-deep profile
 - **Change History:**
+  - 2026-05-23 v0.2.0 — Phase 2 update: BYOK providers, chat folders, command palette, thinking mode, markdown rendering, storage manager, accent color system, performance audit
   - 2026-05-22 v0.1.0 — Initial draft covering Phase 1 scope
 
 ## Document Map

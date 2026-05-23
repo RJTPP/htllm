@@ -1,6 +1,6 @@
 ## 1. Introduction
 
-This SDD describes the Phase 1 (Foundation) design of **htllm** — a fully client-side WebGPU chat application that runs large language models entirely in the browser. It covers the architecture, component design, data model, and UI for the initial release.
+This SDD describes the Phase 1 (Foundation) and Phase 2 (Feature Expansion) design of **htllm** — a fully client-side WebGPU chat application that runs large language models entirely in the browser. It covers the architecture, component design, data model, and UI for the initial release.
 
 ### 1.1 Purpose
 
@@ -12,7 +12,7 @@ This document enables:
 
 ### 1.2 Scope
 
-**In scope (Phase 1):**
+**In scope (Phase 1 + Phase 2):**
 
 - Astro 5 static site scaffold with React 18 islands
 - `ChatProvider` abstraction and provider registry
@@ -25,13 +25,24 @@ This document enables:
 - Prompt templates with `/` trigger in composer
 - Full data import/export (JSON)
 - CSP enforcement via `<meta>` tag
+- OpenAI-compatible BYOK providers (Ollama, LM Studio, Groq, OpenRouter, generic endpoint)
+- Markdown rendering with Shiki syntax highlighting
+- Edit user message and regenerate from that point
+- Thinking/reasoning mode (structured API + `<think>` tag parsing)
+- Command palette (Cmd+K) with global message search
+- Chat folders for thread organization
+- Model-generated session titles
+- Copy button on messages, regenerate response
+- Storage manager (model weights, IDB stats, cache controls)
+- Selectable accent color presets (8 colors, Settings → Appearance tab)
+- API inference timing stats (TTFT, decode tok/s)
+- Performance/memory audit (React.memo, rAF throttle, highlight cache)
 
 **Out of scope (deferred to later phases):**
 
-- Phase 2: Ollama, LM Studio, Groq, OpenRouter providers
 - Phase 3: In-browser RAG (embeddings, vector store, document upload)
 - Phase 4: Agent loop with function calling
-- Phase 5: Markdown rendering, code highlighting, conversation branching, voice input, i18n
+- Phase 5: Voice input, i18n, conversation branching
 
 ### 1.3 Context
 
@@ -71,3 +82,8 @@ The reference architecture `mlc-ai/web-llm-chat` (Apache 2.0) informs worker pat
 | **Worker** | Web Worker — a background thread that runs WebLLM inference without blocking the UI |
 | **Quantization** | Model compression technique (q4, q8, etc.) that reduces VRAM requirements |
 | **Fit** | Whether a model's VRAM requirement is within the device's estimated GPU memory budget |
+| **Accent Color** | User-selectable UI theme color applied via CSS custom property `--accent` |
+| **Command Palette** | Cmd+K overlay for quick navigation and global message search |
+| **Folder** | Organizational grouping for threads in the sidebar |
+| **Reasoning/Thinking** | Model capability to show chain-of-thought, via structured API fields or `<think>` tags |
+| **TTFT** | Time to First Token, measured client-side for API providers |
