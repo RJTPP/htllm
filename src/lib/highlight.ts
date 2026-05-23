@@ -168,6 +168,7 @@ function activeTheme(): BundledTheme {
  */
 export function setCodeTheme(theme: string): void {
   currentTheme = theme;
+  highlightCache.clear();
   ensureTheme(theme);
   notify();
 }
@@ -178,6 +179,11 @@ export function setCodeTheme(theme: string): void {
  * - For an unloaded bundled language: kicks off an on-demand load and returns
  *   a themed plain-text block in the meantime (upgraded on the next render).
  */
+/** Cache highlighted HTML keyed by `theme:lang:code` to avoid re-running shiki
+ *  on identical code blocks during streaming re-renders. Cleared on theme change. */
+const highlightCache = new Map<string, string>();
+const CACHE_MAX = 128;
+
 export function highlightToHtml(code: string, langRaw?: string): string {
   const raw = (langRaw ?? '').trim().toLowerCase();
   const lang = ALIAS[raw] ?? raw;
@@ -185,18 +191,32 @@ export function highlightToHtml(code: string, langRaw?: string): string {
   if (!highlighter) return escapeHtml(code);
 
   const theme = activeTheme();
+  const cacheKey = `${theme}:${lang}:${code}`;
+  const cached = highlightCache.get(cacheKey);
+  if (cached) return cached;
 
+  let html: string;
   if (lang && lang !== 'text' && lang !== 'plaintext' && lang !== 'txt') {
     if (highlighter.getLoadedLanguages().includes(lang)) {
-      return highlighter.codeToHtml(code, { lang, theme });
+      html = highlighter.codeToHtml(code, { lang, theme });
+    } else {
+      if (bundledLangSet.has(lang)) {
+        ensureLanguage(lang); // upgrades on the next render
+      }
+      // Themed plain-text block: no grammar, but keeps the editor look.
+      html = highlighter.codeToHtml(code, { lang: 'text', theme });
     }
-    if (bundledLangSet.has(lang)) {
-      ensureLanguage(lang); // upgrades on the next render
-    }
+  } else {
+    html = highlighter.codeToHtml(code, { lang: 'text', theme });
   }
 
-  // Themed plain-text block: no grammar, but keeps the editor look.
-  return highlighter.codeToHtml(code, { lang: 'text', theme });
+  // Evict oldest entries if cache grows too large.
+  if (highlightCache.size >= CACHE_MAX) {
+    const first = highlightCache.keys().next().value;
+    if (first !== undefined) highlightCache.delete(first);
+  }
+  highlightCache.set(cacheKey, html);
+  return html;
 }
 
 function escapeHtml(s: string): string {
