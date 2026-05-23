@@ -110,7 +110,7 @@ export function ModelGridCard({
                       onClick={() => onEvict(v.id)}
                       className="font-mono text-[10px] px-1.5 py-0.5 rounded-md border border-line text-mute hover:text-err hover:border-err/40"
                     >
-                      evict
+                      delete
                     </button>
                   )}
                 </div>

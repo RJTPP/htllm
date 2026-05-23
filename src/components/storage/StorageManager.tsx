@@ -216,11 +216,11 @@ export function StorageManager({
                     </div>
                   </div>
                   <ConfirmButton
-                    label="evict"
-                    confirmLabel="confirm evict?"
+                    label="delete"
+                    confirmLabel="confirm delete?"
                     onConfirm={() => {
                       onEvict(m.id);
-                      // Refresh after a tick to let eviction complete
+                      // Refresh after a tick to let deletion complete
                       setTimeout(refresh, 500);
                     }}
                     tone="neutral"
