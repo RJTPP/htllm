@@ -1,8 +1,7 @@
-import {
+import type {
   WebWorkerMLCEngine,
-  deleteModelAllInfoInCache,
-  type ChatCompletionMessageParam,
-  type ChatCompletionContentPart,
+  ChatCompletionMessageParam,
+  ChatCompletionContentPart,
 } from '@mlc-ai/web-llm';
 import type {
   ChatProvider,
@@ -81,6 +80,7 @@ export class WebLLMProvider implements ChatProvider {
       );
     }
 
+    const { WebWorkerMLCEngine } = await import('@mlc-ai/web-llm');
     this.engine = new WebWorkerMLCEngine(this.worker);
     this.engine.setInitProgressCallback((report) => {
       onProgress({
@@ -175,6 +175,11 @@ export class WebLLMProvider implements ChatProvider {
       } catch {
         // ignore
       }
+      this.engine = null;
+    }
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
     }
     this.loadedModelId = null;
     this.status = 'idle';
@@ -184,6 +189,7 @@ export class WebLLMProvider implements ChatProvider {
     if (modelId === this.loadedModelId) {
       await this.unload();
     }
+    const { deleteModelAllInfoInCache } = await import('@mlc-ai/web-llm');
     await deleteModelAllInfoInCache(modelId);
   }
 }

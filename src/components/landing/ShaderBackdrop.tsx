@@ -101,6 +101,13 @@ export function ShaderBackdrop() {
 
     return () => {
       if (raf) cancelAnimationFrame(raf);
+      // Release WebGL resources so the GPU memory is freed on unmount.
+      ctx.deleteBuffer(buf);
+      ctx.deleteProgram(prog);
+      ctx.deleteShader(vsh);
+      ctx.deleteShader(fsh);
+      const ext = ctx.getExtension('WEBGL_lose_context');
+      if (ext) ext.loseContext();
     };
   }, []);
 

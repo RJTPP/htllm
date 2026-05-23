@@ -1,9 +1,10 @@
+import { memo } from 'react';
 import type { ModelInfo } from '../../providers/types';
 import { User, Bot } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { brandForModelId } from '../../lib/model-meta';
 
-export function Avatar({
+export const Avatar = memo(function Avatar({
   role,
   modelId,
   models,
@@ -25,4 +26,4 @@ export function Avatar({
       {brand ? <BrandLogo brand={brand} size={17} /> : <Bot size={15} className="text-mute" />}
     </div>
   );
-}
+});

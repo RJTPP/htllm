@@ -301,6 +301,8 @@ export default function App() {
   }, [handleCreateThread]);
 
   const commands: Command[] = useMemo(() => {
+    // Only build the full command list when the palette is open.
+    if (modal !== 'palette') return [];
     const cmds: Command[] = [];
     // New chat is omitted mid-generation — thread switching is locked.
     if (!generating) {
@@ -376,6 +378,7 @@ export default function App() {
     }
     return cmds;
   }, [
+    modal,
     handleCreateThread,
     activeThreadId,
     deleteThread,
@@ -462,6 +465,9 @@ export default function App() {
   const handleThreadParamsReset = useCallback(() => {
     if (activeThreadId) updateThread(activeThreadId, { modelParams: undefined });
   }, [activeThreadId, updateThread]);
+
+  const openPicker = useCallback(() => setModal('picker'), []);
+  const openParams = useCallback(() => setModal('params'), []);
 
   const handleReasoningChange = useCallback(
     (effort: ReasoningEffort) => {
@@ -559,8 +565,8 @@ export default function App() {
                   onStop={stop}
                   onRegenerate={regenerate}
                   onEditAndResend={editAndResend}
-                  onOpenPicker={() => setModal('picker')}
-                  onParams={() => setModal('params')}
+                  onOpenPicker={openPicker}
+                  onParams={openParams}
                   onChangeSystemPrompt={handleChangeSystemPrompt}
                 />
               </>

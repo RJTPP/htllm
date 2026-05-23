@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import type { PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
@@ -9,7 +9,7 @@ import { Tooltip } from '../ui/Tooltip';
 
 const MAX_IMAGES = 3;
 
-function ContextRing({
+const ContextRing = memo(function ContextRing({
   used,
   total,
 }: {
@@ -55,7 +55,7 @@ function ContextRing({
       <span>{label}</span>
     </span>
   );
-}
+});
 
 export function Composer({
   modelReady,
@@ -153,14 +153,14 @@ export function Composer({
 
   const handlePaste = useCallback(
     async (e: React.ClipboardEvent) => {
-      if (!visionOk || images.length >= MAX_IMAGES) return;
+      if (!visionOk) return;
       const img = await compressFromDataTransfer(e.clipboardData.items);
       if (img) {
         e.preventDefault();
-        setImages((prev) => [...prev, img]);
+        setImages((prev) => (prev.length < MAX_IMAGES ? [...prev, img] : prev));
       }
     },
-    [visionOk, images.length],
+    [visionOk],
   );
 
   return (

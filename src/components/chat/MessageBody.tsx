@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Marked, type Tokens } from 'marked';
 import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
 import { Check, Copy } from 'lucide-react';
@@ -41,6 +41,8 @@ function getMarked(): Marked {
 
 function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: string }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const copy = () => {
     try {
@@ -49,7 +51,8 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
       // clipboard unavailable
     }
     setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1200);
   };
 
   // If html came from shiki it's a full <pre><code>…</code></pre> block.

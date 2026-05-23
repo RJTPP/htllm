@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, memo, type Dispatch, type SetStateAction } from 'react';
 import type { PromptTemplate, ModelParams } from '../../providers/types';
 import { createTemplate, deleteTemplate, updateTemplate } from '../../data/prompt-templates';
 import type { TitleMode } from '../../data/settings';
@@ -22,6 +22,15 @@ const THEME_PREVIEW_SAMPLE = [
   '}',
   '```',
 ].join('\n');
+
+/** Memoized so the shiki highlight doesn't re-run on every slider drag. */
+const ThemePreview = memo(function ThemePreview() {
+  return (
+    <div className="mt-2 px-3 py-1 border border-line bg-bg">
+      <MessageBody content={THEME_PREVIEW_SAMPLE} />
+    </div>
+  );
+});
 
 export type SettingsTab = 'templates' | 'providers' | 'params' | 'about';
 
@@ -385,9 +394,7 @@ export function SettingsModal({
                 </option>
               ))}
             </select>
-            <div className="mt-2 px-3 py-1 border border-line bg-bg">
-              <MessageBody content={THEME_PREVIEW_SAMPLE} />
-            </div>
+            <ThemePreview />
             <div className="font-mono text-[10px] text-mute mt-2">
               Syntax highlighting theme for code blocks in chat.
             </div>

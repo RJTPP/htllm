@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react';
 import type { Message, ModelInfo, ContentPart, UsageStats } from '../../providers/types';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
 import { parseThinking } from '../../lib/thinking';
@@ -44,6 +44,8 @@ function UsageInline({ usage }: { usage: UsageStats }) {
 /** Copies the given text to the clipboard with brief "copied" feedback. */
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(timerRef.current), []);
   const copy = () => {
     try {
       navigator.clipboard.writeText(text);
@@ -51,7 +53,8 @@ function CopyButton({ text }: { text: string }) {
       // clipboard unavailable
     }
     setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1200);
   };
   return (
     <button
@@ -72,7 +75,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function MessageView({
+export const MessageView = memo(function MessageView({
   message,
   modelId,
   models,
@@ -96,7 +99,7 @@ export function MessageView({
   const [editText, setEditText] = useState('');
   const editRef = useRef<HTMLTextAreaElement>(null);
   const isUser = message.role === 'user';
-  const { text, images } = splitContent(message.content);
+  const { text, images } = useMemo(() => splitContent(message.content), [message.content]);
 
   // Resolve reasoning/thinking content. Prefer the structured `reasoning`
   // field (from API providers like DeepSeek, OpenAI o-series). Fall back to
@@ -284,4 +287,4 @@ export function MessageView({
       </div>
     </div>
   );
-}
+});

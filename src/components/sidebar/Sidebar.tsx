@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import type { Thread, Folder } from '../../providers/types';
 import { Plus, FolderPlus } from 'lucide-react';
 import { ThreadItem } from './ThreadItem';
@@ -46,26 +46,29 @@ export function Sidebar({
 
   // Group threads by folder; threads with no (or a dangling) folderId are
   // ungrouped. Per-folder order inherits the incoming most-recent-first sort.
-  const folderIds = new Set(folders.map((f) => f.id));
-  const grouped = new Map<string, Thread[]>();
-  const ungrouped: Thread[] = [];
-  for (const t of threads) {
-    if (t.folderId && folderIds.has(t.folderId)) {
-      const arr = grouped.get(t.folderId) ?? [];
-      arr.push(t);
-      grouped.set(t.folderId, arr);
-    } else {
-      ungrouped.push(t);
+  const { grouped, ungrouped } = useMemo(() => {
+    const folderIds = new Set(folders.map((f) => f.id));
+    const g = new Map<string, Thread[]>();
+    const u: Thread[] = [];
+    for (const t of threads) {
+      if (t.folderId && folderIds.has(t.folderId)) {
+        const arr = g.get(t.folderId) ?? [];
+        arr.push(t);
+        g.set(t.folderId, arr);
+      } else {
+        u.push(t);
+      }
     }
-  }
+    return { grouped: g, ungrouped: u };
+  }, [threads, folders]);
 
-  const threadProps = {
+  const threadProps = useMemo(() => ({
     folders,
     onSelect,
     onDelete,
     onRename,
     onMove: onMoveThread,
-  };
+  }), [folders, onSelect, onDelete, onRename, onMoveThread]);
 
   const commitNewFolder = () => {
     const name = (newFolder ?? '').trim();
