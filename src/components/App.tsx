@@ -33,7 +33,7 @@ import { WebGPUBlock } from './system/WebGPUBlock';
 import { Sidebar } from './sidebar/Sidebar';
 import { ChatPage } from './chat/ChatPage';
 import { KnowledgeStub } from './knowledge/KnowledgeStub';
-import { StorageStub } from './storage/StorageStub';
+import { StorageManager } from './storage/StorageManager';
 import { ModelPicker } from './providers/ModelPicker';
 import { SettingsModal, type SettingsTab } from './settings/SettingsModal';
 import { ThreadParams } from './providers/ThreadParams';
@@ -572,7 +572,17 @@ export default function App() {
               </>
             )}
             {page === 'knowledge' && <KnowledgeStub />}
-            {page === 'storage' && <StorageStub />}
+            {page === 'storage' && (
+                  <StorageManager
+                    models={models}
+                    loadedModelId={loadedModelId}
+                    onEvict={handleEvict}
+                    onOpenSettings={() => {
+                      setSettingsTab('about');
+                      setModal('settings');
+                    }}
+                  />
+                )}
           </div>
         )}
       </div>

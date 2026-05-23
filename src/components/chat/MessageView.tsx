@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import type { Message, ModelInfo, ContentPart, UsageStats } from '../../providers/types';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
 import { parseThinking } from '../../lib/thinking';
