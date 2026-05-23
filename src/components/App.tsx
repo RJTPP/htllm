@@ -425,6 +425,25 @@ export default function App() {
     [threads, selectThread],
   );
 
+  // Wrap regenerate with the same model-readiness guard as handleSend —
+  // if no model is loaded, open the picker instead of calling provider.chat().
+  const handleRegenerate = useCallback(() => {
+    if (modelReady) {
+      regenerate();
+      return;
+    }
+    if (!isApiThread && lastModelId && engineStatus === 'idle') {
+      const cached = models.find((m) => m.id === lastModelId)?.cached;
+      if (cached) {
+        // Auto-load the cached model, then regenerate via the pending effect
+        // won't work here (pending is for send). Just open the picker.
+        handleLoad(lastModelId);
+        return;
+      }
+    }
+    setModal('picker');
+  }, [modelReady, isApiThread, lastModelId, engineStatus, models, regenerate, handleLoad]);
+
   const handleSend = useCallback(
     (text: string, images?: import('../lib/image').ChatImage[]) => {
       if (modelReady) {
@@ -579,7 +598,7 @@ export default function App() {
                   onReasoningChange={handleReasoningChange}
                   onSend={handleSend}
                   onStop={stop}
-                  onRegenerate={regenerate}
+                  onRegenerate={handleRegenerate}
                   onEditAndResend={editAndResend}
                   onOpenPicker={openPicker}
                   onParams={openParams}

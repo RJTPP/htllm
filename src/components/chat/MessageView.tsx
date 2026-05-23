@@ -251,7 +251,7 @@ export const MessageView = memo(function MessageView({
                 isThinking={thinking.isThinking}
               />
             )}
-            <MessageBody content={thinking?.reply ?? text} />
+            <MessageBody content={thinking?.reply ?? text} streaming={streaming} />
             {streaming && (
               <span className="inline-block w-1.5 h-3.5 bg-accent ml-0.5 align-middle blink" />
             )}

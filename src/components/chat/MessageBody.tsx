@@ -98,7 +98,7 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
 
 // ── Main component ──────────────────────────────────────────────────
 
-export function MessageBody({ content }: { content: string }) {
+export function MessageBody({ content, streaming }: { content: string; streaming?: boolean }) {
   const [highlighterVersion, setHighlighterVersion] = useState(0);
 
   // Re-render when the highlighter finishes loading or an on-demand grammar
@@ -110,6 +110,18 @@ export function MessageBody({ content }: { content: string }) {
       setHighlighterVersion((n) => n + 1);
     });
   }, []);
+
+  // When streaming ends, force a re-parse so any on-demand grammars that
+  // loaded mid-stream get applied. Without this, the cached fallback HTML
+  // from streaming renders persists even though the grammar is now available.
+  const prevStreamingRef = useRef(streaming);
+  useEffect(() => {
+    if (prevStreamingRef.current && !streaming) {
+      markedInstance = null;
+      setHighlighterVersion((n) => n + 1);
+    }
+    prevStreamingRef.current = streaming;
+  }, [streaming]);
 
   const segments = useMemo(() => {
     const marked = getMarked();

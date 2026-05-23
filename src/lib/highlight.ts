@@ -196,6 +196,7 @@ export function highlightToHtml(code: string, langRaw?: string): string {
   if (cached) return cached;
 
   let html: string;
+  let cacheable = true;
   if (lang && lang !== 'text' && lang !== 'plaintext' && lang !== 'txt') {
     if (highlighter.getLoadedLanguages().includes(lang)) {
       html = highlighter.codeToHtml(code, { lang, theme });
@@ -204,18 +205,23 @@ export function highlightToHtml(code: string, langRaw?: string): string {
         ensureLanguage(lang); // upgrades on the next render
       }
       // Themed plain-text block: no grammar, but keeps the editor look.
+      // Don't cache this fallback — when the grammar loads, we need a
+      // cache miss so the block re-highlights with proper syntax.
       html = highlighter.codeToHtml(code, { lang: 'text', theme });
+      cacheable = false;
     }
   } else {
     html = highlighter.codeToHtml(code, { lang: 'text', theme });
   }
 
-  // Evict oldest entries if cache grows too large.
-  if (highlightCache.size >= CACHE_MAX) {
-    const first = highlightCache.keys().next().value;
-    if (first !== undefined) highlightCache.delete(first);
+  if (cacheable) {
+    // Evict oldest entries if cache grows too large.
+    if (highlightCache.size >= CACHE_MAX) {
+      const first = highlightCache.keys().next().value;
+      if (first !== undefined) highlightCache.delete(first);
+    }
+    highlightCache.set(cacheKey, html);
   }
-  highlightCache.set(cacheKey, html);
   return html;
 }
 
