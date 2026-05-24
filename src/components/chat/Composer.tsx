@@ -6,8 +6,6 @@ import { shortenModelId } from '../../lib/format';
 import { Image, ArrowRight, Brain } from 'lucide-react';
 import { PromptHints } from './PromptHints';
 import { Tooltip } from '../ui/Tooltip';
-import { EmbeddingModelSelector } from '../knowledge/EmbeddingModelSelector';
-import { useEmbeddingModel } from '../../hooks/useEmbeddingModel';
 
 const MAX_IMAGES = 3;
 
@@ -90,7 +88,6 @@ export function Composer({
 }) {
   const [input, setInput] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
-  const embedding = useEmbeddingModel();
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -281,22 +278,11 @@ export function Composer({
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
-          <div className="flex items-center gap-2.5">
-            {contextTotal > 0 ? (
-              <ContextRing used={contextUsed} total={contextTotal} />
-            ) : (
-              <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
-            )}
-            {/* Embedding model lives globally (per-app, not per-thread). Surface
-                it here so it's visible alongside the chat model and easy to
-                switch without leaving the chat. */}
-            <EmbeddingModelSelector
-              compact
-              providerId={embedding.providerId}
-              modelId={embedding.modelId}
-              onSelect={embedding.setEmbeddingModel}
-            />
-          </div>
+          {contextTotal > 0 ? (
+            <ContextRing used={contextUsed} total={contextTotal} />
+          ) : (
+            <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
+          )}
           <div className="flex items-center gap-3">
             <Tooltip label={reasoningTooltip}>
               <div className="flex items-center gap-1">

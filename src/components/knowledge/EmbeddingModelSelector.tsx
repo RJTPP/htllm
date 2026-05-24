@@ -73,9 +73,11 @@ export function EmbeddingModelSelector({
 
 /**
  * The modal body. Extracted so the trigger button stays tiny and the
- * heavier list/loading logic only mounts when open.
+ * heavier list/loading logic only mounts when open. Exported so other
+ * triggers (e.g. header EmbeddingSlot) can drive it directly without
+ * rendering the default trigger button.
  */
-function EmbeddingModelModal({
+export function EmbeddingModelModal({
   open,
   onClose,
   activeProviderId,

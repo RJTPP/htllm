@@ -32,6 +32,7 @@ import { detectReasoning, defaultEffort } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
 import { ModelSlot } from './system/ModelSlot';
+import { EmbeddingSlot } from './system/EmbeddingSlot';
 import { WebGPUBlock } from './system/WebGPUBlock';
 import { Sidebar } from './sidebar/Sidebar';
 import { ChatPage } from './chat/ChatPage';
@@ -546,7 +547,8 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="reveal reveal-1 border-b border-line bg-bg px-4 py-2 flex items-center gap-4">
           {system && <SystemStats system={system} compact />}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <EmbeddingSlot />
             <ModelSlot
               model={
                 isApiThread
