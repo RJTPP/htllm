@@ -146,15 +146,17 @@ ship in any order when prioritized.
 
 ### Phase 4 — Agentic
 
-Tool-use and agent loops. The RAG substrate from Phase 3 plus a
-knowledge-map affordance gives the agent its retrieval surface.
+Tool-use and agent loops. The RAG substrate from Phase 3 becomes the
+agent's retrieval surface via three discrete tools — no pre-injected
+catalog, no naive RAG running underneath.
 
 | Feature | Status |
 |---|---|
 | Custom function-calling — user-defined tool schemas | ✦ ☐ |
 | Tool execution model (sandboxing, CSP interaction) | ✦ ☐ |
-| **Knowledge map** (RAG Layer 0) — catalog of available libraries + documents (name, chunk count, optional summary) exposed to the agent **as part of the `search_knowledge` tool's description**, so the model knows what exists before deciding what to search. Naive RAG (Phase 3) doesn't need this — retrieved chunks already carry their own attribution. | ✦ ☐ |
-| Agentic search (RAG Layer 3) — retrieval-driven agent loop. Model calls `search_knowledge(library, query)` as needed, refines queries across turns. Sits on top of the knowledge map + hybrid retrieval already shipped. | ✦ ☐ |
+| **Tool-capability detection** — `ModelInfo.toolCalls?: boolean` resolved per-model via provider metadata (OpenRouter `supported_parameters`) → id-pattern fallback (gpt-4*, claude-3*, gemini-2*, llama-3.1+, qwen2.5+, deepseek-v3, …) → manual user override in Settings. KnowledgeChip's `agent` mode is disabled with a hint when the bound chat model lacks tools. | ✦ ☐ |
+| **Knowledge tools** — `list_libraries()`, `list_documents(library)`, `search_knowledge(library, query, topK?)`. Replaces the earlier "knowledge map injection" idea; pre-injecting doesn't scale to large knowledge bases and burns tokens on turns that don't need it. A tiny system-prompt nudge ("you have N libraries; use list_libraries to see them") points the model at the tools without paying for the catalog upfront. | ✦ ☐ |
+| **Agentic search loop** (RAG Layer 3) — KnowledgeChip becomes a 3-mode picker per chat: **off / RAG / agent**. Modes are mutually exclusive — naive RAG is skipped entirely when agent mode is on (the agent retrieves what it needs; pre-injection would be redundant and a competing context signal). Agent mode optionally scopes the visible libraries; default is all. | ✦ ☐ |
 
 ### RAG layering (reference)
 
@@ -162,15 +164,17 @@ Four layers of retrieval sophistication, from cheapest to most powerful:
 
 | Layer | What | Phase |
 |---|---|---|
-| **0** | Knowledge map — model knows *what exists* (catalog of libraries/docs) | Phase 4, paired with agentic — naive RAG doesn't need it |
+| **0** | Knowledge tools — `list_libraries`, `list_documents`, `search_knowledge` exposed to the agent. Replaces pre-injected catalogs. | Phase 4, paired with Layer 3 |
 | **1** | Naive embed retrieval — user message → embed → top-K → inject | ✅ Phase 3 Part 1 |
 | **2** | Query rewriting — LLM reformulates the message before embedding | Phase 3 Part 2 |
-| **3** | Agentic search — model drives retrieval as a tool, loops across turns | Phase 4 |
+| **3** | Agentic search — model drives retrieval via tools, loops across turns | Phase 4 |
 
-Layers compose: every turn that uses retrieval picks one path through
-{1, 2, 3}, and Layer 0 is included by 3 (as tool description). Layers 1
-and 2 carry their own provenance in the retrieved chunks, so they
-don't need the catalog.
+Modes are picked per chat (off / RAG / agent) and are **mutually
+exclusive**: agent mode replaces RAG rather than augmenting it.
+- RAG path uses Layer 1 (optionally Layer 2 if query rewriting is on).
+- Agent path uses Layer 3 + the Layer 0 tools.
+- Both paths carry their own provenance, so neither needs a separate
+  always-on catalog injection.
 
 ### Phase 5 — Polish
 
