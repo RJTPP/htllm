@@ -167,6 +167,7 @@ export function KnowledgePage() {
               }}
               onNew={() => setNewLibraryOpen(true)}
               onRemove={(id) => knowledge.removeLibrary(id)}
+              onEmbedAll={(id) => knowledge.embedAllForLibrary(id)}
             />
             <DocumentsColumn
               docs={knowledge.docs}
@@ -174,6 +175,8 @@ export function KnowledgePage() {
               selectedDocId={selectedDoc?.doc.id ?? null}
               onSelect={(id) => setSelectedDocId(id)}
               onAdd={() => setAddDocsOpen(true)}
+              onEmbed={(id) => knowledge.embedOne(id)}
+              modelPinned={Boolean(activeLibrary?.embeddingModelId)}
             />
             <DocumentDetail
               selected={selectedDoc}
@@ -255,12 +258,17 @@ function DocumentsColumn({
   selectedDocId,
   onSelect,
   onAdd,
+  onEmbed,
+  modelPinned,
 }: {
   docs: ReturnType<typeof useKnowledge>['docs'];
   busyDocIds: Set<string>;
   selectedDocId: string | null;
   onSelect: (id: string) => void;
   onAdd: () => void;
+  onEmbed: (id: string) => void;
+  /** Library has a model pinned; gates the per-row embed action. */
+  modelPinned: boolean;
 }) {
   return (
     <div className="flex flex-col border-r border-line min-w-[260px] w-[300px]">
@@ -296,23 +304,43 @@ function DocumentsColumn({
                   : status === 'none'
                     ? 'not embedded'
                     : status;
+            const showEmbedAction =
+              modelPinned && (status === 'none' || status === 'partial') && !busy;
             return (
-              <button
+              <div
                 key={doc.id}
-                onClick={() => onSelect(doc.id)}
-                className={`w-full text-left px-3 py-2 border-l-2 ${
-                  selected ? 'border-accent bg-surface2' : 'border-transparent hover:bg-surface2/50'
+                className={`group relative border-l-2 ${
+                  selected
+                    ? 'border-accent bg-surface2'
+                    : 'border-transparent hover:bg-surface2/50'
                 }`}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <FileText size={12} className="text-mute shrink-0" />
-                  <span className="text-[12px] text-text truncate">{doc.filename}</span>
-                </div>
-                <div className="font-mono text-[10px] text-mute mt-0.5">
-                  {doc.chunkCount} chunks · {subtitle}
-                  {busy && ' · …'}
-                </div>
-              </button>
+                <button
+                  onClick={() => onSelect(doc.id)}
+                  className="w-full text-left px-3 py-2"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0 pr-6">
+                    <FileText size={12} className="text-mute shrink-0" />
+                    <span className="text-[12px] text-text truncate">{doc.filename}</span>
+                  </div>
+                  <div className="font-mono text-[10px] text-mute mt-0.5">
+                    {doc.chunkCount} chunks · {subtitle}
+                    {busy && ' · …'}
+                  </div>
+                </button>
+                {showEmbedAction && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEmbed(doc.id);
+                    }}
+                    title="Embed this document"
+                    className="absolute top-1.5 right-1.5 p-1 text-mute/70 hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Sparkles size={11} />
+                  </button>
+                )}
+              </div>
             );
           })
         )}

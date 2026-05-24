@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Sparkles } from 'lucide-react';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { DEFAULT_LIBRARY_ID } from '../../data/libraries';
 
@@ -13,12 +13,14 @@ export function LibraryList({
   onSelect,
   onNew,
   onRemove,
+  onEmbedAll,
 }: {
   libraries: LibraryWithStats[];
   activeLibraryId: string;
   onSelect: (id: string) => void;
   onNew: () => void;
   onRemove: (id: string) => void;
+  onEmbedAll: (id: string) => void;
 }) {
   return (
     <div className="flex flex-col border-r border-line min-w-[180px] w-[210px]">
@@ -38,6 +40,7 @@ export function LibraryList({
         {libraries.map(({ lib, docCount, chunkCount }) => {
           const active = lib.id === activeLibraryId;
           const canDelete = lib.id !== DEFAULT_LIBRARY_ID;
+          const canEmbed = Boolean(lib.embeddingModelId) && docCount > 0;
           return (
             <div
               key={lib.id}
@@ -49,7 +52,7 @@ export function LibraryList({
                 onClick={() => onSelect(lib.id)}
                 className="w-full text-left px-3 py-2"
               >
-                <div className="text-[12.5px] text-text truncate">{lib.name}</div>
+                <div className="text-[12.5px] text-text truncate pr-12">{lib.name}</div>
                 <div className="font-mono text-[10px] text-mute mt-0.5">
                   {docCount} doc{docCount === 1 ? '' : 's'} · {chunkCount} chunk
                   {chunkCount === 1 ? '' : 's'}
@@ -64,15 +67,36 @@ export function LibraryList({
                   </div>
                 )}
               </button>
-              {canDelete && active && (
-                <button
-                  onClick={() => onRemove(lib.id)}
-                  title="Delete library (and all its documents)"
-                  className="absolute top-1.5 right-1.5 p-1 text-mute/60 hover:text-err opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 size={11} />
-                </button>
-              )}
+
+              {/* Hover row actions — embed (when applicable) and delete
+                  (when not the Default library). Hidden until hover so
+                  the list stays calm at rest. */}
+              <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                {canEmbed && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEmbedAll(lib.id);
+                    }}
+                    title="Embed all documents in this library"
+                    className="p-1 text-mute/70 hover:text-accent"
+                  >
+                    <Sparkles size={11} />
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove(lib.id);
+                    }}
+                    title="Delete library (and all its documents)"
+                    className="p-1 text-mute/60 hover:text-err"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
