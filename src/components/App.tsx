@@ -32,7 +32,7 @@ import { detectReasoning, defaultEffort } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
 import { ModelSlot } from './system/ModelSlot';
-import { EmbeddingSlot } from './system/EmbeddingSlot';
+import { useLibraries } from '../hooks/useLibraries';
 import { WebGPUBlock } from './system/WebGPUBlock';
 import { Sidebar } from './sidebar/Sidebar';
 import { ChatPage } from './chat/ChatPage';
@@ -154,6 +154,11 @@ export default function App() {
   const ragLibraryId =
     activeThread?.libraryId ?? defaultLibraryId ?? null;
   const ragConfig: RagConfig = { libraryId: ragLibraryId };
+
+  // Shared library list — the composer KnowledgeChip uses it for its
+  // popover; the same store is updated from the Knowledge page so any
+  // create / delete / rebind there reflects here without a refresh.
+  const { libraries } = useLibraries();
 
   // A thread is bound to a provider via thread.providerId. WebLLM needs a model
   // loaded into its engine; an HTTP provider is ready as soon as it has a
@@ -510,20 +515,24 @@ export default function App() {
     [activeThreadId, updateThread],
   );
 
-  // Legacy bridge: the SystemPromptBar's rag on/off button toggles the
-  // thread's library binding via the user's preferred default library
-  // (or 'default' as a last resort). The composer KnowledgeChip in
-  // step 3 will replace this with a proper library picker; until then
-  // this keeps the existing UI alive without referencing the deprecated
-  // ragEnabled field.
-  const handleToggleRag = useCallback(() => {
-    if (!activeThreadId) return;
-    const isOn = ragLibraryId !== null;
-    const fallbackLibraryId = defaultLibraryId ?? 'default';
-    updateThread(activeThreadId, {
-      libraryId: isOn ? undefined : fallbackLibraryId,
-    });
-  }, [activeThreadId, ragLibraryId, defaultLibraryId, updateThread]);
+  // Composer KnowledgeChip → updates this thread's library binding.
+  // Passing null clears the binding (RAG off); a library id binds.
+  // Library writes propagate through useLibraries' shared store so the
+  // chip stays in sync after Knowledge-page mutations.
+  const handleChangeRagLibrary = useCallback(
+    (id: string | null) => {
+      if (!activeThreadId) return;
+      updateThread(activeThreadId, { libraryId: id ?? undefined });
+    },
+    [activeThreadId, updateThread],
+  );
+
+  const handleNewLibraryRequest = useCallback(() => {
+    // Pop the user over to the Knowledge page where library creation
+    // lives. They can pick the newly-created library on the chat side
+    // once back. Cheaper than embedding the full NewLibraryModal here.
+    setPage('knowledge');
+  }, []);
 
   const handleThreadParamsApply = useCallback(
     (next: ModelParams) => {
@@ -578,7 +587,10 @@ export default function App() {
         <header className="reveal reveal-1 border-b border-line bg-bg px-4 py-2 flex items-center gap-4">
           {system && <SystemStats system={system} compact />}
           <div className="ml-auto flex items-center gap-2">
-            <EmbeddingSlot />
+            {/* EmbeddingSlot was removed in 3f.8 — each library now owns
+                its embedding model, so a global "active embed model"
+                indicator was misleading. The composer KnowledgeChip
+                tells the truth per chat. */}
             <ModelSlot
               model={
                 isApiThread
@@ -639,9 +651,10 @@ export default function App() {
                   onOpenPicker={openPicker}
                   onParams={openParams}
                   onChangeSystemPrompt={handleChangeSystemPrompt}
-                  ragEnabled={ragLibraryId !== null}
-                  ragReady={ragLibraryId !== null}
-                  onToggleRag={handleToggleRag}
+                  libraries={libraries}
+                  ragLibraryId={ragLibraryId}
+                  onChangeRagLibrary={handleChangeRagLibrary}
+                  onNewLibrary={handleNewLibraryRequest}
                 />
               </>
             )}

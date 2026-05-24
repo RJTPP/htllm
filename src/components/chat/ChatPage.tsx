@@ -1,6 +1,7 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
+import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { SystemPromptBar } from './SystemPromptBar';
 import { MessageView } from './MessageView';
 import { EmptyState } from './EmptyState';
@@ -26,9 +27,10 @@ export function ChatPage({
   onOpenPicker,
   onParams,
   onChangeSystemPrompt,
-  ragEnabled,
-  ragReady,
-  onToggleRag,
+  libraries,
+  ragLibraryId,
+  onChangeRagLibrary,
+  onNewLibrary,
 }: {
   thread: Thread | null;
   messages: Message[];
@@ -49,10 +51,11 @@ export function ChatPage({
   onOpenPicker: () => void;
   onParams: () => void;
   onChangeSystemPrompt: (value: string) => void;
-  ragEnabled: boolean;
-  /** True when an embedding provider + model are configured. */
-  ragReady: boolean;
-  onToggleRag: () => void;
+  /** Knowledge bindings — forwarded to the composer chip. */
+  libraries: LibraryWithStats[];
+  ragLibraryId: string | null;
+  onChangeRagLibrary: (id: string | null) => void;
+  onNewLibrary: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -94,9 +97,6 @@ export function ChatPage({
             value={thread.systemPrompt ?? defaultSystemPrompt}
             defaultPrompt={defaultSystemPrompt}
             onChange={onChangeSystemPrompt}
-            ragEnabled={ragEnabled}
-            ragReady={ragReady}
-            onToggleRag={onToggleRag}
           />
         </div>
         {messages.length === 0 ? (
@@ -133,6 +133,10 @@ export function ChatPage({
         onSend={onSend}
         onStop={onStop}
         onParams={onParams}
+        libraries={libraries}
+        ragLibraryId={ragLibraryId}
+        onChangeRagLibrary={onChangeRagLibrary}
+        onNewLibrary={onNewLibrary}
       />
     </div>
   );
