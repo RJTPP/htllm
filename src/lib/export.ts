@@ -11,6 +11,7 @@ interface ExportData {
   folders?: unknown[];
   /** Phase 3 — knowledge base. Embeddings are intentionally omitted: they're
    *  large, model-specific, and re-derivable from chunks. */
+  libraries?: unknown[];
   documents?: unknown[];
   chunks?: unknown[];
 }
@@ -25,6 +26,7 @@ export async function exportAllData(): Promise<string> {
     settings: await db.getAll('settings'),
     promptTemplates: await db.getAll('promptTemplates'),
     folders: await db.getAll('folders'),
+    libraries: await db.getAll('libraries'),
     documents: await db.getAll('documents'),
     chunks: await db.getAll('chunks'),
   };
@@ -47,6 +49,7 @@ export async function importAllData(json: string): Promise<void> {
     'settings',
     'promptTemplates',
     'folders',
+    'libraries',
     'documents',
     'chunks',
     'embeddings',

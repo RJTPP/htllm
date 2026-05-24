@@ -165,8 +165,32 @@ export interface ModelParams {
  * Vectors are stored as plain number[] so IndexedDB structured clone works
  * without TypedArray quirks; convert to Float32Array for math.
  */
+/**
+ * A Library groups documents you want to search together. Each library
+ * is pinned to one embedding model — vectors from different models can't
+ * be cross-compared, so the library is the unit that owns the choice.
+ * Switching a library's model requires re-embedding every document
+ * inside it.
+ *
+ * Empty `embeddingModelId` means the library hasn't picked a model yet
+ * (e.g., the auto-created "Default" library on a fresh install). The
+ * first ingestion or an explicit setting commits the choice.
+ */
+export interface Library {
+  id: string;
+  name: string;
+  embeddingModelId: string;
+  /** Optional provider hint — handy when the same model id is served by
+   *  multiple providers and we want to remember which one. */
+  embeddingProviderId?: string;
+  createdAt: number;
+}
+
 export interface Document {
   id: string;
+  /** Which library this document belongs to. Every document lives in
+   *  exactly one library. */
+  libraryId: string;
   filename: string;
   mimeType: string;
   sizeBytes: number;

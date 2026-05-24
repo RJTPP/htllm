@@ -15,6 +15,7 @@ export async function getStoreStats(): Promise<StoreStats[]> {
     'settings',
     'promptTemplates',
     'folders',
+    'libraries',
     'documents',
     'chunks',
     'embeddings',
@@ -93,6 +94,7 @@ export async function clearStore(
     | 'settings'
     | 'promptTemplates'
     | 'folders'
+    | 'libraries'
     | 'documents'
     | 'chunks'
     | 'embeddings',

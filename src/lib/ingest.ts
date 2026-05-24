@@ -61,11 +61,13 @@ function isPdfFile(file: File): boolean {
 }
 
 /**
- * Ingest a single file: extract text, chunk, persist. Throws on unsupported
- * formats so the UI can show a typed error.
+ * Ingest a single file into the given library. Extracts text, chunks,
+ * and persists the Document + Chunks. Throws on unsupported formats so
+ * the UI can show a typed error.
  */
 export async function ingestFile(
   file: File,
+  libraryId: string,
   opts: ChunkOpts = {},
 ): Promise<IngestResult> {
   let text: string;
@@ -86,6 +88,7 @@ export async function ingestFile(
   const rawChunks = chunkText(text, { ...opts, isMarkdown });
 
   const document = await addDocument({
+    libraryId,
     filename: file.name,
     mimeType: file.type || (isMarkdown ? 'text/markdown' : 'text/plain'),
     sizeBytes: file.size,
