@@ -66,7 +66,10 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
     dbPromise = openDB<HtllmDB>(DB_NAME, DB_VERSION, {
       // Version-aware migration: each block runs for databases below that
       // version, so both fresh installs and v1 upgrades reach the same shape.
-      upgrade(db, oldVersion, _newVersion, tx) {
+      // The callback is async so we can `await` IDB requests inside —
+      // critical for cursor iteration and writes that must complete before
+      // the upgrade transaction commits.
+      async upgrade(db, oldVersion, _newVersion, tx) {
         if (oldVersion < 1) {
           db.createObjectStore('threads', { keyPath: 'id' });
 
@@ -123,10 +126,21 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
           // model. Every document now belongs to exactly one library.
           // A "Default" library is auto-created so the migration can
           // assign all existing docs to it without prompting the user.
-          const libStore = db.createObjectStore('libraries', { keyPath: 'id' });
-          libStore.createIndex('byCreatedAt', 'createdAt');
+          //
+          // Defensive: if a prior partial run left the store in place but
+          // mis-shaped, reuse it instead of crashing. The Default record
+          // is upserted either way so the data layer never sees an empty
+          // libraries store after migration.
+          let libStore;
+          if (db.objectStoreNames.contains('libraries')) {
+            libStore = tx.objectStore('libraries');
+          } else {
+            libStore = db.createObjectStore('libraries', { keyPath: 'id' });
+            libStore.createIndex('byCreatedAt', 'createdAt');
+          }
 
-          libStore.put({
+          // Await the put so the upgrade transaction stays alive for it.
+          await libStore.put({
             id: DEFAULT_LIBRARY_ID,
             name: 'Default',
             // Empty until the user picks one — first embed action commits it.
@@ -136,20 +150,21 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
 
           // Backfill libraryId on every existing document.
           const docStore = tx.objectStore('documents');
-          docStore.createIndex('byLibrary', 'libraryId');
+          if (!docStore.indexNames.contains('byLibrary')) {
+            docStore.createIndex('byLibrary', 'libraryId');
+          }
 
-          (async () => {
-            // Cursor iteration is async — the upgrade transaction stays
-            // open until all in-flight requests complete, so this is safe.
-            let cursor = await docStore.openCursor();
-            while (cursor) {
-              const doc = cursor.value as import('../providers/types').Document;
-              if (!doc.libraryId) {
-                await cursor.update({ ...doc, libraryId: DEFAULT_LIBRARY_ID });
-              }
-              cursor = await cursor.continue();
+          // Cursor iteration is async — by awaiting here (inside the
+          // async upgrade callback) we keep the transaction open until
+          // every update has been queued.
+          let cursor = await docStore.openCursor();
+          while (cursor) {
+            const doc = cursor.value as import('../providers/types').Document;
+            if (!doc.libraryId) {
+              await cursor.update({ ...doc, libraryId: DEFAULT_LIBRARY_ID });
             }
-          })();
+            cursor = await cursor.continue();
+          }
         }
       },
     });
