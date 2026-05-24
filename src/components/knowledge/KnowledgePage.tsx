@@ -60,19 +60,14 @@ export function KnowledgePage() {
   return (
     <div className="flex-1 grid-bg flex flex-col min-h-0">
       {/* Non-scrolling top region — header + status bar + tabs stay
-          anchored while the body scrolls underneath. */}
-      <div className="max-w-7xl mx-auto w-full px-6 pt-8 pb-4 space-y-5 shrink-0">
-        {/* Header */}
-        <div>
-          <div className="font-mono text-[10px] text-accent uppercase tracking-widest">
-            knowledge · phase 3
-          </div>
-          <h1 className="font-mono text-xl font-medium tracking-tight mt-0.5 mb-1">
-            Your documents
-          </h1>
-          <p className="text-sm text-mute leading-relaxed max-w-2xl">
-            Semantic search across everything you&apos;ve added, plus per-file
-            inspection. Retrieved chunks can be pulled into any chat as context (RAG).
+          anchored while the body scrolls underneath. Header collapsed
+          to a single row to reclaim vertical for the 3-column body —
+          the nav rail already identifies the page. */}
+      <div className="max-w-7xl mx-auto w-full px-6 pt-5 pb-3 space-y-3 shrink-0">
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <h1 className="font-mono text-base font-medium tracking-tight">Your documents</h1>
+          <p className="font-mono text-[10px] text-mute uppercase tracking-widest">
+            semantic search · per-file inspection · RAG context
           </p>
         </div>
 
