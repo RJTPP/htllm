@@ -51,9 +51,17 @@ export const ACCENT_PRESETS: Record<AccentColor, AccentPreset> = {
 export const DEFAULT_ACCENT_COLOR: AccentColor = 'amber';
 
 /**
- * Default for new threads' RAG injection toggle. Off by default — RAG
- * costs an extra embed call per turn and only helps when the knowledge
- * base is relevant to the conversation.
+ * Settings key for the library that new threads inherit as their RAG
+ * binding. Optional — unset means new threads start with no library
+ * (RAG opt-in per chat). The value is a Library.id (or null when
+ * explicitly cleared).
+ */
+export const DEFAULT_LIBRARY_ID_KEY = 'defaultLibraryId';
+
+/**
+ * @deprecated Replaced by per-thread libraryId + DEFAULT_LIBRARY_ID_KEY.
+ * Kept exported for backwards compat with anything still importing it,
+ * but no longer read by the runtime.
  */
 export const DEFAULT_RAG_ENABLED = false;
 
