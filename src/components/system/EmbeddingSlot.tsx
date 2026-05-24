@@ -4,7 +4,8 @@ import { Dot } from '../ui/Dot';
 import { EmbeddingModelModal } from '../knowledge/EmbeddingModelSelector';
 import { useEmbeddingModel } from '../../hooks/useEmbeddingModel';
 import { getProvider } from '../../providers/registry';
-import type { HttpProviderSpec } from '../../providers/openai-compat/index';
+import { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
+import { localityOf } from '../../lib/network';
 
 /**
  * Header chip showing the active embedding model. Mirrors ModelSlot's
@@ -21,13 +22,15 @@ export function EmbeddingSlot() {
   const isReady = Boolean(providerId && modelId);
   const dot = isReady ? 'ok' : 'mute';
 
-  // Show a cloud / hard-drive icon based on whether the active provider
-  // sends data off-device. The flag lives on the underlying HttpProviderSpec.
+  // Cloud vs hard-drive icon derived from the active provider's configured
+  // baseURL — same locality rule the picker uses, so the two views agree.
   const provider = providerId ? getProvider(providerId) : null;
-  const offDevice =
-    provider && 'spec' in provider
-      ? (provider as { spec: HttpProviderSpec }).spec.offDevice
-      : false;
+  const baseURL =
+    provider instanceof OpenAICompatibleProvider
+      ? provider.getConfig().baseURL
+      : '';
+  const locality = localityOf(baseURL);
+  const offDevice = locality === 'off-device';
 
   // Trim long model ids — show the last segment for hf-style "vendor/name"
   // paths, otherwise the full id. Keeps the chip narrow next to ModelSlot.

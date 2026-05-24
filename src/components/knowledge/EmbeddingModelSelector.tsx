@@ -1,25 +1,27 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Cloud, HardDrive, Search, Check, Plus, X, RefreshCw } from 'lucide-react';
+import { Search, Check, Plus, X, RefreshCw } from 'lucide-react';
 import { getEmbeddingProviders, getProvider } from '../../providers/registry';
 import type { EmbeddingModelInfo, EmbeddingProvider } from '../../providers/types';
-import { Modal } from '../ui/Modal';
-import { ProviderLogo } from '../ui/ProviderLogo';
-
-interface ProviderTab {
-  provider: EmbeddingProvider;
-  displayName: string;
-}
+import { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
+import { localityOf, type Locality } from '../../lib/network';
+import { ProviderTabbedModal, type ProviderTabDescriptor } from '../providers/ProviderTabbedModal';
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'loaded'; models: EmbeddingModelInfo[] }
   | { kind: 'error'; msg: string };
 
+interface ProviderTab {
+  provider: EmbeddingProvider;
+  displayName: string;
+  locality: Locality;
+}
+
 /**
- * Embedding model picker — mirrors the chat ModelPicker UX: a centered
- * modal with a provider tab bar and a searchable model list per tab. Also
- * supports manual model id entry for providers (OpenRouter, custom
- * endpoints) that don't list embedding models in /v1/models.
+ * Embedding model picker — mirrors the chat ModelPicker UX via the shared
+ * ProviderTabbedModal shell. Locality (on-device / off-device) is derived
+ * from each provider's currently-configured baseURL, not a static spec
+ * flag, so users see the truth even after reconfiguring an endpoint.
  */
 export function EmbeddingModelSelector({
   providerId,
@@ -72,10 +74,8 @@ export function EmbeddingModelSelector({
 }
 
 /**
- * The modal body. Extracted so the trigger button stays tiny and the
- * heavier list/loading logic only mounts when open. Exported so other
- * triggers (e.g. header EmbeddingSlot) can drive it directly without
- * rendering the default trigger button.
+ * The modal body. Exported so the header EmbeddingSlot can drive it
+ * directly without rendering the default trigger button.
  */
 export function EmbeddingModelModal({
   open,
@@ -90,12 +90,23 @@ export function EmbeddingModelModal({
   activeModelId: string | null;
   onSelect: (providerId: string, modelId: string) => void;
 }) {
-  const tabs: ProviderTab[] = useMemo(() => {
-    return getEmbeddingProviders().map((provider) => ({
-      provider,
-      displayName: getProvider(provider.id)?.displayName ?? provider.id,
-    }));
-  }, []);
+  // Build per-tab metadata: displayName from the registered ChatProvider
+  // (EmbeddingProvider doesn't carry one), locality from the configured
+  // baseURL (OpenAICompatibleProvider exposes it via getConfig()).
+  const tabs: ProviderTab[] = useMemo(
+    () =>
+      getEmbeddingProviders().map((provider) => {
+        const displayName = getProvider(provider.id)?.displayName ?? provider.id;
+        const baseURL =
+          provider instanceof OpenAICompatibleProvider
+            ? provider.getConfig().baseURL
+            : '';
+        return { provider, displayName, locality: localityOf(baseURL) };
+      }),
+    // Recompute when the modal reopens so baseURL edits take effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open],
+  );
 
   const [tabId, setTabId] = useState<string>(
     activeProviderId ?? tabs[0]?.provider.id ?? '',
@@ -108,46 +119,52 @@ export function EmbeddingModelModal({
 
   const activeTab = tabs.find((t) => t.provider.id === tabId) ?? tabs[0];
 
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Embedding model"
-      subtitle="Models for document retrieval. Switching invalidates existing vectors."
-      width="max-w-3xl"
-    >
-      {tabs.length === 0 ? (
+  const tabDescriptors: ProviderTabDescriptor[] = tabs.map((t) => ({
+    id: t.provider.id,
+    label: t.displayName,
+    logoId: t.provider.id,
+    locality: t.locality,
+  }));
+
+  if (tabs.length === 0) {
+    // Render a bare Modal-shaped placeholder via the shell with no tabs.
+    return (
+      <ProviderTabbedModal
+        open={open}
+        onClose={onClose}
+        title="Embedding model"
+        subtitle="Models for document retrieval"
+        tabs={[]}
+        activeTabId=""
+        onTabChange={() => {}}
+      >
         <div className="p-8 text-center font-mono text-[12px] text-mute">
           No embedding-capable providers configured. Add an OpenAI-compatible or
           Ollama provider in Settings → Providers.
         </div>
-      ) : (
-        <>
-          <div className="flex border-b border-line overflow-x-auto">
-            {tabs.map((t) => (
-              <button
-                key={t.provider.id}
-                onClick={() => setTabId(t.provider.id)}
-                className={`flex items-center gap-1.5 font-mono text-[11px] px-4 py-2.5 border-r border-line whitespace-nowrap ${
-                  tabId === t.provider.id ? 'text-accent bg-accent/5' : 'text-mute hover:text-text'
-                }`}
-              >
-                <ProviderLogo providerId={t.provider.id} size={13} />
-                {t.displayName}
-              </button>
-            ))}
-          </div>
-          {activeTab && (
-            <EmbeddingProviderPanel
-              tab={activeTab}
-              activeProviderId={activeProviderId}
-              activeModelId={activeModelId}
-              onSelect={onSelect}
-            />
-          )}
-        </>
+      </ProviderTabbedModal>
+    );
+  }
+
+  return (
+    <ProviderTabbedModal
+      open={open}
+      onClose={onClose}
+      title="Embedding model"
+      subtitle="Models for document retrieval. Switching invalidates existing vectors."
+      tabs={tabDescriptors}
+      activeTabId={tabId}
+      onTabChange={setTabId}
+    >
+      {activeTab && (
+        <EmbeddingProviderPanel
+          tab={activeTab}
+          activeProviderId={activeProviderId}
+          activeModelId={activeModelId}
+          onSelect={onSelect}
+        />
       )}
-    </Modal>
+    </ProviderTabbedModal>
   );
 }
 
@@ -206,7 +223,7 @@ function EmbeddingProviderPanel({
   };
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full overflow-y-auto">
       <div className="px-4 pt-3 pb-3 border-b border-line sticky top-0 bg-bg z-10 space-y-2">
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-mute">
@@ -313,19 +330,9 @@ function EmbeddingProviderPanel({
                       : 'border-line bg-surface hover:border-line-hi'
                   }`}
                 >
-                  {m.offDevice ? (
-                    <Cloud size={12} className="text-mute shrink-0" />
-                  ) : (
-                    <HardDrive size={12} className="text-mute shrink-0" />
-                  )}
                   <span className="font-mono text-[12px] text-text truncate flex-1">
                     {m.id}
                   </span>
-                  {m.offDevice && (
-                    <span className="font-mono text-[9px] text-mute/70 border border-line/60 px-1 shrink-0">
-                      off-device
-                    </span>
-                  )}
                   {selected && <Check size={13} className="text-accent shrink-0" />}
                 </button>
               );
