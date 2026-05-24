@@ -59,6 +59,17 @@ export const DEFAULT_ACCENT_COLOR: AccentColor = 'amber';
 export const DEFAULT_LIBRARY_ID_KEY = 'defaultLibraryId';
 
 /**
+ * When true, the per-chat library picker updates defaultLibraryId on
+ * every non-null selection — so new chats inherit whatever library the
+ * user most recently bound. When false (default), defaultLibraryId is
+ * only changed via the explicit picker in Settings → Knowledge.
+ *
+ * Clearing a chat's library to "None" doesn't update the default; the
+ * setting is about which library to *prefer*, not whether RAG is on.
+ */
+export const REMEMBER_LAST_LIBRARY_KEY = 'rememberLastLibrary';
+
+/**
  * @deprecated Replaced by per-thread libraryId + DEFAULT_LIBRARY_ID_KEY.
  * Kept exported for backwards compat with anything still importing it,
  * but no longer read by the runtime.

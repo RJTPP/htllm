@@ -34,9 +34,13 @@ const THEME_PREVIEW_SAMPLE = [
 function KnowledgeSettingsPanel({
   defaultLibraryId,
   setDefaultLibraryId,
+  rememberLastLibrary,
+  setRememberLastLibrary,
 }: {
   defaultLibraryId: string | null;
   setDefaultLibraryId: (id: string | null) => void;
+  rememberLastLibrary: boolean;
+  setRememberLastLibrary: (value: boolean) => void;
 }) {
   const { libraries } = useLibraries();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -83,6 +87,27 @@ function KnowledgeSettingsPanel({
           <Pencil size={12} className="text-mute shrink-0" />
         </button>
       </div>
+
+      {/* Remember-last toggle. When on, picking a library in any chat
+          auto-updates the default above so new chats inherit the most
+          recent choice. "None" selections don't move the default. */}
+      <label className="flex items-start gap-2.5 cursor-pointer group">
+        <input
+          type="checkbox"
+          checked={rememberLastLibrary}
+          onChange={(e) => setRememberLastLibrary(e.target.checked)}
+          className="accent-accent mt-0.5"
+        />
+        <div className="min-w-0">
+          <div className="font-mono text-[12px] text-text group-hover:text-accent transition-colors">
+            Remember last library selection
+          </div>
+          <div className="font-mono text-[10px] text-mute/80 leading-relaxed mt-0.5">
+            Auto-update the default above whenever you pick a library in a
+            chat. Clearing a chat to "None" doesn&apos;t change the default.
+          </div>
+        </div>
+      </label>
 
       <LibraryPickerModal
         open={pickerOpen}
@@ -172,6 +197,8 @@ export function SettingsModal({
   setAccentColor,
   defaultLibraryId,
   setDefaultLibraryId,
+  rememberLastLibrary,
+  setRememberLastLibrary,
   tab,
   onTabChange,
 }: {
@@ -192,6 +219,9 @@ export function SettingsModal({
   /** Library id new chats inherit as their RAG binding. null = no default. */
   defaultLibraryId: string | null;
   setDefaultLibraryId: (id: string | null) => void;
+  /** When on, the per-chat library picker also updates defaultLibraryId. */
+  rememberLastLibrary: boolean;
+  setRememberLastLibrary: (value: boolean) => void;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
 }) {
@@ -485,6 +515,8 @@ export function SettingsModal({
       {tab === 'knowledge' && <KnowledgeSettingsPanel
         defaultLibraryId={defaultLibraryId}
         setDefaultLibraryId={setDefaultLibraryId}
+        rememberLastLibrary={rememberLastLibrary}
+        setRememberLastLibrary={setRememberLastLibrary}
       />}
 
       {tab === 'appearance' && (
