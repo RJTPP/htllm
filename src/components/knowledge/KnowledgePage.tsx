@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, FileText, Plus, Upload, Sparkles } from 'lucide-react';
+import { Search, FileText, Plus, Upload, Sparkles, Trash2 } from 'lucide-react';
 import { useKnowledge } from '../../hooks/useKnowledge';
 import { useEmbeddingModel } from '../../hooks/useEmbeddingModel';
 import { ActiveLibraryBar } from './ActiveLibraryBar';
@@ -171,6 +171,10 @@ export function KnowledgePage() {
               onSelect={(id) => setSelectedDocId(id)}
               onAdd={() => setAddDocsOpen(true)}
               onEmbed={(id) => knowledge.embedOne(id)}
+              onRemove={(id) => {
+                knowledge.removeDoc(id);
+                if (selectedDoc?.doc.id === id) setSelectedDocId(null);
+              }}
               modelPinned={Boolean(activeLibrary?.embeddingModelId)}
             />
             <DocumentDetail
@@ -254,6 +258,7 @@ function DocumentsColumn({
   onSelect,
   onAdd,
   onEmbed,
+  onRemove,
   modelPinned,
 }: {
   docs: ReturnType<typeof useKnowledge>['docs'];
@@ -262,6 +267,7 @@ function DocumentsColumn({
   onSelect: (id: string) => void;
   onAdd: () => void;
   onEmbed: (id: string) => void;
+  onRemove: (id: string) => void;
   /** Library has a model pinned; gates the per-row embed action. */
   modelPinned: boolean;
 }) {
@@ -323,18 +329,34 @@ function DocumentsColumn({
                     {busy && ' · …'}
                   </div>
                 </button>
-                {showEmbedAction && (
+                {/* Hover-revealed row actions — embed (when applicable)
+                    + delete. Same gesture as the library row to keep the
+                    interactions consistent. */}
+                <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {showEmbedAction && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEmbed(doc.id);
+                      }}
+                      title="Embed this document"
+                      className="p-1 text-mute/70 hover:text-accent"
+                    >
+                      <Sparkles size={11} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onEmbed(doc.id);
+                      onRemove(doc.id);
                     }}
-                    title="Embed this document"
-                    className="absolute top-1.5 right-1.5 p-1 text-mute/70 hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove document"
+                    disabled={busy}
+                    className="p-1 text-mute/60 hover:text-err disabled:opacity-30"
                   >
-                    <Sparkles size={11} />
+                    <Trash2 size={11} />
                   </button>
-                )}
+                </div>
               </div>
             );
           })
