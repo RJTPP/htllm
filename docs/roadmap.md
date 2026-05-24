@@ -70,6 +70,30 @@ which provider produced them. Privacy note: API / localhost embedding sends
 document chunks off-device (the same opt-in trade as BYOK chat), so the UI must
 label non-local embedding explicitly.
 
+### D7 — Optional CORS proxy as a companion binary, not a server dependency
+
+htllm remains fully static — `astro build` produces `dist/`, no SSR, no API
+routes. CORS-blocked providers (OpenAI, Anthropic, Google) are unreachable from
+browser `fetch()` because those APIs don't send `Access-Control-Allow-Origin`.
+Rather than adding a server dependency, an **optional companion binary**
+(`htllm-proxy`, written in Go) runs on localhost as a pass-through reverse
+proxy that adds CORS headers. It:
+
+- Binds localhost-only (no remote access)
+- Forwards requests verbatim — no SDK, no request rewriting
+- Adds CORS headers + handles `OPTIONS` preflight
+- Streams SSE responses with immediate flushing (no buffering)
+- Exposes `/health` for auto-detection by htllm
+- Supports multi-target routing (one instance → multiple upstreams)
+
+htllm detects the proxy the same way it detects Ollama (health-check on known
+port). When absent, CORS-blocked providers simply don't appear. When present,
+the user configures base URL = `localhost:PORT` in the existing BYOK provider
+settings — **no UI changes to the provider abstraction**.
+
+Privacy: API keys flow `browser → localhost proxy → API`. Keys never leave the
+machine (same trust model as Ollama/LM Studio).
+
 ---
 
 ## Phase plan
@@ -176,7 +200,7 @@ exclusive**: agent mode replaces RAG rather than augmenting it.
 - Both paths carry their own provenance, so neither needs a separate
   always-on catalog injection.
 
-### Phase 5 — Polish
+### Phase 5 — Polish + Companion proxy
 
 | Feature | Status |
 |---|---|
@@ -186,6 +210,7 @@ exclusive**: agent mode replaces RAG rather than augmenting it.
 | Light mode / theming — color tokens via CSS variables | ✦ ☐ |
 | Installable PWA — web app manifest + service worker for an offline app shell (model weights already persist via the Cache API) | ✦ ☐ |
 | Thinking-mode handling (`<think>` tags) | ☐ |
+| **CORS proxy companion** — optional local Go binary (`htllm-proxy`) that unlocks CORS-blocked APIs (OpenAI, Anthropic, Google). Not required for core function; purely opt-in. | ✦ ☐ |
 
 ---
 
