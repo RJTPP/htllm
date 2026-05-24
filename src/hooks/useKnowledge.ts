@@ -7,6 +7,7 @@ import {
   createLibrary as createLibraryRecord,
   deleteLibrary as deleteLibraryRecord,
   ensureDefaultLibrary,
+  getLibrary,
   listLibraries,
   updateLibrary,
   DEFAULT_LIBRARY_ID,
@@ -157,19 +158,58 @@ export function useKnowledge() {
 
   /** Ingest files into a library. Defaults to the active one so simple
    *  callers (drop zone) don't have to pass an id; the AddDocumentsModal
-   *  passes an explicit target since it has its own library picker. */
+   *  passes an explicit target since it has its own library picker.
+   *
+   *  Auto-embeds each ingested document when the target library has a
+   *  model pinned — uploading then becomes a single action instead of a
+   *  two-step "upload, click embed" flow. Libraries without a pinned
+   *  model still ingest cleanly; the user pins later, then embed-all
+   *  catches them up. */
   const uploadFiles = useCallback(
     async (files: File[], libraryId?: string): Promise<void> => {
       const targetId = libraryId ?? activeLibraryId;
       setError(null);
+
+      // Resolve the target library's model up-front so we can decide
+      // whether to chain embed() per file. We can't read it from
+      // `libraries` state — that's stale during this call — so we fetch
+      // it fresh.
+      const targetLib = await getLibrary(targetId);
+      const lib = targetLib ?? null;
+      const libProvider =
+        lib && lib.embeddingProviderId ? getEmbeddingProvider(lib.embeddingProviderId) : null;
+      const canAutoEmbed = Boolean(lib && lib.embeddingModelId && libProvider);
+
+      // Pre-compute the total chunk count across all files for a single
+      // progress bar that spans both ingestion and embedding.
+      let cumulativeEmbedded = 0;
+      let plannedTotal = 0;
+
       for (const file of files) {
         try {
-          await ingestFile(file, targetId);
+          const { document, chunks } = await ingestFile(file, targetId);
+          if (canAutoEmbed && lib && libProvider) {
+            plannedTotal += chunks.length;
+            await embedDocument(
+              document.id,
+              libProvider,
+              lib.embeddingModelId,
+              (p) => {
+                setProgress({
+                  embedded: cumulativeEmbedded + p.embedded,
+                  total: plannedTotal + (chunks.length - p.embedded),
+                  documentId: document.id,
+                });
+              },
+            );
+            cumulativeEmbedded += chunks.length;
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           setError(`${file.name}: ${msg}`);
         }
       }
+      setProgress(null);
       invalidateHybridSearchCache();
       await refreshLibraries();
     },
@@ -215,6 +255,50 @@ export function useKnowledge() {
       }
     },
     [activeLibrary, activeEmbeddingProvider, refreshDocs],
+  );
+
+  /** Embed every doc in a specific library under its pinned model.
+   *  Idempotent — chunks already covered have their record re-put with
+   *  the same vector (cheap). Called from LibraryList rows. */
+  const embedAllForLibrary = useCallback(
+    async (libraryId: string): Promise<void> => {
+      const lib = await getLibrary(libraryId);
+      if (!lib || !lib.embeddingModelId || !lib.embeddingProviderId) {
+        setError('Pin an embedding model to this library first.');
+        return;
+      }
+      const libProvider = getEmbeddingProvider(lib.embeddingProviderId);
+      if (!libProvider) {
+        setError(`Provider "${lib.embeddingProviderId}" is no longer registered.`);
+        return;
+      }
+      setError(null);
+      try {
+        const list = await listDocumentsByLibrary(lib.id);
+        const totalChunks = list.reduce((sum, d) => sum + d.chunkCount, 0);
+        let done = 0;
+        for (const d of list) {
+          await embedDocument(
+            d.id,
+            libProvider,
+            lib.embeddingModelId,
+            (p) =>
+              setProgress({
+                embedded: done + p.embedded,
+                total: totalChunks,
+                documentId: d.id,
+              }),
+          );
+          done += d.chunkCount;
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setProgress(null);
+        await refreshLibraries();
+      }
+    },
+    [refreshLibraries],
   );
 
   /** Embed every doc in the active library that isn't fully covered. */
@@ -273,6 +357,7 @@ export function useKnowledge() {
     uploadFiles,
     embedOne,
     embedAll,
+    embedAllForLibrary,
     removeDoc,
   };
 }
