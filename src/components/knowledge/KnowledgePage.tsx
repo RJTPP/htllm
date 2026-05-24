@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Search, FileText, Plus, Upload, AlertTriangle, Sparkles, Pencil } from 'lucide-react';
+import { Search, FileText, Plus, Upload, Sparkles } from 'lucide-react';
 import { useKnowledge } from '../../hooks/useKnowledge';
 import { useEmbeddingModel } from '../../hooks/useEmbeddingModel';
+import { ActiveLibraryBar } from './ActiveLibraryBar';
 import { LibraryList } from './LibraryList';
 import { DocumentDetail } from './DocumentDetail';
 import { NewLibraryModal } from './NewLibraryModal';
@@ -73,32 +74,18 @@ export function KnowledgePage() {
           </p>
         </div>
 
-        {/* Active library bar — surfaces the library's pinned model and
-            lets the user swap it without leaving the page. */}
+        {/* Active library bar — brutalist manifest header, status + actions. */}
         {activeLibrary && (
-          <div className="flex items-center gap-3 border border-line bg-surface/40 px-3 py-2">
-            <span className="font-mono text-[10px] text-mute uppercase tracking-widest">
-              active library
-            </span>
-            <span className="font-mono text-[12px] text-text">{activeLibrary.name}</span>
-            <span className="font-mono text-[10px] text-mute">·</span>
-            <span className="font-mono text-[10px] text-mute">embed model</span>
-            {activeLibrary.embeddingModelId ? (
-              <span className="font-mono text-[12px] text-text truncate">
-                {activeLibrary.embeddingModelId}
-              </span>
-            ) : (
-              <span className="font-mono text-[12px] text-warn flex items-center gap-1">
-                <AlertTriangle size={12} /> none — pick one to embed
-              </span>
-            )}
-            <button
-              onClick={() => setModelPickerOpen(true)}
-              className="ml-auto flex items-center gap-1 font-mono text-[10px] px-2 py-1 border border-line text-mute hover:text-accent hover:border-accent/40"
-            >
-              <Pencil size={10} /> change
-            </button>
-          </div>
+          <ActiveLibraryBar
+            libraries={knowledge.libraries}
+            activeLibraryId={knowledge.activeLibraryId}
+            onSelectLibrary={(id) => {
+              knowledge.setActiveLibraryId(id);
+              setSelectedDocId(null);
+            }}
+            onNewLibrary={() => setNewLibraryOpen(true)}
+            onChangeModel={() => setModelPickerOpen(true)}
+          />
         )}
 
         {/* Tabs + actions row — actions are always visible across both
