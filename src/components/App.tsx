@@ -35,7 +35,7 @@ import { ModelSlot } from './system/ModelSlot';
 import { WebGPUBlock } from './system/WebGPUBlock';
 import { Sidebar } from './sidebar/Sidebar';
 import { ChatPage } from './chat/ChatPage';
-import { KnowledgeStub } from './knowledge/KnowledgeStub';
+import { KnowledgePage } from './knowledge/KnowledgePage';
 import { StorageManager } from './storage/StorageManager';
 import { ModelPicker } from './providers/ModelPicker';
 import { SettingsModal, type SettingsTab } from './settings/SettingsModal';
@@ -610,7 +610,7 @@ export default function App() {
                 />
               </>
             )}
-            {page === 'knowledge' && <KnowledgeStub />}
+            {page === 'knowledge' && <KnowledgePage />}
             {page === 'storage' && (
                   <StorageManager
                     models={models}
