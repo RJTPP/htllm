@@ -1,4 +1,4 @@
-import { Plus, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { DEFAULT_LIBRARY_ID } from '../../data/libraries';
 
@@ -10,6 +10,7 @@ import { DEFAULT_LIBRARY_ID } from '../../data/libraries';
 export function LibraryList({
   libraries,
   activeLibraryId,
+  busyLibraryId,
   onSelect,
   onNew,
   onRemove,
@@ -17,6 +18,8 @@ export function LibraryList({
 }: {
   libraries: LibraryWithStats[];
   activeLibraryId: string;
+  /** When set, the matching row shows a spinner — its docs are being embedded. */
+  busyLibraryId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
   onRemove: (id: string) => void;
@@ -41,6 +44,7 @@ export function LibraryList({
           const active = lib.id === activeLibraryId;
           const canDelete = lib.id !== DEFAULT_LIBRARY_ID;
           const canEmbed = Boolean(lib.embeddingModelId) && docCount > 0;
+          const busy = busyLibraryId === lib.id;
           return (
             <div
               key={lib.id}
@@ -53,9 +57,16 @@ export function LibraryList({
                 className="w-full text-left px-3 py-2"
               >
                 <div className="text-[12.5px] text-text truncate pr-12">{lib.name}</div>
-                <div className="font-mono text-[10px] text-mute mt-0.5">
-                  {docCount} doc{docCount === 1 ? '' : 's'} · {chunkCount} chunk
-                  {chunkCount === 1 ? '' : 's'}
+                <div className="font-mono text-[10px] text-mute mt-0.5 flex items-center gap-1">
+                  <span>
+                    {docCount} doc{docCount === 1 ? '' : 's'} · {chunkCount} chunk
+                    {chunkCount === 1 ? '' : 's'}
+                  </span>
+                  {busy && (
+                    <span className="flex items-center gap-1 text-accent">
+                      · <Loader2 size={9} className="animate-spin" /> embedding…
+                    </span>
+                  )}
                 </div>
                 {lib.embeddingModelId ? (
                   <div className="font-mono text-[9px] text-mute/70 mt-0.5 truncate">
