@@ -133,23 +133,44 @@ experience before any new surface area.
 
 ### Phase 3 Part 2 — Chat-side knowledge features
 
-Deferred from Part 1 — these don't depend on the library/RAG track and
-can ship independently when prioritized.
+Deferred from Part 1. Independent of the library/RAG substrate; can
+ship in any order when prioritized.
 
 | Feature | Status |
 |---|---|
 | Conversation branching / tree view — pairs with edit-from-mid-conversation | ✦ ☐ |
 | Persistent memory — Mem0-style user-facts store injected into context | ✦ ☐ |
 | Context compression — summarize old turns when used context exceeds a trigger threshold; keeps recent turns verbatim (runs a local model call) | ✦ ☐ |
+| **Query rewriting** (RAG Layer 2) — small LLM call reformulates the user's message into a better embedding query before retrieval. Optional: global toggle in Settings → Knowledge, per-thread toggle in the KnowledgeChip modal. Default off. | ✦ ☐ |
 | PDF ingestion — lazy-load pdfjs-dist when a user drops a PDF | ◐ stub → real impl |
 
 ### Phase 4 — Agentic
 
+Tool-use and agent loops. The RAG substrate from Phase 3 plus a
+knowledge-map affordance gives the agent its retrieval surface.
+
 | Feature | Status |
 |---|---|
 | Custom function-calling — user-defined tool schemas | ✦ ☐ |
-| Agentic search — retrieval-driven agent loop | ✦ ☐ |
 | Tool execution model (sandboxing, CSP interaction) | ✦ ☐ |
+| **Knowledge map** (RAG Layer 0) — catalog of available libraries + documents (name, chunk count, optional summary) exposed to the agent **as part of the `search_knowledge` tool's description**, so the model knows what exists before deciding what to search. Naive RAG (Phase 3) doesn't need this — retrieved chunks already carry their own attribution. | ✦ ☐ |
+| Agentic search (RAG Layer 3) — retrieval-driven agent loop. Model calls `search_knowledge(library, query)` as needed, refines queries across turns. Sits on top of the knowledge map + hybrid retrieval already shipped. | ✦ ☐ |
+
+### RAG layering (reference)
+
+Four layers of retrieval sophistication, from cheapest to most powerful:
+
+| Layer | What | Phase |
+|---|---|---|
+| **0** | Knowledge map — model knows *what exists* (catalog of libraries/docs) | Phase 4, paired with agentic — naive RAG doesn't need it |
+| **1** | Naive embed retrieval — user message → embed → top-K → inject | ✅ Phase 3 Part 1 |
+| **2** | Query rewriting — LLM reformulates the message before embedding | Phase 3 Part 2 |
+| **3** | Agentic search — model drives retrieval as a tool, loops across turns | Phase 4 |
+
+Layers compose: every turn that uses retrieval picks one path through
+{1, 2, 3}, and Layer 0 is included by 3 (as tool description). Layers 1
+and 2 carry their own provenance in the retrieved chunks, so they
+don't need the catalog.
 
 ### Phase 5 — Polish
 
