@@ -57,9 +57,11 @@ export function useKnowledge({ provider, modelId }: UseKnowledgeOpts) {
       documents.map(async (doc): Promise<DocWithStatus> => {
         const chunks = await getChunksForDocument(doc.id);
         let embeddedChunks = 0;
+        // Each chunk now holds one record per model — look up directly
+        // by composite key instead of fetching all and comparing.
         for (const chunk of chunks) {
-          const e = await getEmbedding(chunk.id);
-          if (e && e.embeddingModelId === modelId) embeddedChunks++;
+          const e = await getEmbedding(chunk.id, modelId);
+          if (e) embeddedChunks++;
         }
         let status: DocStatus = 'none';
         if (embeddedChunks === 0) status = 'none';
