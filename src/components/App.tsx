@@ -534,6 +534,14 @@ export default function App() {
     setPage('knowledge');
   }, []);
 
+  const handleSetDefaultLibraryId = useCallback(
+    async (id: string | null) => {
+      setDefaultLibraryIdState(id);
+      await setSetting('defaultLibraryId', id);
+    },
+    [],
+  );
+
   const handleThreadParamsApply = useCallback(
     (next: ModelParams) => {
       if (activeThreadId) updateThread(activeThreadId, { modelParams: next });
@@ -708,6 +716,8 @@ export default function App() {
         setTitleMode={setTitleMode}
         accentColor={accentColor}
         setAccentColor={handleSetAccentColor}
+        defaultLibraryId={defaultLibraryId}
+        setDefaultLibraryId={handleSetDefaultLibraryId}
         tab={settingsTab}
         onTabChange={setSettingsTab}
       />
