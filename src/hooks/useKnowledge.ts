@@ -1,25 +1,23 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { Document, EmbeddingProvider } from '../providers/types';
-import { listDocuments, deleteDocument } from '../data/documents';
-import { countEmbeddingsForModel } from '../data/embeddings';
-import { ingestFile } from '../lib/ingest';
-import { DEFAULT_LIBRARY_ID } from '../data/libraries';
-import {
-  embedDocument,
-  embedAllDocuments,
-  type EmbedProgress,
-} from '../lib/embed-pipeline';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import type { Document, EmbeddingProvider, Library } from '../providers/types';
+import { listDocumentsByLibrary, deleteDocument } from '../data/documents';
+import { countEmbeddingsForModel, getEmbedding } from '../data/embeddings';
 import { getChunksForDocument } from '../data/chunks';
-import { getEmbedding } from '../data/embeddings';
+import {
+  createLibrary as createLibraryRecord,
+  deleteLibrary as deleteLibraryRecord,
+  ensureDefaultLibrary,
+  listLibraries,
+  updateLibrary,
+  DEFAULT_LIBRARY_ID,
+} from '../data/libraries';
+import { ingestFile } from '../lib/ingest';
+import { embedDocument, type EmbedProgress } from '../lib/embed-pipeline';
 import { invalidateHybridSearchCache } from '../lib/hybrid-search';
+import { getEmbeddingProvider } from '../providers/registry';
 
 /**
- * Per-document embedding status used by the Knowledge UI.
- * - 'none'    — no embeddings for this doc under the current model
- * - 'partial' — some chunks embedded (re-embed required to finish)
- * - 'full'    — every chunk has an embedding under the current model
- * - 'pending' — embedding in progress
- * - 'error'   — last embed attempt failed
+ * Per-document embedding status under the active library's pinned model.
  */
 export type DocStatus = 'none' | 'partial' | 'full' | 'pending' | 'error';
 
@@ -30,39 +28,64 @@ export interface DocWithStatus {
   errorMessage?: string;
 }
 
-export interface UseKnowledgeOpts {
-  provider: EmbeddingProvider | null;
-  modelId: string | null;
+export interface LibraryWithStats {
+  lib: Library;
+  docCount: number;
+  chunkCount: number;
 }
 
-export function useKnowledge({ provider, modelId }: UseKnowledgeOpts) {
+export function useKnowledge() {
+  const [libraries, setLibraries] = useState<LibraryWithStats[]>([]);
+  const [activeLibraryId, setActiveLibraryId] = useState<string>(DEFAULT_LIBRARY_ID);
   const [docs, setDocs] = useState<DocWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyDocIds, setBusyDocIds] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<EmbedProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Compute embedding status for each document under the active model.
-   * Cheap-ish: one IDB scan per document, batched in a single Promise.all.
-   */
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const documents = await listDocuments();
+  const activeLibrary = useMemo(
+    () => libraries.find((l) => l.lib.id === activeLibraryId)?.lib ?? null,
+    [libraries, activeLibraryId],
+  );
+
+  /** Reload the library list with counts. Counts come from documents
+   *  rather than walking chunks so they're cheap. */
+  const refreshLibraries = useCallback(async (): Promise<LibraryWithStats[]> => {
+    await ensureDefaultLibrary();
+    const libs = await listLibraries();
+    const withStats = await Promise.all(
+      libs.map(async (lib) => {
+        const libDocs = await listDocumentsByLibrary(lib.id);
+        const chunkCount = libDocs.reduce((sum, d) => sum + d.chunkCount, 0);
+        return { lib, docCount: libDocs.length, chunkCount };
+      }),
+    );
+    setLibraries(withStats);
+    return withStats;
+  }, []);
+
+  /** Reload docs for the active library, computing per-doc embedding
+   *  status against the library's pinned model. */
+  const refreshDocs = useCallback(async (): Promise<void> => {
+    if (!activeLibrary) {
+      setDocs([]);
+      return;
+    }
+    const list = await listDocumentsByLibrary(activeLibrary.id);
+    const modelId = activeLibrary.embeddingModelId;
     if (!modelId) {
-      setDocs(documents.map((doc) => ({ doc, status: 'none' as const, embeddedChunks: 0 })));
-      setLoading(false);
+      // Library has no model pinned yet — every doc is unembeddable until
+      // one is chosen. Show status='none' across the board.
+      setDocs(list.map((doc) => ({ doc, status: 'none' as const, embeddedChunks: 0 })));
       return;
     }
     const withStatus = await Promise.all(
-      documents.map(async (doc): Promise<DocWithStatus> => {
+      list.map(async (doc): Promise<DocWithStatus> => {
         const chunks = await getChunksForDocument(doc.id);
         let embeddedChunks = 0;
-        // Each chunk now holds one record per model — look up directly
-        // by composite key instead of fetching all and comparing.
         for (const chunk of chunks) {
-          const e = await getEmbedding(chunk.id, modelId);
-          if (e) embeddedChunks++;
+          const rec = await getEmbedding(chunk.id, modelId);
+          if (rec) embeddedChunks++;
         }
         let status: DocStatus = 'none';
         if (embeddedChunks === 0) status = 'none';
@@ -72,45 +95,112 @@ export function useKnowledge({ provider, modelId }: UseKnowledgeOpts) {
       }),
     );
     setDocs(withStatus);
+  }, [activeLibrary]);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    await refreshLibraries();
     setLoading(false);
-  }, [modelId]);
+  }, [refreshLibraries]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  /** Ingest one or more files into the knowledge base. */
+  // Re-load docs whenever the active library changes or its stats refresh.
+  useEffect(() => {
+    refreshDocs();
+  }, [refreshDocs, libraries]);
+
+  /** Create a new library. Sets it as active on success. */
+  const createLibrary = useCallback(
+    async (input: {
+      name: string;
+      embeddingProviderId?: string;
+      embeddingModelId?: string;
+    }) => {
+      const lib = await createLibraryRecord(input);
+      await refreshLibraries();
+      setActiveLibraryId(lib.id);
+      return lib;
+    },
+    [refreshLibraries],
+  );
+
+  /** Rename or rebind a library to a new embedding model. Caller is
+   *  responsible for re-embedding docs when the model changes. */
+  const editLibrary = useCallback(
+    async (id: string, patch: Partial<Library>) => {
+      await updateLibrary(id, patch);
+      await refreshLibraries();
+    },
+    [refreshLibraries],
+  );
+
+  /** Delete a library and all its documents (cascading). The Default
+   *  library can't be deleted. */
+  const removeLibrary = useCallback(
+    async (id: string) => {
+      const targetDocs = await listDocumentsByLibrary(id);
+      for (const d of targetDocs) {
+        await deleteDocument(d.id);
+      }
+      await deleteLibraryRecord(id);
+      invalidateHybridSearchCache();
+      if (activeLibraryId === id) {
+        setActiveLibraryId(DEFAULT_LIBRARY_ID);
+      }
+      await refreshLibraries();
+    },
+    [activeLibraryId, refreshLibraries],
+  );
+
+  /** Ingest files into the active library. */
   const uploadFiles = useCallback(
-    async (files: File[], libraryId: string = DEFAULT_LIBRARY_ID): Promise<void> => {
+    async (files: File[]): Promise<void> => {
       setError(null);
       for (const file of files) {
         try {
-          await ingestFile(file, libraryId);
+          await ingestFile(file, activeLibraryId);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           setError(`${file.name}: ${msg}`);
         }
       }
       invalidateHybridSearchCache();
-      await refresh();
+      await refreshLibraries();
     },
-    [refresh],
+    [activeLibraryId, refreshLibraries],
   );
 
-  /** Embed a single document. No-op if no provider/model configured. */
+  /** Resolve the active library's embedding provider. Returns null if
+   *  the library has no model pinned or the provider isn't registered. */
+  const activeEmbeddingProvider = useMemo((): EmbeddingProvider | null => {
+    if (!activeLibrary) return null;
+    if (!activeLibrary.embeddingProviderId || !activeLibrary.embeddingModelId) {
+      return null;
+    }
+    return getEmbeddingProvider(activeLibrary.embeddingProviderId) ?? null;
+  }, [activeLibrary]);
+
+  /** Embed one document under the library's pinned model. */
   const embedOne = useCallback(
     async (docId: string): Promise<void> => {
-      if (!provider || !modelId) {
-        setError('Select an embedding model first.');
+      if (!activeLibrary || !activeEmbeddingProvider || !activeLibrary.embeddingModelId) {
+        setError('Pin an embedding model to this library before embedding.');
         return;
       }
       setBusyDocIds((s) => new Set(s).add(docId));
       setError(null);
       try {
-        await embedDocument(docId, provider, modelId, (p) => setProgress(p));
+        await embedDocument(
+          docId,
+          activeEmbeddingProvider,
+          activeLibrary.embeddingModelId,
+          (p) => setProgress(p),
+        );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(msg);
+        setError(err instanceof Error ? err.message : String(err));
       } finally {
         setBusyDocIds((s) => {
           const next = new Set(s);
@@ -118,46 +208,65 @@ export function useKnowledge({ provider, modelId }: UseKnowledgeOpts) {
           return next;
         });
         setProgress(null);
-        await refresh();
+        await refreshDocs();
       }
     },
-    [provider, modelId, refresh],
+    [activeLibrary, activeEmbeddingProvider, refreshDocs],
   );
 
-  /** Embed every document not yet covered under the current model. */
+  /** Embed every doc in the active library that isn't fully covered. */
   const embedAll = useCallback(async (): Promise<void> => {
-    if (!provider || !modelId) {
-      setError('Select an embedding model first.');
+    if (!activeLibrary || !activeEmbeddingProvider || !activeLibrary.embeddingModelId) {
+      setError('Pin an embedding model to this library before embedding.');
       return;
     }
     setError(null);
     try {
-      await embedAllDocuments(provider, modelId, (p) => setProgress(p));
+      // embedAllDocuments embeds the whole DB; we want only the active
+      // library's docs, so iterate them explicitly.
+      const list = await listDocumentsByLibrary(activeLibrary.id);
+      const totalChunks = list.reduce((sum, d) => sum + d.chunkCount, 0);
+      let done = 0;
+      for (const d of list) {
+        await embedDocument(
+          d.id,
+          activeEmbeddingProvider,
+          activeLibrary.embeddingModelId,
+          (p) => setProgress({ embedded: done + p.embedded, total: totalChunks, documentId: d.id }),
+        );
+        done += d.chunkCount;
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setProgress(null);
-      await refresh();
+      await refreshDocs();
     }
-  }, [provider, modelId, refresh]);
+  }, [activeLibrary, activeEmbeddingProvider, refreshDocs]);
 
   const removeDoc = useCallback(
     async (docId: string): Promise<void> => {
       await deleteDocument(docId);
       invalidateHybridSearchCache();
-      await refresh();
+      await refreshLibraries();
     },
-    [refresh],
+    [refreshLibraries],
   );
 
   return {
+    libraries,
+    activeLibraryId,
+    setActiveLibraryId,
+    activeLibrary,
     docs,
     loading,
     busyDocIds,
     progress,
     error,
     refresh,
+    createLibrary,
+    editLibrary,
+    removeLibrary,
     uploadFiles,
     embedOne,
     embedAll,
@@ -165,7 +274,7 @@ export function useKnowledge({ provider, modelId }: UseKnowledgeOpts) {
   };
 }
 
-/** Total embedding count for the active model — used as a "ready to search" signal. */
+/** Total embedding count for the given model — used as a "ready to search" signal. */
 export function useEmbeddingCount(modelId: string | null): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
