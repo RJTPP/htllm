@@ -13,6 +13,9 @@ import { ProviderConfig } from './ProviderConfig';
 import { getHttpProviders } from '../../providers/registry';
 import { CODE_THEMES } from '../../lib/highlight';
 import { MessageBody } from '../chat/MessageBody';
+import { useLibraries } from '../../hooks/useLibraries';
+import { LibraryPickerModal } from '../knowledge/LibraryPickerModal';
+import { Pencil, AlertTriangle } from 'lucide-react';
 
 const THEME_PREVIEW_SAMPLE = [
   '```typescript',
@@ -23,6 +26,86 @@ const THEME_PREVIEW_SAMPLE = [
   '```',
 ].join('\n');
 
+/**
+ * Knowledge settings — currently just the default library new chats
+ * inherit. Future RAG knobs (top-K, min score, max context chars) can
+ * live here too.
+ */
+function KnowledgeSettingsPanel({
+  defaultLibraryId,
+  setDefaultLibraryId,
+}: {
+  defaultLibraryId: string | null;
+  setDefaultLibraryId: (id: string | null) => void;
+}) {
+  const { libraries } = useLibraries();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const bound = defaultLibraryId
+    ? libraries.find((l) => l.lib.id === defaultLibraryId)?.lib ?? null
+    : null;
+
+  return (
+    <div className="p-4 space-y-6">
+      <div className="space-y-2">
+        <div>
+          <div className="font-mono text-[10px] text-mute uppercase tracking-widest">
+            default library for new chats
+          </div>
+          <p className="font-mono text-[10px] text-mute/80 leading-relaxed mt-1 max-w-prose">
+            When set, every new chat starts bound to this library so RAG
+            retrieval works without picking one per-thread. Leave unset to
+            keep RAG opt-in per chat (each new chat starts with "off").
+          </p>
+        </div>
+        <button
+          onClick={() => setPickerOpen(true)}
+          className="w-full flex items-center justify-between gap-2 bg-surface border border-line hover:border-accent/40 px-3 py-2 text-left transition-colors"
+        >
+          {bound ? (
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="font-mono text-[12.5px] text-text truncate">{bound.name}</span>
+              {bound.embeddingModelId ? (
+                <span className="font-mono text-[10px] text-mute truncate">
+                  · {bound.embeddingModelId}
+                </span>
+              ) : (
+                <span className="font-mono text-[10px] text-warn flex items-center gap-1">
+                  <AlertTriangle size={10} /> no model pinned
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="font-mono text-[12.5px] text-mute">
+              None — new chats start with RAG off
+            </span>
+          )}
+          <Pencil size={12} className="text-mute shrink-0" />
+        </button>
+      </div>
+
+      <LibraryPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        libraries={libraries}
+        activeLibraryId={defaultLibraryId}
+        allowNone
+        title="Default library for new chats"
+        noneLabel="None — new chats start with RAG off"
+        onSelect={(id) => {
+          setDefaultLibraryId(id);
+          setPickerOpen(false);
+        }}
+        onNewLibrary={() => {
+          // Closing the modal returns control to the user — they can
+          // hop to the Knowledge page to create one and return here.
+          setPickerOpen(false);
+        }}
+      />
+    </div>
+  );
+}
+
 /** Memoized so the shiki highlight doesn't re-run on every slider drag. */
 const ThemePreview = memo(function ThemePreview() {
   return (
@@ -32,12 +115,19 @@ const ThemePreview = memo(function ThemePreview() {
   );
 });
 
-export type SettingsTab = 'templates' | 'providers' | 'params' | 'appearance' | 'about';
+export type SettingsTab =
+  | 'templates'
+  | 'providers'
+  | 'params'
+  | 'knowledge'
+  | 'appearance'
+  | 'about';
 
 const TABS: [SettingsTab, string][] = [
   ['templates', 'Prompt templates'],
   ['providers', 'Providers'],
   ['params', 'Chat defaults'],
+  ['knowledge', 'Knowledge'],
   ['appearance', 'Appearance'],
   ['about', 'About'],
 ];
@@ -80,6 +170,8 @@ export function SettingsModal({
   setTitleMode,
   accentColor,
   setAccentColor,
+  defaultLibraryId,
+  setDefaultLibraryId,
   tab,
   onTabChange,
 }: {
@@ -97,6 +189,9 @@ export function SettingsModal({
   setTitleMode: (value: TitleMode) => void;
   accentColor: AccentColor;
   setAccentColor: (value: AccentColor) => void;
+  /** Library id new chats inherit as their RAG binding. null = no default. */
+  defaultLibraryId: string | null;
+  setDefaultLibraryId: (id: string | null) => void;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
 }) {
@@ -386,6 +481,11 @@ export function SettingsModal({
           </div>
         </div>
       )}
+
+      {tab === 'knowledge' && <KnowledgeSettingsPanel
+        defaultLibraryId={defaultLibraryId}
+        setDefaultLibraryId={setDefaultLibraryId}
+      />}
 
       {tab === 'appearance' && (
         <div className="p-4 space-y-6">
