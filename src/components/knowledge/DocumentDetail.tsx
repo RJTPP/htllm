@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Trash2, Sparkles, Loader2, AlertTriangle } from 'lucide-react';
+import { FileText, Trash2, Sparkles, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
 import { fmtBytes, fmtRelativeTime } from '../../lib/format';
 import { getChunksForDocument } from '../../data/chunks';
 import type { Chunk } from '../../providers/types';
@@ -21,7 +21,8 @@ const STATUS_CLASS: Record<DocWithStatus['status'], string> = {
   error: 'text-err',
 };
 
-const CHUNK_PREVIEW_COUNT = 4;
+const INITIAL_CHUNK_PREVIEW = 4;
+const CHUNK_LOAD_BATCH = 8;
 
 /**
  * Right column of the 3-column Documents tab — full detail for the
@@ -45,14 +46,21 @@ export function DocumentDetail({
 }) {
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [loadingChunks, setLoadingChunks] = useState(false);
+  // Render-only lazy load: we fetch all chunks once per doc (cheap at our
+  // scale; IDB index scan over a few hundred records is sub-ms) but only
+  // render the first slice. "Load more" expands the window without
+  // re-hitting IDB.
+  const [visibleCount, setVisibleCount] = useState(INITIAL_CHUNK_PREVIEW);
 
   useEffect(() => {
     if (!selected) {
       setChunks([]);
+      setVisibleCount(INITIAL_CHUNK_PREVIEW);
       return;
     }
     let cancelled = false;
     setLoadingChunks(true);
+    setVisibleCount(INITIAL_CHUNK_PREVIEW);
     getChunksForDocument(selected.doc.id).then((list) => {
       if (cancelled) return;
       setChunks(list);
@@ -78,8 +86,9 @@ export function DocumentDetail({
 
   const { doc, status, embeddedChunks } = selected;
   const effectiveStatus: DocWithStatus['status'] = busy ? 'pending' : status;
-  const visibleChunks = chunks.slice(0, CHUNK_PREVIEW_COUNT);
-  const remainingChunks = Math.max(chunks.length - CHUNK_PREVIEW_COUNT, 0);
+  const visibleChunks = chunks.slice(0, visibleCount);
+  const remainingChunks = Math.max(chunks.length - visibleCount, 0);
+  const nextBatch = Math.min(remainingChunks, CHUNK_LOAD_BATCH);
 
   return (
     <div className="flex-1 min-w-0 flex flex-col">
@@ -141,9 +150,12 @@ export function DocumentDetail({
                   </div>
                 ))}
                 {remainingChunks > 0 && (
-                  <div className="font-mono text-[10px] text-mute text-center py-1">
-                    +{remainingChunks} more chunk{remainingChunks === 1 ? '' : 's'}
-                  </div>
+                  <button
+                    onClick={() => setVisibleCount((n) => n + CHUNK_LOAD_BATCH)}
+                    className="w-full flex items-center justify-center gap-1 font-mono text-[10px] text-mute hover:text-accent border border-line/60 hover:border-accent/40 py-1 transition-colors"
+                  >
+                    <ChevronDown size={11} /> load {nextBatch} more · {remainingChunks} left
+                  </button>
                 )}
               </>
             )}
