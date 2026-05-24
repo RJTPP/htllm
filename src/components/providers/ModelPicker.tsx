@@ -9,14 +9,14 @@ import type {
 import { groupByModel, familyRank, brandForFamily, type GroupedModel } from '../../lib/model-meta';
 import { fitFor } from '../../lib/fit';
 import { getHttpProviders, WEBLLM_ID } from '../../providers/registry';
-import { Modal } from '../ui/Modal';
+import { localityOf, type Locality } from '../../lib/network';
 import { Search } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
-import { ProviderLogo } from '../ui/ProviderLogo';
 import { StatusPanel } from './StatusPanel';
 import { ParamControls } from './ParamControls';
 import { ModelGridCard } from './ModelGridCard';
 import { ApiModelList } from './ApiModelList';
+import { ProviderTabbedModal, type ProviderTabDescriptor } from './ProviderTabbedModal';
 
 function FamilyChip({
   family,
@@ -139,132 +139,140 @@ export function ModelPicker({
       ? `${filtered.length} chat models · runs in-browser via WebLLM`
       : 'API models · served by your configured endpoint';
 
+  // Tab descriptors with locality computed from each HTTP provider's
+  // currently-configured baseURL. WebLLM is always on-device (runs in
+  // the browser process itself).
+  const tabDescriptors: ProviderTabDescriptor[] = [
+    {
+      id: WEBLLM_ID,
+      label: 'In-browser · WebLLM',
+      logoId: WEBLLM_ID,
+      locality: 'on-device' as Locality,
+    },
+    ...httpProviders.map((p) => ({
+      id: p.id,
+      label: p.displayName,
+      logoId: p.id,
+      locality: localityOf(p.getConfig().baseURL),
+    })),
+  ];
+
+  const footer = (
+    <>
+      <button
+        onClick={() => setShowParams((s) => !s)}
+        className="w-full flex items-center justify-between px-4 py-2.5 font-mono text-[11px] text-mute hover:text-text"
+      >
+        <span>default generation parameters</span>
+        <span>{showParams ? '−' : '+'}</span>
+      </button>
+      {showParams && (
+        <div className="px-4 pb-4">
+          <ParamControls params={globalDefaults} onChange={onParamsChange} />
+          <div className="font-mono text-[10px] text-mute mt-2.5">
+            Applied to new threads. Per-thread overrides live in thread parameters.
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   return (
-    <Modal
+    <ProviderTabbedModal
       open={open}
       onClose={onClose}
       title="Model selection"
       subtitle={subtitle}
       width="max-w-4xl"
+      tabs={tabDescriptors}
+      activeTabId={tab}
+      onTabChange={setTab}
+      footer={footer}
     >
-      <div className="flex border-b border-line overflow-x-auto">
-        {[
-          { id: WEBLLM_ID, label: 'In-browser · WebLLM' },
-          ...httpProviders.map((p) => ({ id: p.id, label: p.displayName })),
-        ].map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 font-mono text-[11px] px-4 py-2.5 border-r border-line whitespace-nowrap ${
-              tab === id ? 'text-accent bg-accent/5' : 'text-mute hover:text-text'
-            }`}
-          >
-            <ProviderLogo providerId={id} size={13} />
-            {label}
-          </button>
-        ))}
-      </div>
-
       {tab !== WEBLLM_ID ? (
-        <ApiModelList
-          provider={httpProviders.find((p) => p.id === tab) ?? httpProviders[0]!}
-          apiModelId={apiModelId}
-          onSelect={(modelId) => onSelectApiModel(tab, modelId)}
-          onConfigure={onConfigureProvider}
-        />
-      ) : (
-        <>
-      <div className="px-4 pt-3 border-b border-line space-y-3 sticky top-0 bg-bg z-10">
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-mute">
-            <Search size={15} />
-          </span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search chat models…"
-            className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none pl-9 pr-3 py-2 text-[13px]"
+        <div className="h-full overflow-y-auto">
+          <ApiModelList
+            provider={httpProviders.find((p) => p.id === tab) ?? httpProviders[0]!}
+            apiModelId={apiModelId}
+            onSelect={(modelId) => onSelectApiModel(tab, modelId)}
+            onConfigure={onConfigureProvider}
           />
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            onClick={() => setFamily(null)}
-            className={`px-3 py-1.5 border text-[12px] transition-colors ${
-              family === null
-                ? 'border-accent/60 bg-accent/10 text-text'
-                : 'border-line text-mute hover:text-text'
-            }`}
-          >
-            All
-          </button>
-          {families.map((f) => (
-            <FamilyChip
-              key={f}
-              family={f}
-              active={family === f}
-              onClick={() => setFamily(family === f ? null : f)}
-            />
-          ))}
-        </div>
-        <div className="flex items-center justify-between pb-3">
-          <label className="flex items-center gap-2 font-mono text-[11px] text-mute cursor-pointer">
-            <input
-              type="checkbox"
-              checked={hideTooLarge}
-              onChange={(e) => setHideTooLarge(e.target.checked)}
-              className="accent-accent"
-            />
-            hide models too large for this device
-          </label>
-        </div>
-        <div className="pb-3">
-          <StatusPanel engineState={engineStatus} progress={loadProgress} />
-        </div>
-      </div>
-
-      <div className="p-4">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 items-start">
-          {filtered.map((m) => (
-            <ModelGridCard
-              key={m.name}
-              model={m}
-              system={system}
-              loadedId={loadedModelId}
-              recommended={m.name === recommendedName}
-              engineState={engineStatus}
-              onLoad={onLoad}
-              onUnload={onUnload}
-              onEvict={onEvict}
-            />
-          ))}
-        </div>
-        {filtered.length === 0 && (
-          <div className="font-mono text-[12px] text-mute text-center py-12">
-            No models match your search.
-          </div>
-        )}
-      </div>
-        </>
-      )}
-
-      <div className="border-t border-line">
-        <button
-          onClick={() => setShowParams((s) => !s)}
-          className="w-full flex items-center justify-between px-4 py-2.5 font-mono text-[11px] text-mute hover:text-text"
-        >
-          <span>default generation parameters</span>
-          <span>{showParams ? '−' : '+'}</span>
-        </button>
-        {showParams && (
-          <div className="px-4 pb-4">
-            <ParamControls params={globalDefaults} onChange={onParamsChange} />
-            <div className="font-mono text-[10px] text-mute mt-2.5">
-              Applied to new threads. Per-thread overrides live in thread parameters.
+      ) : (
+        <div className="h-full overflow-y-auto">
+          <div className="px-4 pt-3 border-b border-line space-y-3 sticky top-0 bg-bg z-10">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-mute">
+                <Search size={15} />
+              </span>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search chat models…"
+                className="w-full bg-surface border border-line focus:border-accent/60 focus:outline-none pl-9 pr-3 py-2 text-[13px]"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setFamily(null)}
+                className={`px-3 py-1.5 border text-[12px] transition-colors ${
+                  family === null
+                    ? 'border-accent/60 bg-accent/10 text-text'
+                    : 'border-line text-mute hover:text-text'
+                }`}
+              >
+                All
+              </button>
+              {families.map((f) => (
+                <FamilyChip
+                  key={f}
+                  family={f}
+                  active={family === f}
+                  onClick={() => setFamily(family === f ? null : f)}
+                />
+              ))}
+            </div>
+            <div className="flex items-center justify-between pb-3">
+              <label className="flex items-center gap-2 font-mono text-[11px] text-mute cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hideTooLarge}
+                  onChange={(e) => setHideTooLarge(e.target.checked)}
+                  className="accent-accent"
+                />
+                hide models too large for this device
+              </label>
+            </div>
+            <div className="pb-3">
+              <StatusPanel engineState={engineStatus} progress={loadProgress} />
             </div>
           </div>
-        )}
-      </div>
-    </Modal>
+
+          <div className="p-4">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 items-start">
+              {filtered.map((m) => (
+                <ModelGridCard
+                  key={m.name}
+                  model={m}
+                  system={system}
+                  loadedId={loadedModelId}
+                  recommended={m.name === recommendedName}
+                  engineState={engineStatus}
+                  onLoad={onLoad}
+                  onUnload={onUnload}
+                  onEvict={onEvict}
+                />
+              ))}
+            </div>
+            {filtered.length === 0 && (
+              <div className="font-mono text-[12px] text-mute text-center py-12">
+                No models match your search.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </ProviderTabbedModal>
   );
 }
