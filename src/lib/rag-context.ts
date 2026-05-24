@@ -25,6 +25,12 @@ export interface RagContextOpts {
   vectorWeight?: number;
   /** Abort signal forwarded to provider.embed(). */
   signal?: AbortSignal;
+  /**
+   * Restrict retrieval to chunks whose document belongs to one of these
+   * libraries. Undefined / empty = no scope filter (search every doc
+   * under the given model — used to be the only behavior pre-3f.7).
+   */
+  libraryIds?: string[];
 }
 
 export interface RagContextResult {
@@ -83,11 +89,13 @@ export async function buildRagContext(
   }
 
   // Pull candidates, then enforce char budget by including chunks in
-  // descending score order until we run out of room.
+  // descending score order until we run out of room. Library scope is
+  // forwarded straight through; hybridSearch handles the filter.
   const candidates = await hybridSearch(trimmed, queryVector, embeddingModelId, {
     topK: cfg.topK,
     minScore: cfg.minScore,
     vectorWeight: cfg.vectorWeight,
+    ...(cfg.libraryIds ? { libraryIds: cfg.libraryIds } : {}),
   });
   if (candidates.length === 0) {
     return { context: '', sources: [], candidates: [], reason: 'no-matches' };

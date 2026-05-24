@@ -5,12 +5,13 @@ import type {
   ContentPart,
   UsageStats,
   ChatProvider,
-  EmbeddingProvider,
 } from '../providers/types';
 import type { ChatImage } from '../lib/image';
 import { addMessage, getMessages, updateMessage, deleteMessage, deleteMessagesAfter } from '../data/messages';
 import { stripThinking } from '../lib/thinking';
 import { buildRagContext } from '../lib/rag-context';
+import { getLibrary } from '../data/libraries';
+import { getEmbeddingProvider } from '../providers/registry';
 
 /** Extract plain text from a Message.content payload (string or parts). */
 function userMessageText(msg: Message): string {
@@ -23,16 +24,17 @@ function userMessageText(msg: Message): string {
 }
 
 /**
- * Optional RAG configuration. When `enabled` is true and both `provider`
- * and `modelId` are present, useChat will retrieve relevant chunks before
- * each generation and prepend them to the system prompt. Any failure
- * (no index, embed error, no matches) silently degrades to a normal chat
- * turn — the user's question still goes through.
+ * RAG configuration — per-thread library binding. Library presence IS
+ * the state: `libraryId === null` means no retrieval; any library id
+ * means retrieve from that library through its pinned embedding model.
+ *
+ * useChat resolves provider + model internally so callers don't have
+ * to thread embedding state through props. If the library or its model
+ * disappears between binding and generation, RAG is silently skipped
+ * (chat still works).
  */
 export interface RagConfig {
-  enabled: boolean;
-  provider: EmbeddingProvider | null;
-  modelId: string | null;
+  libraryId: string | null;
 }
 
 export function useChat(
@@ -116,27 +118,38 @@ export function useChat(
           return result;
         });
 
-        // Optional RAG retrieval — runs before the system prompt is built
-        // so the retrieved context lives inside the system message. We
-        // probe the user's most recent message text as the query. Any
-        // failure (no index, embed error, no matches) silently produces
-        // empty context and chat proceeds normally.
+        // Optional RAG retrieval. Resolves the bound library, its
+        // pinned model, and the matching provider inside the hook so
+        // App.tsx only has to pass a libraryId. Every silent-fail path
+        // logs at debug; chat always proceeds.
         let ragBlock = '';
-        if (rag?.enabled && rag.provider && rag.modelId) {
+        if (rag?.libraryId) {
           const lastUser = [...cleaned].reverse().find((m) => m.role === 'user');
           const queryText = lastUser ? userMessageText(lastUser) : '';
           if (queryText) {
             try {
-              const result = await buildRagContext(
-                queryText,
-                rag.provider,
-                rag.modelId,
-                { signal: controller.signal },
-              );
-              if (result.context) {
-                ragBlock = result.context;
-              } else if (result.reason) {
-                console.debug('[rag] skipped:', result.reason);
+              const lib = await getLibrary(rag.libraryId);
+              if (!lib) {
+                console.debug('[rag] skipped: bound library no longer exists');
+              } else if (!lib.embeddingModelId || !lib.embeddingProviderId) {
+                console.debug('[rag] skipped: library has no model pinned');
+              } else {
+                const ragProvider = getEmbeddingProvider(lib.embeddingProviderId);
+                if (!ragProvider) {
+                  console.debug('[rag] skipped: provider not registered');
+                } else {
+                  const result = await buildRagContext(
+                    queryText,
+                    ragProvider,
+                    lib.embeddingModelId,
+                    { signal: controller.signal, libraryIds: [lib.id] },
+                  );
+                  if (result.context) {
+                    ragBlock = result.context;
+                  } else if (result.reason) {
+                    console.debug('[rag] skipped:', result.reason);
+                  }
+                }
               }
             } catch (err) {
               console.warn('[rag] context build failed:', err);
