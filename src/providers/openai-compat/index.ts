@@ -105,6 +105,19 @@ function isEmbeddingModelId(id: string): boolean {
   return EMBEDDING_MODEL_PATTERNS.some((re) => re.test(id));
 }
 
+/**
+ * Shape we read out of /models and /embeddings/models responses. Most
+ * fields are optional — different providers return different supersets of
+ * the OpenAI baseline; we read what we can and ignore the rest.
+ */
+interface EmbeddingModelEntry {
+  id: string;
+  name?: string;
+  architecture?: {
+    output_modalities?: string[];
+  };
+}
+
 export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider {
   readonly id: string;
   readonly displayName: string;
@@ -190,13 +203,17 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
         `HTTP ${res.status} from /models${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
       );
     }
-    const json = (await res.json()) as { data?: { id?: string }[] };
+    const json = (await res.json()) as { data?: EmbeddingModelEntry[] };
     const data = Array.isArray(json.data) ? json.data : [];
     return data
-      .filter((m): m is { id: string } => typeof m.id === 'string')
-      // Hide embedding models from the chat picker — they appear separately
-      // in the Knowledge page's embedding model selector.
-      .filter((m) => !isEmbeddingModelId(m.id))
+      .filter((m): m is EmbeddingModelEntry => typeof m.id === 'string')
+      // Hide embedding models from the chat picker. Trust the provider tag
+      // when present; otherwise fall back to the id pattern.
+      .filter((m) => {
+        const out = m.architecture?.output_modalities;
+        if (out && out.length > 0) return !out.includes('embeddings');
+        return !isEmbeddingModelId(m.id);
+      })
       .map((m) => ({
         id: m.id,
         displayName: m.id,
@@ -210,11 +227,70 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
   }
 
   /**
-   * List embedding models exposed by this endpoint. Same /models call as
-   * listModels(), but filtered to embedding-family ids only.
+   * List embedding models exposed by this endpoint.
+   *
+   * Discovery order:
+   *   1. /embeddings/models — OpenRouter's dedicated embedding list (richer
+   *      metadata: architecture.output_modalities, context_length, etc.).
+   *      Other endpoints will 404 here, which is fine.
+   *   2. /models — filtered by output_modalities including 'embeddings'
+   *      (some providers tag embedding models in the unified list).
+   *   3. /models — filtered by id pattern (text-embedding-*, nomic-embed-*,
+   *      …) as the last-resort fallback.
+   *
+   * Providers like OpenRouter return embedding models ONLY at step 1;
+   * Groq mixes them into /models at step 2-3; Ollama relies on step 3.
    */
   async listEmbeddingModels(): Promise<EmbeddingModelInfo[]> {
     if (!this.baseURL) return [];
+
+    const fromDedicated = await this.tryDedicatedEmbeddingsEndpoint();
+    if (fromDedicated && fromDedicated.length > 0) return fromDedicated;
+
+    return this.embeddingModelsFromUnifiedList();
+  }
+
+  /**
+   * Hit /embeddings/models. Returns null on 404 (endpoint doesn't exist) or
+   * on network/parse errors — the caller then falls back to /models.
+   */
+  private async tryDedicatedEmbeddingsEndpoint(): Promise<EmbeddingModelInfo[] | null> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseURL}/embeddings/models`, {
+        headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+      });
+    } catch {
+      return null;
+    }
+    if (res.status === 404) return null;
+    if (!res.ok) return null;
+    let json: { data?: EmbeddingModelEntry[] };
+    try {
+      json = (await res.json()) as { data?: EmbeddingModelEntry[] };
+    } catch {
+      return null;
+    }
+    const data = Array.isArray(json.data) ? json.data : [];
+    return data
+      .filter((m): m is EmbeddingModelEntry => typeof m.id === 'string')
+      .map((m) => ({
+        id: m.id,
+        displayName: m.name ?? m.id,
+        family: parseFamily(m.id),
+        // /models endpoints don't advertise output dimensionality —
+        // discovered on first call. context_length is the input limit,
+        // not the vector dim, so we don't conflate them.
+        dim: 0,
+        offDevice: this.spec.offDevice,
+      }));
+  }
+
+  /**
+   * Fall back to /models. First filter by output_modalities=['embeddings']
+   * when present (precise); otherwise filter by id pattern (heuristic).
+   */
+  private async embeddingModelsFromUnifiedList(): Promise<EmbeddingModelInfo[]> {
     let res: Response;
     try {
       res = await fetch(`${this.baseURL}/models`, {
@@ -230,19 +306,26 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
         `HTTP ${res.status} from /models${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
       );
     }
-    const json = (await res.json()) as { data?: { id?: string }[] };
+    const json = (await res.json()) as { data?: EmbeddingModelEntry[] };
     const data = Array.isArray(json.data) ? json.data : [];
-    return data
-      .filter((m): m is { id: string } => typeof m.id === 'string')
-      .filter((m) => isEmbeddingModelId(m.id))
-      .map((m) => ({
-        id: m.id,
-        displayName: m.id,
-        family: parseFamily(m.id),
-        // /models does not advertise dimensionality — discovered on first call.
-        dim: 0,
-        offDevice: this.spec.offDevice,
-      }));
+    const typed = data.filter((m): m is EmbeddingModelEntry => typeof m.id === 'string');
+
+    // Precise path: provider tags output_modalities.
+    const taggedAsEmbedding = typed.filter((m) =>
+      m.architecture?.output_modalities?.includes('embeddings'),
+    );
+    const pool = taggedAsEmbedding.length > 0
+      ? taggedAsEmbedding
+      : typed.filter((m) => isEmbeddingModelId(m.id));
+
+    return pool.map((m) => ({
+      id: m.id,
+      displayName: m.name ?? m.id,
+      family: parseFamily(m.id),
+      // /models doesn't advertise vector dim — discovered on first embed call.
+      dim: 0,
+      offDevice: this.spec.offDevice,
+    }));
   }
 
   /**
