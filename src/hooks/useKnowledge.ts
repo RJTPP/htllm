@@ -41,6 +41,9 @@ export function useKnowledge() {
   const [docs, setDocs] = useState<DocWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyDocIds, setBusyDocIds] = useState<Set<string>>(new Set());
+  /** Which library is currently running an embed-all / upload-and-embed
+   *  pass. Lets the LibraryList show a spinner on the right row. */
+  const [busyLibraryId, setBusyLibraryId] = useState<string | null>(null);
   const [progress, setProgress] = useState<EmbedProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -178,6 +181,7 @@ export function useKnowledge() {
       // progress bar that spans both ingestion and embedding.
       let cumulativeEmbedded = 0;
       let plannedTotal = 0;
+      if (canAutoEmbed) setBusyLibraryId(targetId);
 
       for (const file of files) {
         try {
@@ -204,6 +208,7 @@ export function useKnowledge() {
         }
       }
       setProgress(null);
+      setBusyLibraryId(null);
       invalidateHybridSearchCache();
       await refreshLibraries();
     },
@@ -267,6 +272,7 @@ export function useKnowledge() {
         return;
       }
       setError(null);
+      setBusyLibraryId(lib.id);
       try {
         const list = await listDocumentsByLibrary(lib.id);
         const totalChunks = list.reduce((sum, d) => sum + d.chunkCount, 0);
@@ -289,6 +295,7 @@ export function useKnowledge() {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setProgress(null);
+        setBusyLibraryId(null);
         await refreshLibraries();
       }
     },
@@ -302,6 +309,7 @@ export function useKnowledge() {
       return;
     }
     setError(null);
+    setBusyLibraryId(activeLibrary.id);
     try {
       // embedAllDocuments embeds the whole DB; we want only the active
       // library's docs, so iterate them explicitly.
@@ -321,6 +329,7 @@ export function useKnowledge() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setProgress(null);
+      setBusyLibraryId(null);
       await refreshDocs();
     }
   }, [activeLibrary, activeEmbeddingProvider, refreshDocs]);
@@ -342,6 +351,7 @@ export function useKnowledge() {
     docs,
     loading,
     busyDocIds,
+    busyLibraryId,
     progress,
     error,
     refresh,

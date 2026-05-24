@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, FileText, Plus, Upload, Sparkles, Trash2 } from 'lucide-react';
+import { Search, FileText, Plus, Upload, Sparkles, Trash2, Loader2 } from 'lucide-react';
 import { useKnowledge } from '../../hooks/useKnowledge';
 import { ActiveLibraryBar } from './ActiveLibraryBar';
 import { LibraryList } from './LibraryList';
@@ -107,9 +107,22 @@ export function KnowledgePage() {
                 <button
                   onClick={knowledge.embedAll}
                   disabled={knowledge.progress !== null}
-                  className="flex items-center gap-1 font-mono text-[11px] px-2.5 py-1.5 border border-line text-mute hover:text-accent hover:border-accent/40 disabled:opacity-30"
+                  className={`flex items-center gap-1 font-mono text-[11px] px-2.5 py-1.5 border transition-colors disabled:cursor-not-allowed ${
+                    knowledge.progress
+                      ? 'border-accent/60 text-accent bg-accent/5'
+                      : 'border-line text-mute hover:text-accent hover:border-accent/40'
+                  }`}
                 >
-                  <Sparkles size={12} /> embed all
+                  {knowledge.progress ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" />
+                      embedding · {knowledge.progress.embedded}/{knowledge.progress.total}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={12} /> embed all
+                    </>
+                  )}
                 </button>
               )}
             <button
@@ -154,6 +167,7 @@ export function KnowledgePage() {
             <LibraryList
               libraries={knowledge.libraries}
               activeLibraryId={knowledge.activeLibraryId}
+              busyLibraryId={knowledge.busyLibraryId}
               onSelect={(id) => {
                 knowledge.setActiveLibraryId(id);
                 setSelectedDocId(null);
@@ -165,6 +179,7 @@ export function KnowledgePage() {
             <DocumentsColumn
               docs={knowledge.docs}
               busyDocIds={knowledge.busyDocIds}
+              progressDocId={knowledge.progress?.documentId ?? null}
               selectedDocId={selectedDoc?.doc.id ?? null}
               onSelect={(id) => setSelectedDocId(id)}
               onAdd={() => setAddDocsOpen(true)}
@@ -252,6 +267,7 @@ function TabButton({
 function DocumentsColumn({
   docs,
   busyDocIds,
+  progressDocId,
   selectedDocId,
   onSelect,
   onAdd,
@@ -261,6 +277,8 @@ function DocumentsColumn({
 }: {
   docs: ReturnType<typeof useKnowledge>['docs'];
   busyDocIds: Set<string>;
+  /** Document currently being embedded; gets a row-level spinner. */
+  progressDocId: string | null;
   selectedDocId: string | null;
   onSelect: (id: string) => void;
   onAdd: () => void;
@@ -294,7 +312,7 @@ function DocumentsColumn({
         ) : (
           docs.map(({ doc, status, embeddedChunks }) => {
             const selected = doc.id === selectedDocId;
-            const busy = busyDocIds.has(doc.id);
+            const busy = busyDocIds.has(doc.id) || progressDocId === doc.id;
             const subtitle =
               status === 'partial'
                 ? `${embeddedChunks}/${doc.chunkCount} embedded`
@@ -322,9 +340,13 @@ function DocumentsColumn({
                     <FileText size={12} className="text-mute shrink-0" />
                     <span className="text-[12px] text-text truncate">{doc.filename}</span>
                   </div>
-                  <div className="font-mono text-[10px] text-mute mt-0.5">
-                    {doc.chunkCount} chunks · {subtitle}
-                    {busy && ' · …'}
+                  <div className="font-mono text-[10px] text-mute mt-0.5 flex items-center gap-1">
+                    <span>
+                      {doc.chunkCount} chunks · {subtitle}
+                    </span>
+                    {busy && (
+                      <Loader2 size={9} className="animate-spin text-accent" />
+                    )}
                   </div>
                 </button>
                 {/* Hover-revealed row actions — embed (when applicable)
