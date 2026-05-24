@@ -205,6 +205,25 @@ function EmbeddingProviderPanel({
       : state.models;
   }, [state, search]);
 
+  // Group by family so the listing mirrors the chat ApiModelList UX:
+  // family headers ("OPENAI · 3", "GOOGLE · 2", …) with the models
+  // beneath. Useful when the picker shows 20+ embedding models from a
+  // single endpoint (OpenRouter has 25).
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof filtered>();
+    for (const m of filtered) {
+      const arr = map.get(m.family) ?? [];
+      arr.push(m);
+      map.set(m.family, arr);
+    }
+    return [...map.entries()]
+      .map(([family, models]) => ({
+        family,
+        models: [...models].sort((a, b) => a.id.localeCompare(b.id)),
+      }))
+      .sort((a, b) => a.family.localeCompare(b.family));
+  }, [filtered]);
+
   const submitCustom = () => {
     const id = customId.trim();
     if (!id) return;
@@ -306,26 +325,36 @@ function EmbeddingProviderPanel({
         )}
 
         {state.kind === 'loaded' && filtered.length > 0 && (
-          <div className="space-y-1">
-            {filtered.map((m) => {
-              const selected = activeProviderId === tab.provider.id && activeModelId === m.id;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => onSelect(tab.provider.id, m.id)}
-                  className={`w-full flex items-center gap-2 px-3 py-2 border text-left transition-colors ${
-                    selected
-                      ? 'border-accent/60 bg-accent/10'
-                      : 'border-line bg-surface hover:border-line-hi'
-                  }`}
-                >
-                  <span className="font-mono text-[12px] text-text truncate flex-1">
-                    {m.id}
-                  </span>
-                  {selected && <Check size={13} className="text-accent shrink-0" />}
-                </button>
-              );
-            })}
+          <div className="space-y-4">
+            {groups.map((g) => (
+              <div key={g.family}>
+                <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-1.5">
+                  {g.family} · {g.models.length}
+                </div>
+                <div className="space-y-1">
+                  {g.models.map((m) => {
+                    const selected =
+                      activeProviderId === tab.provider.id && activeModelId === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => onSelect(tab.provider.id, m.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-2 border text-left transition-colors ${
+                          selected
+                            ? 'border-accent/60 bg-accent/10'
+                            : 'border-line bg-surface hover:border-line-hi'
+                        }`}
+                      >
+                        <span className="font-mono text-[12px] text-text truncate flex-1">
+                          {m.id}
+                        </span>
+                        {selected && <Check size={13} className="text-accent shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Database, Cloud, HardDrive } from 'lucide-react';
-import { Dot } from '../ui/Dot';
 import { EmbeddingModelModal } from '../knowledge/EmbeddingModelSelector';
 import { useEmbeddingModel } from '../../hooks/useEmbeddingModel';
 import { getProvider } from '../../providers/registry';
@@ -20,7 +19,6 @@ export function EmbeddingSlot() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const isReady = Boolean(providerId && modelId);
-  const dot = isReady ? 'ok' : 'mute';
 
   // Cloud vs hard-drive icon derived from the active provider's configured
   // baseURL — same locality rule the picker uses, so the two views agree.
@@ -69,7 +67,6 @@ export function EmbeddingSlot() {
             embed
           </span>
           <div className="flex items-center gap-1.5 max-w-[200px]">
-            <Dot tone={dot} />
             <span
               className={`font-mono text-[11px] truncate ${
                 isReady ? 'text-text' : 'text-mute'
