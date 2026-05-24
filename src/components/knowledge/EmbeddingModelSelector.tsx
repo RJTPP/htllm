@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Cloud, HardDrive, RefreshCw, ChevronDown } from 'lucide-react';
+import { Cloud, HardDrive, RefreshCw, ChevronDown, Plus, Check, X } from 'lucide-react';
 import { getEmbeddingProviders, getProvider } from '../../providers/registry';
 import type { EmbeddingModelInfo, EmbeddingProvider } from '../../providers/types';
 
@@ -21,13 +21,18 @@ export function EmbeddingModelSelector({
   providerId,
   modelId,
   onSelect,
+  compact = false,
 }: {
   providerId: string | null;
   modelId: string | null;
   onSelect: (providerId: string, modelId: string) => void;
+  /** Slimmer trigger button for chat footer placement. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [customForProvider, setCustomForProvider] = useState<string | null>(null);
+  const [customModelId, setCustomModelId] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -78,16 +83,28 @@ export function EmbeddingModelSelector({
     };
   }, [open]);
 
-  const summary = modelId ?? 'Select embedding model';
+  const summary = modelId ?? (compact ? 'no embed model' : 'Select embedding model');
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 font-mono text-[11px] px-2.5 py-1.5 border border-line bg-bg hover:border-accent/40"
+        title={modelId ? `Embedding · ${modelId}` : 'Choose embedding model'}
+        className={
+          compact
+            ? `flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 border ${
+                modelId
+                  ? 'border-accent/40 text-accent hover:bg-accent/10'
+                  : 'border-line text-mute/70 hover:text-mute'
+              }`
+            : 'flex items-center gap-2 font-mono text-[11px] px-2.5 py-1.5 border border-line bg-bg hover:border-accent/40'
+        }
       >
-        <span className={modelId ? 'text-text' : 'text-mute'}>{summary}</span>
-        <ChevronDown size={12} className="text-mute" />
+        {compact && <span className="text-mute/60">embed:</span>}
+        <span className={modelId ? '' : compact ? 'text-mute/70' : 'text-mute'}>
+          {compact && modelId ? modelId.split('/').pop()?.slice(0, 20) : summary}
+        </span>
+        <ChevronDown size={compact ? 10 : 12} className="text-mute" />
       </button>
       {open && (
         <>
@@ -143,6 +160,61 @@ export function EmbeddingModelSelector({
                     </button>
                   );
                 })}
+                {/* Manual model id entry — some providers (OpenRouter et al.)
+                    don't list embedding models in /v1/models but still accept
+                    a custom id at /v1/embeddings. */}
+                {customForProvider === g.provider.id ? (
+                  <div className="px-3 py-2 flex items-center gap-1.5 bg-bg/40">
+                    <input
+                      autoFocus
+                      value={customModelId}
+                      onChange={(e) => setCustomModelId(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && customModelId.trim()) {
+                          onSelect(g.provider.id, customModelId.trim());
+                          setCustomForProvider(null);
+                          setCustomModelId('');
+                          setOpen(false);
+                        } else if (e.key === 'Escape') {
+                          setCustomForProvider(null);
+                          setCustomModelId('');
+                        }
+                      }}
+                      placeholder="e.g. text-embedding-3-small"
+                      className="flex-1 bg-bg border border-line focus:border-accent/60 font-mono text-[11px] text-text px-2 py-1 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!customModelId.trim()) return;
+                        onSelect(g.provider.id, customModelId.trim());
+                        setCustomForProvider(null);
+                        setCustomModelId('');
+                        setOpen(false);
+                      }}
+                      disabled={!customModelId.trim()}
+                      className="p-1 text-accent hover:bg-accent/10 disabled:opacity-30"
+                    >
+                      <Check size={11} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCustomForProvider(null);
+                        setCustomModelId('');
+                      }}
+                      className="p-1 text-mute hover:text-text"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setCustomForProvider(g.provider.id)}
+                    className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-mute hover:bg-surface2 hover:text-text"
+                  >
+                    <Plus size={11} />
+                    <span className="font-mono text-[10px]">enter model id…</span>
+                  </button>
+                )}
               </div>
             ))}
             {groups.length === 0 && (
