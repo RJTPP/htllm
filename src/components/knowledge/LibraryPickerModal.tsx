@@ -1,4 +1,4 @@
-import { Check, Plus, AlertTriangle, Cloud, HardDrive } from 'lucide-react';
+import { Check, Plus, AlertTriangle, Cloud, HardDrive, Ban } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { localityOf } from '../../lib/network';
@@ -14,6 +14,10 @@ import { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
  * Rows surface the same metadata as the active library bar (doc count,
  * pinned model, locality) so users can pick without leaving the
  * Knowledge page to inspect.
+ *
+ * When `allowNone` is true, a "None" row at the top lets the caller
+ * clear the selection — used by the chat knowledge chip and the
+ * Settings default-library picker, where "no library" means "no RAG".
  */
 export function LibraryPickerModal({
   open,
@@ -22,19 +26,27 @@ export function LibraryPickerModal({
   activeLibraryId,
   onSelect,
   onNewLibrary,
+  allowNone = false,
+  title = 'Switch library',
+  noneLabel = 'None — disable retrieval',
 }: {
   open: boolean;
   onClose: () => void;
   libraries: LibraryWithStats[];
-  activeLibraryId: string;
-  onSelect: (id: string) => void;
+  /** Currently-bound library id; `null` indicates "None" is active when allowNone. */
+  activeLibraryId: string | null;
+  /** Called with a library id, or `null` when "None" is chosen. */
+  onSelect: (id: string | null) => void;
   onNewLibrary: () => void;
+  allowNone?: boolean;
+  title?: string;
+  noneLabel?: string;
 }) {
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Switch library"
+      title={title}
       subtitle={
         libraries.length === 1
           ? '1 library'
@@ -44,6 +56,16 @@ export function LibraryPickerModal({
     >
       <div className="flex flex-col">
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {allowNone && (
+            <NoneRow
+              label={noneLabel}
+              isActive={activeLibraryId === null}
+              onSelect={() => {
+                onSelect(null);
+                onClose();
+              }}
+            />
+          )}
           {libraries.map((entry) => (
             <LibraryRow
               key={entry.lib.id}
@@ -67,6 +89,33 @@ export function LibraryPickerModal({
         </button>
       </div>
     </Modal>
+  );
+}
+
+function NoneRow({
+  label,
+  isActive,
+  onSelect,
+}: {
+  label: string;
+  isActive: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left px-3 py-2 border transition-colors ${
+        isActive
+          ? 'border-accent/60 bg-accent/10'
+          : 'border-line bg-surface hover:border-line-hi'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <Ban size={12} className="text-mute shrink-0" />
+        <span className="font-mono text-[12.5px] text-text flex-1">{label}</span>
+        {isActive && <Check size={13} className="text-accent shrink-0" />}
+      </div>
+    </button>
   );
 }
 

@@ -132,8 +132,20 @@ export interface Thread {
   /** Folder this thread belongs to; undefined means ungrouped. */
   folderId?: string;
   /**
-   * Whether RAG injection is on for this thread. Overrides the global
-   * `defaultRagEnabled` setting. Undefined means follow the default.
+   * Library this thread retrieves from for RAG. Undefined means no
+   * retrieval — RAG is opt-in per thread. Set by clicking the
+   * knowledge chip in the composer; new threads inherit
+   * settings.defaultLibraryId if it's set, otherwise stay undefined.
+   *
+   * Replaces the old ragEnabled boolean: library presence IS the
+   * state ("none" = off, any library id = on, scoped to that library
+   * and its pinned embedding model).
+   */
+  libraryId?: string;
+  /**
+   * @deprecated Replaced by libraryId. Older threads may still carry
+   * this flag; the runtime ignores it. Safe to remove in a future
+   * migration once we're confident no users have legacy threads.
    */
   ragEnabled?: boolean;
   createdAt: number;

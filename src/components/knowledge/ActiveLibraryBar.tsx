@@ -126,7 +126,9 @@ export function ActiveLibraryBar({
         onClose={() => setPickerOpen(false)}
         libraries={libraries}
         activeLibraryId={activeLibraryId}
-        onSelect={onSelectLibrary}
+        // Library bar never lets the user clear — there's always an
+        // active library on the Documents tab. allowNone defaults to false.
+        onSelect={(id) => id && onSelectLibrary(id)}
         onNewLibrary={onNewLibrary}
       />
     </div>
