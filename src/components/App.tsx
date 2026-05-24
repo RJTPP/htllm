@@ -12,7 +12,8 @@ import { getProvider, getWebLLMProvider, getHttpProviders } from '../providers/r
 import { useSystem } from '../hooks/useSystem';
 import { useThreads } from '../hooks/useThreads';
 import { useFolders } from '../hooks/useFolders';
-import { useChat } from '../hooks/useChat';
+import { useChat, type RagConfig } from '../hooks/useChat';
+import { useEmbeddingModel } from '../hooks/useEmbeddingModel';
 import { useModelParams } from '../hooks/useModelParams';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
 import {
@@ -83,6 +84,7 @@ export default function App() {
   const [page, setPage] = useState<NavPage>('chat');
   const [modal, setModal] = useState<ModalId>(null);
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
+  const [defaultRagEnabled, setDefaultRagEnabledState] = useState(false);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
   const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
   const [accentColor, setAccentColorState] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
@@ -115,6 +117,9 @@ export default function App() {
         document.documentElement.style.setProperty('--accent', ACCENT_PRESETS[v].rgb);
       }
     });
+    getSetting<boolean>('defaultRagEnabled').then((v) => {
+      if (typeof v === 'boolean') setDefaultRagEnabledState(v);
+    });
   }, []);
 
   const setDefaultSystemPrompt = useCallback(async (value: string) => {
@@ -140,6 +145,17 @@ export default function App() {
   }, []);
 
   const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
+
+  // RAG resolution: explicit per-thread override wins, else fall back to
+  // the global default. Embedding provider/model are global state read
+  // from the same hook the Knowledge page uses.
+  const embedding = useEmbeddingModel();
+  const ragEnabled = activeThread?.ragEnabled ?? defaultRagEnabled;
+  const ragConfig: RagConfig = {
+    enabled: ragEnabled,
+    provider: embedding.provider,
+    modelId: embedding.modelId,
+  };
 
   // A thread is bound to a provider via thread.providerId. WebLLM needs a model
   // loaded into its engine; an HTTP provider is ready as soon as it has a
@@ -195,6 +211,7 @@ export default function App() {
     systemPrompt,
     updateThreadTimestamp,
     handleAutoTitle,
+    ragConfig,
   );
 
   const modelReady = isApiThread
@@ -495,6 +512,15 @@ export default function App() {
     [activeThreadId, updateThread],
   );
 
+  const handleToggleRag = useCallback(() => {
+    if (!activeThreadId) return;
+    // Tri-state collapsed to bi: undefined (follow default) → !default.
+    // Subsequent toggles flip the explicit value. Clearing the override
+    // is left to a future "reset" affordance if it's ever needed.
+    const next = !ragEnabled;
+    updateThread(activeThreadId, { ragEnabled: next });
+  }, [activeThreadId, ragEnabled, updateThread]);
+
   const handleThreadParamsApply = useCallback(
     (next: ModelParams) => {
       if (activeThreadId) updateThread(activeThreadId, { modelParams: next });
@@ -609,6 +635,9 @@ export default function App() {
                   onOpenPicker={openPicker}
                   onParams={openParams}
                   onChangeSystemPrompt={handleChangeSystemPrompt}
+                  ragEnabled={ragEnabled}
+                  ragReady={Boolean(embedding.provider && embedding.modelId)}
+                  onToggleRag={handleToggleRag}
                 />
               </>
             )}

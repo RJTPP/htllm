@@ -5,10 +5,35 @@ import type {
   ContentPart,
   UsageStats,
   ChatProvider,
+  EmbeddingProvider,
 } from '../providers/types';
 import type { ChatImage } from '../lib/image';
 import { addMessage, getMessages, updateMessage, deleteMessage, deleteMessagesAfter } from '../data/messages';
 import { stripThinking } from '../lib/thinking';
+import { buildRagContext } from '../lib/rag-context';
+
+/** Extract plain text from a Message.content payload (string or parts). */
+function userMessageText(msg: Message): string {
+  if (typeof msg.content === 'string') return msg.content;
+  return msg.content
+    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+    .map((p) => p.text)
+    .join('\n')
+    .trim();
+}
+
+/**
+ * Optional RAG configuration. When `enabled` is true and both `provider`
+ * and `modelId` are present, useChat will retrieve relevant chunks before
+ * each generation and prepend them to the system prompt. Any failure
+ * (no index, embed error, no matches) silently degrades to a normal chat
+ * turn — the user's question still goes through.
+ */
+export interface RagConfig {
+  enabled: boolean;
+  provider: EmbeddingProvider | null;
+  modelId: string | null;
+}
 
 export function useChat(
   provider: ChatProvider,
@@ -18,6 +43,7 @@ export function useChat(
   systemPrompt: string,
   onThreadUpdate?: (threadId: string) => void,
   onAutoTitle?: (threadId: string, firstMessage: string) => void,
+  rag?: RagConfig,
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [generating, setGenerating] = useState(false);
@@ -90,12 +116,44 @@ export function useChat(
           return result;
         });
 
-        const sysMsg: Message | null = systemPrompt.trim()
+        // Optional RAG retrieval — runs before the system prompt is built
+        // so the retrieved context lives inside the system message. We
+        // probe the user's most recent message text as the query. Any
+        // failure (no index, embed error, no matches) silently produces
+        // empty context and chat proceeds normally.
+        let ragBlock = '';
+        if (rag?.enabled && rag.provider && rag.modelId) {
+          const lastUser = [...cleaned].reverse().find((m) => m.role === 'user');
+          const queryText = lastUser ? userMessageText(lastUser) : '';
+          if (queryText) {
+            try {
+              const result = await buildRagContext(
+                queryText,
+                rag.provider,
+                rag.modelId,
+                { signal: controller.signal },
+              );
+              if (result.context) {
+                ragBlock = result.context;
+              } else if (result.reason) {
+                console.debug('[rag] skipped:', result.reason);
+              }
+            } catch (err) {
+              console.warn('[rag] context build failed:', err);
+            }
+          }
+        }
+
+        // Compose the system message: retrieved context (if any) sits
+        // above the persona prompt so model-side instructions still have
+        // the last word.
+        const sysContent = [ragBlock, systemPrompt.trim()].filter(Boolean).join('\n');
+        const sysMsg: Message | null = sysContent
           ? {
               id: '__system',
               threadId,
               role: 'system',
-              content: systemPrompt,
+              content: sysContent,
               createdAt: 0,
             }
           : null;
@@ -168,7 +226,7 @@ export function useChat(
         onThreadUpdate?.(threadId);
       }
     },
-    [threadId, modelId, params, systemPrompt, provider, onThreadUpdate],
+    [threadId, modelId, params, systemPrompt, provider, onThreadUpdate, rag],
   );
 
   const send = useCallback(
