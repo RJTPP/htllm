@@ -1,7 +1,6 @@
 import { type ReactNode } from 'react';
 import { Modal } from '../ui/Modal';
 import { ProviderLogo } from '../ui/ProviderLogo';
-import type { Locality } from '../../lib/network';
 
 export interface ProviderTabDescriptor {
   /** Stable id used as the active-tab key. */
@@ -10,42 +9,15 @@ export interface ProviderTabDescriptor {
   /** Provider id passed to ProviderLogo. Optional — ProviderLogo falls
    *  back to a generic icon when unrecognized. */
   logoId?: string;
-  /**
-   * Tri-state locality indicator shown next to the label as a colored dot.
-   * 'unknown' renders no dot, so unconfigured providers stay quiet.
-   */
-  locality?: Locality;
-}
-
-const LOCALITY_DOT: Record<Exclude<Locality, 'unknown'>, { className: string; title: string }> = {
-  'on-device': {
-    className: 'bg-ok',
-    title: 'On-device — requests stay on this machine',
-  },
-  'off-device': {
-    className: 'bg-warn',
-    title: 'Off-device — requests leave this machine',
-  },
-};
-
-function LocalityDot({ locality }: { locality: Locality }) {
-  if (locality === 'unknown') return null;
-  const meta = LOCALITY_DOT[locality];
-  return (
-    <span
-      title={meta.title}
-      className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${meta.className}`}
-    />
-  );
 }
 
 /**
  * Shared shell for tabbed provider pickers — ChatModelPicker and
  * EmbeddingModelModal both build on this. Owns:
  *   - Modal wrapper (title, subtitle, esc-to-close, portal)
- *   - Provider tab bar with logo + label + locality dot, sticky at the
- *     top of the scroll area so it stays visible while a long model
- *     list scrolls below
+ *   - Provider tab bar with logo + label, sticky at the top of the
+ *     scroll area so it stays visible while a long model list scrolls
+ *     below
  *   - Optional footer slot that sits below the scroll area
  *
  * The per-tab body is the children prop. The consumer is responsible for
@@ -102,7 +74,6 @@ export function ProviderTabbedModal({
               >
                 {t.logoId && <ProviderLogo providerId={t.logoId} size={13} />}
                 <span>{t.label}</span>
-                {t.locality && <LocalityDot locality={t.locality} />}
               </button>
             );
           })}

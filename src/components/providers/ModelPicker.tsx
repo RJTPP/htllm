@@ -9,7 +9,6 @@ import type {
 import { groupByModel, familyRank, brandForFamily, type GroupedModel } from '../../lib/model-meta';
 import { fitFor } from '../../lib/fit';
 import { getHttpProviders, WEBLLM_ID } from '../../providers/registry';
-import { localityOf, type Locality } from '../../lib/network';
 import { Search } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { StatusPanel } from './StatusPanel';
@@ -139,21 +138,12 @@ export function ModelPicker({
       ? `${filtered.length} chat models · runs in-browser via WebLLM`
       : 'API models · served by your configured endpoint';
 
-  // Tab descriptors with locality computed from each HTTP provider's
-  // currently-configured baseURL. WebLLM is always on-device (runs in
-  // the browser process itself).
   const tabDescriptors: ProviderTabDescriptor[] = [
-    {
-      id: WEBLLM_ID,
-      label: 'In-browser · WebLLM',
-      logoId: WEBLLM_ID,
-      locality: 'on-device' as Locality,
-    },
+    { id: WEBLLM_ID, label: 'In-browser · WebLLM', logoId: WEBLLM_ID },
     ...httpProviders.map((p) => ({
       id: p.id,
       label: p.displayName,
       logoId: p.id,
-      locality: localityOf(p.getConfig().baseURL),
     })),
   ];
 

@@ -2,8 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { Search, Check, Plus, X, RefreshCw } from 'lucide-react';
 import { getEmbeddingProviders, getProvider } from '../../providers/registry';
 import type { EmbeddingModelInfo, EmbeddingProvider } from '../../providers/types';
-import { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
-import { localityOf, type Locality } from '../../lib/network';
 import { ProviderTabbedModal, type ProviderTabDescriptor } from '../providers/ProviderTabbedModal';
 
 type LoadState =
@@ -14,7 +12,6 @@ type LoadState =
 interface ProviderTab {
   provider: EmbeddingProvider;
   displayName: string;
-  locality: Locality;
 }
 
 /**
@@ -91,21 +88,14 @@ export function EmbeddingModelModal({
   onSelect: (providerId: string, modelId: string) => void;
 }) {
   // Build per-tab metadata: displayName from the registered ChatProvider
-  // (EmbeddingProvider doesn't carry one), locality from the configured
-  // baseURL (OpenAICompatibleProvider exposes it via getConfig()).
+  // (EmbeddingProvider doesn't carry one).
   const tabs: ProviderTab[] = useMemo(
     () =>
-      getEmbeddingProviders().map((provider) => {
-        const displayName = getProvider(provider.id)?.displayName ?? provider.id;
-        const baseURL =
-          provider instanceof OpenAICompatibleProvider
-            ? provider.getConfig().baseURL
-            : '';
-        return { provider, displayName, locality: localityOf(baseURL) };
-      }),
-    // Recompute when the modal reopens so baseURL edits take effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [open],
+      getEmbeddingProviders().map((provider) => ({
+        provider,
+        displayName: getProvider(provider.id)?.displayName ?? provider.id,
+      })),
+    [],
   );
 
   const [tabId, setTabId] = useState<string>(
@@ -123,7 +113,6 @@ export function EmbeddingModelModal({
     id: t.provider.id,
     label: t.displayName,
     logoId: t.provider.id,
-    locality: t.locality,
   }));
 
   if (tabs.length === 0) {
