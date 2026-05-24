@@ -116,20 +116,32 @@ experience before any new surface area.
 | Edit any user message + regenerate from that point | ✦ ☐ (extends Phase 1 regenerate) |
 | Keyboard-first navigation — shortcuts + command palette | ✦ ☐ |
 
-### Phase 3 — Knowledge / RAG
+### Phase 3 Part 1 — Knowledge / RAG ✅ shipped
 
 | Feature | Status |
 |---|---|
-| `embeddings` IndexedDB store, model-tagged (D2) | ✦ ☐ |
-| Embedding model support in the picker (model-type aware) | ✦ ☐ |
-| Embedding via OpenAI-compatible API / Ollama — provider-served `/v1/embeddings` (D6) | ✦ ☐ |
-| txt / PDF ingestion + chunking (lazy-loaded PDF parser) | ✦ ☐ |
-| Vector store + similarity retrieval | ✦ ☐ |
-| Knowledge page — global semantic search surface | ✦ ☐ |
-| File / document manager (full Storage page) | ✦ ☐ |
+| `embeddings` IndexedDB store, model-tagged (D2) | ✦ ✓ composite key `[chunkId, embeddingModelId]` for multi-model coexistence |
+| Embedding model support in the picker (model-type aware) | ✦ ✓ EmbeddingModelModal mirrors chat picker (tabs + family groups + manual entry) |
+| Embedding via OpenAI-compatible API / Ollama — provider-served `/v1/embeddings` (D6) | ✦ ✓ + dedicated `/v1/embeddings/models` discovery + known-model fallback for OpenRouter |
+| txt / md ingestion + markdown-aware chunking | ✦ ✓ |
+| PDF ingestion (lazy-loaded parser) | ◐ stubbed — defers to Phase 3 Part 2 |
+| Vector store + hybrid retrieval (BM25 + cosine) | ✦ ✓ minisearch + brute-force cosine + library scope filter |
+| Knowledge page — global semantic search + 3-column document workspace | ✦ ✓ Libraries · Documents · Preview, scope chips |
+| File / document manager (Storage page) | ✦ ✓ Documents section + per-model embedding indexes |
+| **Libraries** — named groups of docs pinned to one embedding model | ✦ ✓ (rename from "corpus") |
+| Per-thread library binding for RAG (composer KnowledgeChip) | ✦ ✓ |
+
+### Phase 3 Part 2 — Chat-side knowledge features
+
+Deferred from Part 1 — these don't depend on the library/RAG track and
+can ship independently when prioritized.
+
+| Feature | Status |
+|---|---|
 | Conversation branching / tree view — pairs with edit-from-mid-conversation | ✦ ☐ |
-| Persistent memory — user-facts store injected into context | ✦ ☐ |
+| Persistent memory — Mem0-style user-facts store injected into context | ✦ ☐ |
 | Context compression — summarize old turns when used context exceeds a trigger threshold; keeps recent turns verbatim (runs a local model call) | ✦ ☐ |
+| PDF ingestion — lazy-load pdfjs-dist when a user drops a PDF | ◐ stub → real impl |
 
 ### Phase 4 — Agentic
 

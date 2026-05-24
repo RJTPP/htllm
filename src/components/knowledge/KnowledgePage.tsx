@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, FileText, Plus, Upload, Sparkles, Trash2 } from 'lucide-react';
 import { useKnowledge } from '../../hooks/useKnowledge';
-import { useEmbeddingModel } from '../../hooks/useEmbeddingModel';
 import { ActiveLibraryBar } from './ActiveLibraryBar';
 import { LibraryList } from './LibraryList';
 import { DocumentDetail } from './DocumentDetail';
@@ -25,7 +24,6 @@ type Tab = 'search' | 'documents';
  */
 export function KnowledgePage() {
   const knowledge = useKnowledge();
-  const { providerId: defaultProviderId, modelId: defaultModelId } = useEmbeddingModel();
 
   const [tab, setTab] = useState<Tab>('search');
   const [newLibraryOpen, setNewLibraryOpen] = useState(false);
@@ -145,8 +143,8 @@ export function KnowledgePage() {
       <div className="max-w-7xl mx-auto w-full px-6 pb-8 flex-1 min-h-0 flex flex-col">
         {tab === 'search' ? (
           <SearchPane
-            providerId={activeLibrary?.embeddingProviderId ?? defaultProviderId}
-            modelId={activeLibrary?.embeddingModelId ?? defaultModelId}
+            providerId={activeLibrary?.embeddingProviderId ?? null}
+            modelId={activeLibrary?.embeddingModelId ?? null}
             libraries={knowledge.libraries}
             activeLibraryId={knowledge.activeLibraryId}
             ready={ragReady}
@@ -195,8 +193,8 @@ export function KnowledgePage() {
       <NewLibraryModal
         open={newLibraryOpen}
         onClose={() => setNewLibraryOpen(false)}
-        defaultProviderId={defaultProviderId}
-        defaultModelId={defaultModelId}
+        defaultProviderId={null}
+        defaultModelId={null}
         onCreate={(input) => knowledge.createLibrary(input)}
       />
 
