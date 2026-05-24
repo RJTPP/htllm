@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { ModelInfo } from '../../providers/types';
+import type { Document, ModelInfo } from '../../providers/types';
 import { fmtBytes, shortenModelId } from '../../lib/format';
 import {
   getStoreStats,
@@ -9,7 +9,28 @@ import {
   type StoreStats,
   type CacheEntry,
 } from '../../data/storage-stats';
-import { HardDrive, Database, Trash2, AlertTriangle, RefreshCw, Package } from 'lucide-react';
+import {
+  listDocuments,
+  deleteDocument,
+  getDocumentStats,
+  type DocumentStats,
+} from '../../data/documents';
+import {
+  invalidateEmbeddingsForModel,
+  listEmbeddingModelIdsWithData,
+  countEmbeddingsForModel,
+} from '../../data/embeddings';
+import { invalidateHybridSearchCache } from '../../lib/hybrid-search';
+import {
+  HardDrive,
+  Database,
+  Trash2,
+  AlertTriangle,
+  RefreshCw,
+  Package,
+  FileText,
+  Sparkles,
+} from 'lucide-react';
 
 /** Friendly labels for IndexedDB store names. */
 const STORE_LABELS: Record<string, string> = {
@@ -19,6 +40,9 @@ const STORE_LABELS: Record<string, string> = {
   settings: 'Settings',
   promptTemplates: 'Prompt Templates',
   folders: 'Folders',
+  documents: 'Documents',
+  chunks: 'Chunks',
+  embeddings: 'Embeddings',
 };
 
 /** Stores the user should never accidentally clear. */
@@ -106,13 +130,35 @@ export function StorageManager({
   const [storeStats, setStoreStats] = useState<StoreStats[]>([]);
   const [cacheEntries, setCacheEntries] = useState<CacheEntry[]>([]);
   const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documentStats, setDocumentStats] = useState<DocumentStats | null>(null);
+  const [embeddingIndexes, setEmbeddingIndexes] = useState<
+    { modelId: string; vectorCount: number }[]
+  >([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [stores, caches] = await Promise.all([getStoreStats(), getCacheEntries()]);
+    const [stores, caches, docs, docStats, modelIds] = await Promise.all([
+      getStoreStats(),
+      getCacheEntries(),
+      listDocuments(),
+      getDocumentStats(),
+      listEmbeddingModelIdsWithData(),
+    ]);
     setStoreStats(stores);
     setCacheEntries(caches);
+    setDocuments(docs);
+    setDocumentStats(docStats);
+    // Hydrate vector counts per model so the UI can show "X vectors" per
+    // index without scanning the entire embeddings store twice.
+    const indexes = await Promise.all(
+      modelIds.map(async (modelId) => ({
+        modelId,
+        vectorCount: await countEmbeddingsForModel(modelId),
+      })),
+    );
+    setEmbeddingIndexes(indexes);
     try {
       const est = await navigator.storage.estimate();
       setStorageEstimate({ usage: est.usage ?? 0, quota: est.quota ?? 0 });
@@ -145,6 +191,23 @@ export function StorageManager({
 
   const handleClearStore = async (storeName: string) => {
     await clearStore(storeName as Parameters<typeof clearStore>[0]);
+    // Knowledge-related stores feed the BM25 cache — drop it so the
+    // next search rebuilds against the current state.
+    if (storeName === 'documents' || storeName === 'chunks' || storeName === 'embeddings') {
+      invalidateHybridSearchCache();
+    }
+    await refresh();
+  };
+
+  const handleDeleteDocument = async (id: string) => {
+    await deleteDocument(id);
+    invalidateHybridSearchCache();
+    await refresh();
+  };
+
+  const handleDropEmbeddingIndex = async (modelId: string) => {
+    await invalidateEmbeddingsForModel(modelId);
+    invalidateHybridSearchCache();
     await refresh();
   };
 
@@ -262,6 +325,100 @@ export function StorageManager({
             </details>
           )}
         </div>
+
+        {/* Knowledge base documents (Phase 3 RAG). Always shown; the
+            empty state hints at where docs come from. */}
+        <div className="border border-line bg-surface/40 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <FileText size={14} className="text-accent" />
+            <span className="font-mono text-[11px] text-text/80">Documents</span>
+            <span className="ml-auto font-mono text-[10px] text-mute">
+              {documentStats?.count ?? 0} docs · {documentStats?.totalChunks ?? 0} chunks ·{' '}
+              {fmtBytes(documentStats?.totalSizeBytes ?? 0)}
+            </span>
+          </div>
+
+          {documents.length === 0 ? (
+            <p className="text-[11px] text-mute py-2">
+              No documents ingested. Drop files in the Knowledge page to build a
+              retrievable index.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {documents.map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between py-1.5 px-2 border border-line/40 bg-bg/40"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono text-[11px] text-text truncate">
+                      {d.filename}
+                    </div>
+                    <div className="font-mono text-[10px] text-mute">
+                      {fmtBytes(d.sizeBytes)} · {d.chunkCount} chunk
+                      {d.chunkCount === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <ConfirmButton
+                    label="delete"
+                    confirmLabel="confirm delete?"
+                    onConfirm={() => handleDeleteDocument(d.id)}
+                    tone="neutral"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Embedding indexes — one per model that has stored vectors.
+            Useful for reclaiming space when permanently switching to a
+            different embedding model. */}
+        {embeddingIndexes.length > 0 && (
+          <div className="border border-line bg-surface/40 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-accent" />
+              <span className="font-mono text-[11px] text-text/80">
+                Embedding indexes
+              </span>
+              <span className="ml-auto font-mono text-[10px] text-mute">
+                {embeddingIndexes.length} model
+                {embeddingIndexes.length === 1 ? '' : 's'} ·{' '}
+                {embeddingIndexes.reduce((sum, i) => sum + i.vectorCount, 0)} vectors
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              {embeddingIndexes.map((idx) => (
+                <div
+                  key={idx.modelId}
+                  className="flex items-center justify-between py-1.5 px-2 border border-line/40 bg-bg/40"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono text-[11px] text-text truncate">
+                      {idx.modelId}
+                    </div>
+                    <div className="font-mono text-[10px] text-mute">
+                      {idx.vectorCount} vector{idx.vectorCount === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <ConfirmButton
+                    label="drop index"
+                    confirmLabel="confirm drop?"
+                    onConfirm={() => handleDropEmbeddingIndex(idx.modelId)}
+                    tone="neutral"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <p className="font-mono text-[9px] text-mute/60 mt-1">
+              Different embedding models produce incompatible vector spaces.
+              Dropping an index removes only that model's vectors — documents
+              and other indexes survive.
+            </p>
+          </div>
+        )}
 
         {/* IndexedDB stores */}
         <div className="border border-line bg-surface/40 p-4 space-y-3">
