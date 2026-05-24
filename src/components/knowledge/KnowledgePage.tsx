@@ -152,6 +152,8 @@ export function KnowledgePage() {
           <SearchPane
             providerId={activeLibrary?.embeddingProviderId ?? defaultProviderId}
             modelId={activeLibrary?.embeddingModelId ?? defaultModelId}
+            libraries={knowledge.libraries}
+            activeLibraryId={knowledge.activeLibraryId}
             ready={ragReady}
           />
         ) : (
@@ -319,17 +321,29 @@ function DocumentsColumn({
   );
 }
 
-/** Search tab — currently scoped to the active library only. The full
- *  cross-library scope picker arrives in 3f.7. */
+/** Search tab — owns the EmbeddingProvider resolution and forwards
+ *  libraries down so SemanticSearch can render scope chips. */
 function SearchPane({
   providerId,
   modelId,
+  libraries,
+  activeLibraryId,
   ready,
 }: {
   providerId: string | null;
   modelId: string | null;
+  libraries: ReturnType<typeof useKnowledge>['libraries'];
+  activeLibraryId: string;
   ready: boolean;
 }) {
   const provider = providerId ? getEmbeddingProvider(providerId) ?? null : null;
-  return <SemanticSearch provider={provider} modelId={modelId} ready={ready} />;
+  return (
+    <SemanticSearch
+      provider={provider}
+      modelId={modelId}
+      libraries={libraries}
+      activeLibraryId={activeLibraryId}
+      ready={ready}
+    />
+  );
 }

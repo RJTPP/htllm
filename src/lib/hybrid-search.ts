@@ -11,7 +11,7 @@
 import MiniSearch from 'minisearch';
 import type { Chunk, Document } from '../providers/types';
 import { getAllChunks } from '../data/chunks';
-import { getDocument } from '../data/documents';
+import { getDocument, listDocuments } from '../data/documents';
 import { getAllEmbeddingsForModel } from '../data/embeddings';
 import { cosineSimilarity, minMaxNormalize } from './vector-search';
 
@@ -37,6 +37,12 @@ export interface HybridSearchOpts {
   vectorWeight?: number;
   /** Candidates pulled from each signal before merging. Default 20. */
   candidatePoolSize?: number;
+  /**
+   * Restrict search to chunks whose document belongs to one of these
+   * libraries. Undefined / empty array = no filter (search every doc
+   * that has vectors under the given model).
+   */
+  libraryIds?: string[];
 }
 
 let cachedIndex: MiniSearch<Chunk> | null = null;
@@ -89,32 +95,60 @@ export async function hybridSearch(
   const minScore = opts.minScore ?? 0.5;
   const vectorWeight = opts.vectorWeight ?? 0.7;
   const candidatePool = opts.candidatePoolSize ?? 20;
+  const librarySet =
+    opts.libraryIds && opts.libraryIds.length > 0 ? new Set(opts.libraryIds) : null;
 
-  const [embeddings, { index, chunks }] = await Promise.all([
+  const [embeddings, { index, chunks }, docs] = await Promise.all([
     getAllEmbeddingsForModel(embeddingModelId),
     getBm25Index(),
+    // Documents are needed for the chunk → library mapping. Cheap: a
+    // single getAll() returns metadata only (no chunks / vectors).
+    listDocuments(),
   ]);
 
   if (chunks.length === 0) return [];
 
   const chunkById = new Map(chunks.map((c) => [c.id, c]));
+  const libraryByDocument = new Map(docs.map((d) => [d.id, d.libraryId]));
+
+  // Resolve the library a chunk belongs to via its document. Returns
+  // undefined if the document was deleted out from under the chunk
+  // (defensive — shouldn't happen with the cascading delete).
+  const libraryOfChunk = (chunk: Chunk): string | undefined =>
+    libraryByDocument.get(chunk.documentId);
+
+  // Library filter helper — applied uniformly to both signal candidate lists.
+  const inScope = (chunk: Chunk | undefined): boolean => {
+    if (!chunk) return false;
+    if (!librarySet) return true;
+    const libId = libraryOfChunk(chunk);
+    return libId !== undefined && librarySet.has(libId);
+  };
 
   // Vector candidates: brute-force cosine over all stored embeddings.
+  // Apply the library filter here so the candidatePool slice reflects
+  // in-scope hits only (otherwise scope-narrow searches would return
+  // fewer than candidatePool candidates by accident).
   const vectorScored: { chunkId: string; score: number }[] = [];
   for (const rec of embeddings) {
     const chunk = chunkById.get(rec.chunkId);
     if (!chunk) continue; // orphan embedding — chunk was deleted
+    if (!inScope(chunk)) continue;
     const vec = Float32Array.from(rec.vector);
     vectorScored.push({ chunkId: rec.chunkId, score: cosineSimilarity(queryVector, vec) });
   }
   vectorScored.sort((a, b) => b.score - a.score);
   const vectorTop = vectorScored.slice(0, candidatePool);
 
-  // BM25 candidates from minisearch.
-  const bm25Hits = query.trim().length > 0
-    ? index.search(query, { combineWith: 'OR' }).slice(0, candidatePool)
+  // BM25 candidates from minisearch. Same scope filter; minisearch
+  // doesn't know about libraries, so we post-filter the hit stream.
+  const bm25HitsRaw = query.trim().length > 0
+    ? index.search(query, { combineWith: 'OR' })
     : [];
-  const bm25Scored = bm25Hits.map((h) => ({ chunkId: String(h.id), score: h.score }));
+  const bm25Scored = bm25HitsRaw
+    .filter((h) => inScope(chunkById.get(String(h.id))))
+    .slice(0, candidatePool)
+    .map((h) => ({ chunkId: String(h.id), score: h.score }));
 
   // Merge candidate pool — chunks that appear in either list are scored.
   const candidateIds = new Set<string>();
