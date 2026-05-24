@@ -131,6 +131,11 @@ export interface Thread {
   systemPrompt?: string;
   /** Folder this thread belongs to; undefined means ungrouped. */
   folderId?: string;
+  /**
+   * Whether RAG injection is on for this thread. Overrides the global
+   * `defaultRagEnabled` setting. Undefined means follow the default.
+   */
+  ragEnabled?: boolean;
   createdAt: number;
   updatedAt: number;
 }

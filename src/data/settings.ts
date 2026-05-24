@@ -50,6 +50,13 @@ export const ACCENT_PRESETS: Record<AccentColor, AccentPreset> = {
 
 export const DEFAULT_ACCENT_COLOR: AccentColor = 'amber';
 
+/**
+ * Default for new threads' RAG injection toggle. Off by default — RAG
+ * costs an extra embed call per turn and only helps when the knowledge
+ * base is relevant to the conversation.
+ */
+export const DEFAULT_RAG_ENABLED = false;
+
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDb();
   const entry = await db.get('settings', key);

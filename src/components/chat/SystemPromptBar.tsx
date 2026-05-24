@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react';
+import { BookOpen } from 'lucide-react';
 
 export function SystemPromptBar({
   value,
   defaultPrompt,
   onChange,
+  ragEnabled,
+  ragReady,
+  onToggleRag,
 }: {
   value: string;
   defaultPrompt: string;
   onChange: (value: string) => void;
+  /** Whether RAG injection is active for this thread (resolved value). */
+  ragEnabled: boolean;
+  /** True only when an embedding provider + model are configured. When
+   *  false the toggle is shown disabled with a hint to set one up. */
+  ragReady: boolean;
+  onToggleRag: () => void;
 }) {
   const isDefault = value === defaultPrompt;
   const [editing, setEditing] = useState(false);
@@ -19,12 +29,39 @@ export function SystemPromptBar({
     if (!isDefault) setExpanded(true);
   }, [isDefault]);
 
+  const ragToggleClass = `flex items-center gap-1 px-1.5 py-0.5 border font-mono text-[10px] transition-colors ${
+    !ragReady
+      ? 'border-line/40 text-mute/40 cursor-not-allowed'
+      : ragEnabled
+        ? 'border-accent/60 bg-accent/10 text-accent'
+        : 'border-line text-mute hover:text-text'
+  }`;
+  const ragTitle = !ragReady
+    ? 'RAG is off — select an embedding model in the header to enable it'
+    : ragEnabled
+      ? 'RAG on — retrieved context from your Knowledge base is prepended to the system prompt'
+      : 'RAG off — click to inject retrieved context for this thread';
+
+  const RagToggle = (
+    <button
+      type="button"
+      onClick={ragReady ? onToggleRag : undefined}
+      disabled={!ragReady}
+      title={ragTitle}
+      className={ragToggleClass}
+    >
+      <BookOpen size={11} />
+      rag {ragEnabled && ragReady ? 'on' : 'off'}
+    </button>
+  );
+
   if (!expanded && !editing) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 border border-line bg-surface/40 font-mono text-[10px] text-mute whitespace-nowrap">
         <span className="text-accent uppercase tracking-widest shrink-0">system</span>
         <span className="text-mute shrink-0">·</span>
         <span className="text-text/70 flex-1 min-w-0 truncate">default</span>
+        {RagToggle}
         <button
           onClick={() => {
             setEditing(true);
@@ -47,7 +84,8 @@ export function SystemPromptBar({
         <span className="font-mono text-[10px] text-accent uppercase tracking-widest">
           system prompt
         </span>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {RagToggle}
           {editing ? (
             <>
               <button

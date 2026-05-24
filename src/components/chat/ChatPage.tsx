@@ -26,6 +26,9 @@ export function ChatPage({
   onOpenPicker,
   onParams,
   onChangeSystemPrompt,
+  ragEnabled,
+  ragReady,
+  onToggleRag,
 }: {
   thread: Thread | null;
   messages: Message[];
@@ -46,6 +49,10 @@ export function ChatPage({
   onOpenPicker: () => void;
   onParams: () => void;
   onChangeSystemPrompt: (value: string) => void;
+  ragEnabled: boolean;
+  /** True when an embedding provider + model are configured. */
+  ragReady: boolean;
+  onToggleRag: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -87,6 +94,9 @@ export function ChatPage({
             value={thread.systemPrompt ?? defaultSystemPrompt}
             defaultPrompt={defaultSystemPrompt}
             onChange={onChangeSystemPrompt}
+            ragEnabled={ragEnabled}
+            ragReady={ragReady}
+            onToggleRag={onToggleRag}
           />
         </div>
         {messages.length === 0 ? (
