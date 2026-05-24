@@ -7,6 +7,7 @@ const STORES = [
   'settings',
   'promptTemplates',
   'folders',
+  'libraries',
   'documents',
   'chunks',
   'embeddings',

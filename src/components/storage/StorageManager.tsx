@@ -40,6 +40,7 @@ const STORE_LABELS: Record<string, string> = {
   settings: 'Settings',
   promptTemplates: 'Prompt Templates',
   folders: 'Folders',
+  libraries: 'Libraries',
   documents: 'Documents',
   chunks: 'Chunks',
   embeddings: 'Embeddings',

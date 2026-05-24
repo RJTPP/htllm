@@ -3,6 +3,7 @@ import type { Document, EmbeddingProvider } from '../providers/types';
 import { listDocuments, deleteDocument } from '../data/documents';
 import { countEmbeddingsForModel } from '../data/embeddings';
 import { ingestFile } from '../lib/ingest';
+import { DEFAULT_LIBRARY_ID } from '../data/libraries';
 import {
   embedDocument,
   embedAllDocuments,
@@ -80,11 +81,11 @@ export function useKnowledge({ provider, modelId }: UseKnowledgeOpts) {
 
   /** Ingest one or more files into the knowledge base. */
   const uploadFiles = useCallback(
-    async (files: File[]): Promise<void> => {
+    async (files: File[], libraryId: string = DEFAULT_LIBRARY_ID): Promise<void> => {
       setError(null);
       for (const file of files) {
         try {
-          await ingestFile(file);
+          await ingestFile(file, libraryId);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           setError(`${file.name}: ${msg}`);

@@ -7,6 +7,7 @@ import { deleteEmbeddingsForDocument } from './embeddings';
 /**
  * Create a Document record. Chunks and embeddings are persisted separately
  * by the ingestion pipeline — this only stores the document metadata.
+ * Caller must supply libraryId.
  */
 export async function addDocument(
   data: Omit<Document, 'id' | 'createdAt'>,
@@ -26,6 +27,13 @@ export async function getDocument(id: string): Promise<Document | undefined> {
 export async function listDocuments(): Promise<Document[]> {
   const db = await getDb();
   const docs = await db.getAll('documents');
+  return docs.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** List documents in a single library, newest first. */
+export async function listDocumentsByLibrary(libraryId: string): Promise<Document[]> {
+  const db = await getDb();
+  const docs = await db.getAllFromIndex('documents', 'byLibrary', libraryId);
   return docs.sort((a, b) => b.createdAt - a.createdAt);
 }
 
