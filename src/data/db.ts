@@ -38,14 +38,17 @@ export interface HtllmDB {
     indexes: { byDocument: string };
   };
   embeddings: {
-    key: string; // chunkId
+    // Composite key: [chunkId, embeddingModelId]. Vectors from different
+    // models occupy distinct vector spaces and aren't comparable, so we
+    // keep them as separate records — switching models doesn't lose work.
+    key: [string, string];
     value: import('../providers/types').EmbeddingRecord;
-    indexes: { byModel: string };
+    indexes: { byModel: string; byChunk: string };
   };
 }
 
 const DB_NAME = 'htllm';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let dbPromise: Promise<IDBPDatabase<HtllmDB>> | null = null;
 
@@ -82,9 +85,29 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
           const chunkStore = db.createObjectStore('chunks', { keyPath: 'id' });
           chunkStore.createIndex('byDocument', 'documentId');
 
-          // Keyed by chunkId — one embedding per chunk.
+          // (v4 created embeddings with keyPath='chunkId'; v5 rebuilds it
+          //  with a composite key for multi-model support — see below.)
           const embedStore = db.createObjectStore('embeddings', { keyPath: 'chunkId' });
           embedStore.createIndex('byModel', 'embeddingModelId');
+        }
+        if (oldVersion < 5) {
+          // Multi-model embedding support. The v4 store keyed by chunkId
+          // alone could only hold one vector per chunk, so switching the
+          // embedding model overwrote prior vectors. Rebuild with a
+          // composite key [chunkId, embeddingModelId] so vectors from
+          // different models coexist.
+          //
+          // Any v4 embeddings are dropped — they can be regenerated from
+          // chunks via the Knowledge page. Chunks themselves survive
+          // intact.
+          if (db.objectStoreNames.contains('embeddings')) {
+            db.deleteObjectStore('embeddings');
+          }
+          const embedStore = db.createObjectStore('embeddings', {
+            keyPath: ['chunkId', 'embeddingModelId'],
+          });
+          embedStore.createIndex('byModel', 'embeddingModelId');
+          embedStore.createIndex('byChunk', 'chunkId');
         }
       },
     });
