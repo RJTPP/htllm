@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Cloud, HardDrive, AlertTriangle, Plus, Check } from 'lucide-react';
+import { Cloud, HardDrive, AlertTriangle } from 'lucide-react';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { localityOf } from '../../lib/network';
 import { getProvider } from '../../providers/registry';
 import { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
+import { LibraryPickerModal } from './LibraryPickerModal';
 
 /**
  * Active library status header — reads like a compile-time manifest
@@ -28,7 +29,7 @@ export function ActiveLibraryBar({
   onNewLibrary: () => void;
   onChangeModel: () => void;
 }) {
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const active = libraries.find((l) => l.lib.id === activeLibraryId);
   if (!active) return null;
@@ -51,7 +52,7 @@ export function ActiveLibraryBar({
           <Key>library</Key>
           <button
             type="button"
-            onClick={() => setPopoverOpen((o) => !o)}
+            onClick={() => setPickerOpen(true)}
             className="font-mono text-[13px] text-text hover:text-accent transition-colors"
           >
             {lib.name}
@@ -62,7 +63,7 @@ export function ActiveLibraryBar({
           </span>
           <button
             type="button"
-            onClick={() => setPopoverOpen((o) => !o)}
+            onClick={() => setPickerOpen(true)}
             className="ml-auto font-mono text-[10px] text-mute hover:text-accent flex items-center gap-0.5 shrink-0"
           >
             <span className="text-mute/60">▸</span> switch
@@ -120,65 +121,14 @@ export function ActiveLibraryBar({
         </div>
       </div>
 
-      {/* Library switcher popover — click-outside to dismiss. Intentionally
-          inline + lightweight; this is a single-tap context shift, not a
-          flow worth a full Modal. */}
-      {popoverOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-30"
-            onClick={() => setPopoverOpen(false)}
-          />
-          <div className="absolute z-40 mt-1 left-3 right-3 max-w-md border border-line bg-bg shadow-lg">
-            <div className="px-3 py-1.5 border-b border-line/60 font-mono text-[10px] text-mute uppercase tracking-widest">
-              switch library · {libraries.length}
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              {libraries.map((entry) => {
-                const isActive = entry.lib.id === activeLibraryId;
-                return (
-                  <button
-                    key={entry.lib.id}
-                    onClick={() => {
-                      onSelectLibrary(entry.lib.id);
-                      setPopoverOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 border-l-2 transition-colors ${
-                      isActive
-                        ? 'border-accent bg-accent/5'
-                        : 'border-transparent hover:bg-surface2'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] text-text flex-1 truncate">
-                        {entry.lib.name}
-                      </span>
-                      {isActive && <Check size={11} className="text-accent shrink-0" />}
-                    </div>
-                    <div className="font-mono text-[10px] text-mute mt-0.5 truncate">
-                      {entry.docCount} doc{entry.docCount === 1 ? '' : 's'}
-                      {entry.lib.embeddingModelId ? (
-                        <> · {entry.lib.embeddingModelId}</>
-                      ) : (
-                        <span className="text-warn"> · no model</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => {
-                setPopoverOpen(false);
-                onNewLibrary();
-              }}
-              className="w-full flex items-center gap-1.5 px-3 py-2 border-t border-line/60 font-mono text-[11px] text-accent hover:bg-accent/10 transition-colors"
-            >
-              <Plus size={12} /> New library
-            </button>
-          </div>
-        </>
-      )}
+      <LibraryPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        libraries={libraries}
+        activeLibraryId={activeLibraryId}
+        onSelect={onSelectLibrary}
+        onNewLibrary={onNewLibrary}
+      />
     </div>
   );
 }
