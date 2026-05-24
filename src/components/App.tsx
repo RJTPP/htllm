@@ -84,6 +84,7 @@ export default function App() {
   const [modal, setModal] = useState<ModalId>(null);
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [defaultLibraryId, setDefaultLibraryIdState] = useState<string | null>(null);
+  const [rememberLastLibrary, setRememberLastLibraryState] = useState(false);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
   const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
   const [accentColor, setAccentColorState] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
@@ -120,6 +121,9 @@ export default function App() {
       // The setting can be a library id, null (explicit "no default"),
       // or undefined (never set — same as null at runtime).
       if (typeof v === 'string' || v === null) setDefaultLibraryIdState(v);
+    });
+    getSetting<boolean>('rememberLastLibrary').then((v) => {
+      if (typeof v === 'boolean') setRememberLastLibraryState(v);
     });
   }, []);
 
@@ -519,12 +523,24 @@ export default function App() {
   // Passing null clears the binding (RAG off); a library id binds.
   // Library writes propagate through useLibraries' shared store so the
   // chip stays in sync after Knowledge-page mutations.
+  //
+  // When the "remember last library" setting is on, every non-null
+  // selection also updates defaultLibraryId so new chats inherit the
+  // most recent choice. Clearing to None doesn't change the default —
+  // the preference is "which library to prefer", not "is RAG on".
   const handleChangeRagLibrary = useCallback(
     (id: string | null) => {
       if (!activeThreadId) return;
       updateThread(activeThreadId, { libraryId: id ?? undefined });
+      if (rememberLastLibrary && id !== null && id !== defaultLibraryId) {
+        setDefaultLibraryIdState(id);
+        setSetting('defaultLibraryId', id).catch(() => {
+          // Persistence failure shouldn't break the chat — the in-
+          // memory state is the truth for this session.
+        });
+      }
     },
-    [activeThreadId, updateThread],
+    [activeThreadId, updateThread, rememberLastLibrary, defaultLibraryId],
   );
 
   const handleNewLibraryRequest = useCallback(() => {
@@ -541,6 +557,11 @@ export default function App() {
     },
     [],
   );
+
+  const handleSetRememberLastLibrary = useCallback(async (value: boolean) => {
+    setRememberLastLibraryState(value);
+    await setSetting('rememberLastLibrary', value);
+  }, []);
 
   const handleThreadParamsApply = useCallback(
     (next: ModelParams) => {
@@ -718,6 +739,8 @@ export default function App() {
         setAccentColor={handleSetAccentColor}
         defaultLibraryId={defaultLibraryId}
         setDefaultLibraryId={handleSetDefaultLibraryId}
+        rememberLastLibrary={rememberLastLibrary}
+        setRememberLastLibrary={handleSetRememberLastLibrary}
         tab={settingsTab}
         onTabChange={setSettingsTab}
       />
