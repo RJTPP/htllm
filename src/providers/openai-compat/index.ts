@@ -118,6 +118,55 @@ interface EmbeddingModelEntry {
   };
 }
 
+/**
+ * Known embedding model ids keyed by URL host. Used as a last-resort
+ * fallback when a provider's discovery endpoint is unreachable from the
+ * browser due to missing CORS headers (e.g. OpenRouter's
+ * /v1/embeddings/models returns 200 + JSON but no Access-Control-Allow-Origin,
+ * so the browser silently drops the response).
+ *
+ * These models are confirmed available via curl. The actual /v1/embeddings
+ * POST endpoint on these hosts IS CORS-friendly, so calling the model
+ * works from the browser even though listing it doesn't.
+ */
+const KNOWN_EMBEDDING_MODELS_BY_HOST: Record<string, string[]> = {
+  'openrouter.ai': [
+    'openai/text-embedding-3-small',
+    'openai/text-embedding-3-large',
+    'openai/text-embedding-ada-002',
+    'google/gemini-embedding-001',
+    'google/gemini-embedding-2-preview',
+    'mistralai/mistral-embed-2312',
+    'mistralai/codestral-embed-2505',
+    'qwen/qwen3-embedding-4b',
+    'qwen/qwen3-embedding-8b',
+    'perplexity/pplx-embed-v1-0.6b',
+    'perplexity/pplx-embed-v1-4b',
+    'baai/bge-base-en-v1.5',
+    'baai/bge-large-en-v1.5',
+    'baai/bge-m3',
+    'intfloat/e5-base-v2',
+    'intfloat/e5-large-v2',
+    'intfloat/multilingual-e5-large',
+    'thenlper/gte-base',
+    'thenlper/gte-large',
+    'sentence-transformers/all-minilm-l6-v2',
+    'sentence-transformers/all-minilm-l12-v2',
+    'sentence-transformers/all-mpnet-base-v2',
+    'sentence-transformers/multi-qa-mpnet-base-dot-v1',
+    'sentence-transformers/paraphrase-minilm-l6-v2',
+    'nvidia/llama-nemotron-embed-vl-1b-v2:free',
+  ],
+};
+
+function hostFor(url: string): string | null {
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
+}
+
 export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider {
   readonly id: string;
   readonly displayName: string;
@@ -247,7 +296,27 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
     const fromDedicated = await this.tryDedicatedEmbeddingsEndpoint();
     if (fromDedicated && fromDedicated.length > 0) return fromDedicated;
 
-    return this.embeddingModelsFromUnifiedList();
+    const fromUnified = await this.embeddingModelsFromUnifiedList();
+    if (fromUnified.length > 0) return fromUnified;
+
+    // Last resort: curated list keyed by host. Required for OpenRouter,
+    // whose /v1/embeddings/models is reachable server-side but lacks CORS
+    // headers so the browser drops the response.
+    return this.knownEmbeddingModelsForHost();
+  }
+
+  private knownEmbeddingModelsForHost(): EmbeddingModelInfo[] {
+    const host = hostFor(this.baseURL);
+    if (!host) return [];
+    const known = KNOWN_EMBEDDING_MODELS_BY_HOST[host];
+    if (!known) return [];
+    return known.map((id) => ({
+      id,
+      displayName: id,
+      family: parseFamily(id),
+      dim: 0,
+      offDevice: this.spec.offDevice,
+    }));
   }
 
   /**
