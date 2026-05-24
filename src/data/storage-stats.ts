@@ -5,7 +5,10 @@ export interface StoreStats {
   count: number;
 }
 
-/** Count records in each IndexedDB object store. */
+/** Count records in each IndexedDB object store. Stores that don't
+ *  exist on the current DB schema are silently skipped — useful when a
+ *  partial migration left some new stores unbuilt; the UI still renders
+ *  the rest instead of erroring out entirely. */
 export async function getStoreStats(): Promise<StoreStats[]> {
   const db = await getDb();
   const stores = [
@@ -22,10 +25,15 @@ export async function getStoreStats(): Promise<StoreStats[]> {
   ] as const;
   const results: StoreStats[] = [];
   for (const name of stores) {
-    const tx = db.transaction(name, 'readonly');
-    const count = await tx.store.count();
-    await tx.done;
-    results.push({ name, count });
+    if (!db.objectStoreNames.contains(name)) continue;
+    try {
+      const tx = db.transaction(name, 'readonly');
+      const count = await tx.store.count();
+      await tx.done;
+      results.push({ name, count });
+    } catch (err) {
+      console.warn(`[storage-stats] failed to count ${name}:`, err);
+    }
   }
   return results;
 }

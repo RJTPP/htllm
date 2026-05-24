@@ -140,26 +140,46 @@ export function StorageManager({
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    // Load each source independently. If one throws (e.g. an unmigrated
+    // store), the rest still render. Logging the error helps surface
+    // schema mismatches without breaking the page.
+    const safe = async <T,>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await fn();
+      } catch (err) {
+        console.warn(`[storage] ${label} failed:`, err);
+        return fallback;
+      }
+    };
+
     const [stores, caches, docs, docStats, modelIds] = await Promise.all([
-      getStoreStats(),
-      getCacheEntries(),
-      listDocuments(),
-      getDocumentStats(),
-      listEmbeddingModelIdsWithData(),
+      safe('store stats', getStoreStats, [] as Awaited<ReturnType<typeof getStoreStats>>),
+      safe('cache entries', getCacheEntries, [] as Awaited<ReturnType<typeof getCacheEntries>>),
+      safe('list documents', listDocuments, [] as Document[]),
+      safe('document stats', getDocumentStats, {
+        count: 0,
+        totalSizeBytes: 0,
+        totalChunks: 0,
+      } as DocumentStats),
+      safe('embedding model ids', listEmbeddingModelIdsWithData, [] as string[]),
     ]);
     setStoreStats(stores);
     setCacheEntries(caches);
     setDocuments(docs);
     setDocumentStats(docStats);
-    // Hydrate vector counts per model so the UI can show "X vectors" per
-    // index without scanning the entire embeddings store twice.
+
     const indexes = await Promise.all(
       modelIds.map(async (modelId) => ({
         modelId,
-        vectorCount: await countEmbeddingsForModel(modelId),
+        vectorCount: await safe(
+          `embedding count ${modelId}`,
+          () => countEmbeddingsForModel(modelId),
+          0,
+        ),
       })),
     );
     setEmbeddingIndexes(indexes);
+
     try {
       const est = await navigator.storage.estimate();
       setStorageEstimate({ usage: est.usage ?? 0, quota: est.quota ?? 0 });
