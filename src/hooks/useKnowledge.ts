@@ -8,13 +8,13 @@ import {
   deleteLibrary as deleteLibraryRecord,
   ensureDefaultLibrary,
   getLibrary,
-  listLibraries,
   updateLibrary,
   DEFAULT_LIBRARY_ID,
 } from '../data/libraries';
 import { ingestFile } from '../lib/ingest';
 import { embedDocument, type EmbedProgress } from '../lib/embed-pipeline';
 import { invalidateHybridSearchCache } from '../lib/hybrid-search';
+import { refreshLibrariesShared } from './useLibraries';
 import { getEmbeddingProvider } from '../providers/registry';
 
 /**
@@ -49,18 +49,12 @@ export function useKnowledge() {
     [libraries, activeLibraryId],
   );
 
-  /** Reload the library list with counts. Counts come from documents
-   *  rather than walking chunks so they're cheap. */
+  /** Reload the library list with counts. Delegates to the shared
+   *  store so the KnowledgeChip, Settings picker, and Knowledge page
+   *  all see the same data and stay in sync after mutations. */
   const refreshLibraries = useCallback(async (): Promise<LibraryWithStats[]> => {
     await ensureDefaultLibrary();
-    const libs = await listLibraries();
-    const withStats = await Promise.all(
-      libs.map(async (lib) => {
-        const libDocs = await listDocumentsByLibrary(lib.id);
-        const chunkCount = libDocs.reduce((sum, d) => sum + d.chunkCount, 0);
-        return { lib, docCount: libDocs.length, chunkCount };
-      }),
-    );
+    const withStats = await refreshLibrariesShared();
     setLibraries(withStats);
     return withStats;
   }, []);

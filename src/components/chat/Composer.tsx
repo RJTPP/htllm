@@ -6,6 +6,8 @@ import { shortenModelId } from '../../lib/format';
 import { Image, ArrowRight, Brain } from 'lucide-react';
 import { PromptHints } from './PromptHints';
 import { Tooltip } from '../ui/Tooltip';
+import { KnowledgeChip } from './KnowledgeChip';
+import type { LibraryWithStats } from '../../hooks/useKnowledge';
 
 const MAX_IMAGES = 3;
 
@@ -71,6 +73,10 @@ export function Composer({
   onSend,
   onStop,
   onParams,
+  libraries,
+  ragLibraryId,
+  onChangeRagLibrary,
+  onNewLibrary,
 }: {
   modelReady: boolean;
   model: string | null;
@@ -85,6 +91,12 @@ export function Composer({
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onParams: () => void;
+  /** Knowledge bindings — pass the full library list so the chip can
+   *  show names and surface "no model pinned" warn states. */
+  libraries: LibraryWithStats[];
+  ragLibraryId: string | null;
+  onChangeRagLibrary: (id: string | null) => void;
+  onNewLibrary: () => void;
 }) {
   const [input, setInput] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
@@ -284,6 +296,12 @@ export function Composer({
             <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
           )}
           <div className="flex items-center gap-3">
+            <KnowledgeChip
+              libraryId={ragLibraryId}
+              libraries={libraries}
+              onSelect={onChangeRagLibrary}
+              onNewLibrary={onNewLibrary}
+            />
             <Tooltip label={reasoningTooltip}>
               <div className="flex items-center gap-1">
                 <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />
