@@ -1,5 +1,4 @@
 import type { EngineStatus, LoadProgress, ModelInfo } from '../../providers/types';
-import { Dot } from '../ui/Dot';
 import { Bot } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { shortenModelId } from '../../lib/format';
@@ -21,7 +20,6 @@ export function ModelSlot({
   const isReady = state === 'ready' && !!model;
   const isLoading = state === 'loading';
   const brand = model ? brandForModelId(model, models) : null;
-  const dot = isReady ? 'ok' : isLoading ? 'accent' : 'mute';
 
   return (
     <button
@@ -38,7 +36,6 @@ export function ModelSlot({
       <div className="flex flex-col items-start min-w-0 leading-tight">
         <span className="font-mono text-[9px] uppercase tracking-widest text-mute">chat</span>
         <div className="flex items-center gap-1.5 max-w-[230px]">
-          <Dot tone={dot} />
           <span
             className={`font-mono text-[11px] truncate ${isReady ? 'text-text' : 'text-mute'}`}
           >
