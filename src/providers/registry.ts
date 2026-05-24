@@ -1,4 +1,4 @@
-import type { ChatProvider } from './types';
+import type { ChatProvider, EmbeddingProvider } from './types';
 import { WebLLMProvider } from './webllm/index';
 import { OpenAICompatibleProvider, type HttpProviderSpec } from './openai-compat/index';
 
@@ -62,4 +62,17 @@ export function getHttpProviders(): OpenAICompatibleProvider[] {
 
 export function getAllProviders(): ChatProvider[] {
   return allProviders;
+}
+
+/**
+ * Embedding-capable providers. Currently all HTTP providers implement
+ * EmbeddingProvider (via /v1/embeddings); WebLLM doesn't, so we cast the
+ * subset rather than the whole registry.
+ */
+export function getEmbeddingProviders(): EmbeddingProvider[] {
+  return httpProviders;
+}
+
+export function getEmbeddingProvider(id: string): EmbeddingProvider | undefined {
+  return httpProviders.find((p) => p.id === id);
 }

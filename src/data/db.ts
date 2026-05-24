@@ -27,10 +27,25 @@ export interface HtllmDB {
     key: string;
     value: import('../providers/types').Folder;
   };
+  documents: {
+    key: string;
+    value: import('../providers/types').Document;
+    indexes: { byCreatedAt: number };
+  };
+  chunks: {
+    key: string;
+    value: import('../providers/types').Chunk;
+    indexes: { byDocument: string };
+  };
+  embeddings: {
+    key: string; // chunkId
+    value: import('../providers/types').EmbeddingRecord;
+    indexes: { byModel: string };
+  };
 }
 
 const DB_NAME = 'htllm';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let dbPromise: Promise<IDBPDatabase<HtllmDB>> | null = null;
 
@@ -58,6 +73,18 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
           threadStore.createIndex('byUpdatedAt', 'updatedAt');
           const messageStore = tx.objectStore('messages');
           messageStore.createIndex('byThreadCreated', ['threadId', 'createdAt']);
+        }
+        if (oldVersion < 4) {
+          // Phase 3 — RAG knowledge base stores.
+          const docStore = db.createObjectStore('documents', { keyPath: 'id' });
+          docStore.createIndex('byCreatedAt', 'createdAt');
+
+          const chunkStore = db.createObjectStore('chunks', { keyPath: 'id' });
+          chunkStore.createIndex('byDocument', 'documentId');
+
+          // Keyed by chunkId — one embedding per chunk.
+          const embedStore = db.createObjectStore('embeddings', { keyPath: 'chunkId' });
+          embedStore.createIndex('byModel', 'embeddingModelId');
         }
       },
     });

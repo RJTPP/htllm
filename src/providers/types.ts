@@ -16,6 +16,41 @@ export interface ChatProvider {
 }
 
 /**
+ * Embedding provider — separate from ChatProvider so chat-only backends
+ * (WebLLM today) don't have to implement it. A single provider class may
+ * implement both interfaces (OpenAICompatibleProvider does).
+ */
+export interface EmbeddingProvider {
+  readonly id: string;
+  embed(params: EmbeddingParams): Promise<EmbeddingResult>;
+  listEmbeddingModels(): Promise<EmbeddingModelInfo[]>;
+}
+
+export interface EmbeddingParams {
+  modelId: string;
+  inputs: string[];
+  signal?: AbortSignal;
+}
+
+export interface EmbeddingResult {
+  vectors: Float32Array[];
+  /** Dimensionality of the returned vectors. */
+  dim: number;
+  /** Echo back the model used — providers may normalize the id. */
+  modelId: string;
+}
+
+export interface EmbeddingModelInfo {
+  id: string;
+  displayName: string;
+  family: string;
+  /** Output dimension; 0 if not advertised by the provider. */
+  dim: number;
+  /** True when calling this model sends text off-device (cloud API). */
+  offDevice: boolean;
+}
+
+/**
  * Reasoning capability of a model:
  * - `'effort'` — supports off/low/medium/high (OpenAI o-series)
  * - `'toggle'` — supports on/off only (Qwen3, QwQ, DeepSeek-R1)
@@ -117,6 +152,43 @@ export interface ModelParams {
   contextWindow: number;
   historyMsgs: number;
   reasoningEffort: ReasoningEffort;
+}
+
+/**
+ * Phase 3 — RAG knowledge base entities. Documents are ingested files,
+ * chunks are their text segments, embeddings hold the vector per chunk.
+ * Vectors are stored as plain number[] so IndexedDB structured clone works
+ * without TypedArray quirks; convert to Float32Array for math.
+ */
+export interface Document {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  chunkCount: number;
+  createdAt: number;
+}
+
+export interface Chunk {
+  id: string;
+  documentId: string;
+  /** 0-based position within the document. */
+  index: number;
+  text: string;
+  /** Character offset of this chunk within the original document text. */
+  startOffset: number;
+  /** Heading breadcrumb for markdown chunks, e.g. "Intro > Setup". */
+  headingPath?: string;
+}
+
+export interface EmbeddingRecord {
+  /** Same as chunkId — one embedding per chunk. */
+  chunkId: string;
+  /** Model that produced this vector. Switching models invalidates. (D2) */
+  embeddingModelId: string;
+  /** Vector length; stored per-record for validation. */
+  dim: number;
+  vector: number[];
 }
 
 export interface PromptTemplate {

@@ -5,6 +5,10 @@ import type {
   ModelInfo,
   ContentPart,
   UsageStats,
+  EmbeddingProvider,
+  EmbeddingParams,
+  EmbeddingResult,
+  EmbeddingModelInfo,
 } from '../types';
 import { ProviderError } from '../../lib/errors';
 import { detectReasoning } from '../../lib/reasoning';
@@ -83,7 +87,25 @@ function normalizeBaseURL(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
-export class OpenAICompatibleProvider implements ChatProvider {
+// Patterns used to identify embedding models when a provider's /models
+// endpoint mixes chat and embedding models in one response.
+const EMBEDDING_MODEL_PATTERNS = [
+  /text-embedding/i,
+  /-embed(-|$)/i,
+  /^embed-/i,
+  /nomic-embed/i,
+  /^bge-/i,
+  /^e5-/i,
+  /gte-/i,
+  /mxbai-embed/i,
+  /snowflake-arctic-embed/i,
+];
+
+function isEmbeddingModelId(id: string): boolean {
+  return EMBEDDING_MODEL_PATTERNS.some((re) => re.test(id));
+}
+
+export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider {
   readonly id: string;
   readonly displayName: string;
   readonly authMode: 'none' | 'byok-local';
@@ -172,6 +194,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
     const data = Array.isArray(json.data) ? json.data : [];
     return data
       .filter((m): m is { id: string } => typeof m.id === 'string')
+      // Hide embedding models from the chat picker — they appear separately
+      // in the Knowledge page's embedding model selector.
+      .filter((m) => !isEmbeddingModelId(m.id))
       .map((m) => ({
         id: m.id,
         displayName: m.id,
@@ -182,6 +207,109 @@ export class OpenAICompatibleProvider implements ChatProvider {
         vision: true,
         reasoning: detectReasoning(m.id),
       }));
+  }
+
+  /**
+   * List embedding models exposed by this endpoint. Same /models call as
+   * listModels(), but filtered to embedding-family ids only.
+   */
+  async listEmbeddingModels(): Promise<EmbeddingModelInfo[]> {
+    if (!this.baseURL) return [];
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseURL}/models`, {
+        headers: this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
+      });
+    } catch (err) {
+      throw new ProviderError(this.id, this.unreachableMessage(), err);
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new ProviderError(
+        this.id,
+        `HTTP ${res.status} from /models${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
+      );
+    }
+    const json = (await res.json()) as { data?: { id?: string }[] };
+    const data = Array.isArray(json.data) ? json.data : [];
+    return data
+      .filter((m): m is { id: string } => typeof m.id === 'string')
+      .filter((m) => isEmbeddingModelId(m.id))
+      .map((m) => ({
+        id: m.id,
+        displayName: m.id,
+        family: parseFamily(m.id),
+        // /models does not advertise dimensionality — discovered on first call.
+        dim: 0,
+        offDevice: this.spec.offDevice,
+      }));
+  }
+
+  /**
+   * Generate embeddings for one or more strings. Follows the OpenAI shape:
+   * POST /v1/embeddings { model, input } → { data: [{ embedding: number[] }] }.
+   * Returns Float32Array vectors for in-memory similarity math; stored as
+   * plain number[] in IDB (see EmbeddingRecord).
+   */
+  async embed(params: EmbeddingParams): Promise<EmbeddingResult> {
+    if (!this.baseURL) {
+      throw new ProviderError(this.id, 'No base URL configured');
+    }
+    if (params.inputs.length === 0) {
+      return { vectors: [], dim: 0, modelId: params.modelId };
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseURL}/embeddings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model: params.modelId,
+          input: params.inputs,
+        }),
+        signal: params.signal,
+      });
+    } catch (err) {
+      if (params.signal?.aborted) {
+        throw new ProviderError(this.id, 'Embedding aborted', err);
+      }
+      throw new ProviderError(this.id, this.unreachableMessage(), err);
+    }
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new ProviderError(
+        this.id,
+        `HTTP ${res.status} from /embeddings${detail ? ` — ${detail.slice(0, 200)}` : ''}`,
+      );
+    }
+
+    const json = (await res.json()) as {
+      data?: { embedding?: number[]; index?: number }[];
+      model?: string;
+    };
+    const items = Array.isArray(json.data) ? json.data : [];
+    // Sort by index — some providers don't guarantee response order matches
+    // the input order, but always include the index field.
+    items.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    const vectors = items
+      .filter((d): d is { embedding: number[] } => Array.isArray(d.embedding))
+      .map((d) => Float32Array.from(d.embedding));
+
+    if (vectors.length !== params.inputs.length) {
+      throw new ProviderError(
+        this.id,
+        `Embedding count mismatch: requested ${params.inputs.length}, got ${vectors.length}`,
+      );
+    }
+
+    const firstVector = vectors[0];
+    const dim = firstVector ? firstVector.length : 0;
+    return { vectors, dim, modelId: json.model ?? params.modelId };
   }
 
   async *chat(params: ChatParams): AsyncIterable<ChatChunk> {
