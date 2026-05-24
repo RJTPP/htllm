@@ -58,8 +58,10 @@ export function KnowledgePage() {
   };
 
   return (
-    <div className="flex-1 grid-bg overflow-y-auto">
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-5">
+    <div className="flex-1 grid-bg flex flex-col min-h-0">
+      {/* Non-scrolling top region — header + status bar + tabs stay
+          anchored while the body scrolls underneath. */}
+      <div className="max-w-7xl mx-auto w-full px-6 pt-8 pb-4 space-y-5 shrink-0">
         {/* Header */}
         <div>
           <div className="font-mono text-[10px] text-accent uppercase tracking-widest">
@@ -139,8 +141,13 @@ export function KnowledgePage() {
             {knowledge.error}
           </div>
         )}
+      </div>
 
-        {/* Tab body */}
+      {/* Tab body — owns the remaining vertical so internal columns
+          (libraries / docs / preview) scroll independently of the page
+          header. flex-1 + min-h-0 is the canonical "fill the rest" recipe
+          for a flex-column parent. */}
+      <div className="max-w-7xl mx-auto w-full px-6 pb-8 flex-1 min-h-0 flex flex-col">
         {tab === 'search' ? (
           <SearchPane
             providerId={activeLibrary?.embeddingProviderId ?? defaultProviderId}
@@ -148,7 +155,7 @@ export function KnowledgePage() {
             ready={ragReady}
           />
         ) : (
-          <div className="flex border border-line bg-surface/30 min-h-[480px]">
+          <div className="flex border border-line bg-surface/30 flex-1 min-h-[480px] min-w-0">
             <LibraryList
               libraries={knowledge.libraries}
               activeLibraryId={knowledge.activeLibraryId}
