@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Search, FileText, Plus, AlertTriangle, Sparkles, Pencil } from 'lucide-react';
+import { Search, FileText, Plus, Upload, AlertTriangle, Sparkles, Pencil } from 'lucide-react';
 import { useKnowledge } from '../../hooks/useKnowledge';
 import { useEmbeddingModel } from '../../hooks/useEmbeddingModel';
 import { LibraryList } from './LibraryList';
 import { DocumentDetail } from './DocumentDetail';
 import { NewLibraryModal } from './NewLibraryModal';
-import { DocumentUpload } from './DocumentUpload';
+import { AddDocumentsModal } from './AddDocumentsModal';
 import { EmbeddingProgress } from './EmbeddingProgress';
 import { SemanticSearch } from './SemanticSearch';
 import { EmbeddingModelModal } from './EmbeddingModelSelector';
@@ -28,6 +28,7 @@ export function KnowledgePage() {
 
   const [tab, setTab] = useState<Tab>('search');
   const [newLibraryOpen, setNewLibraryOpen] = useState(false);
+  const [addDocsOpen, setAddDocsOpen] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
@@ -100,7 +101,8 @@ export function KnowledgePage() {
           </div>
         )}
 
-        {/* Tabs + actions row */}
+        {/* Tabs + actions row — actions are always visible across both
+            tabs so the user can add docs from the search view too. */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex gap-1.5">
             <TabButton
@@ -116,9 +118,10 @@ export function KnowledgePage() {
               onClick={() => setTab('documents')}
             />
           </div>
-          {tab === 'documents' && (
-            <div className="flex items-center gap-2">
-              {activeLibrary && activeLibrary.embeddingModelId && (
+          <div className="flex items-center gap-2">
+            {tab === 'documents' &&
+              activeLibrary &&
+              activeLibrary.embeddingModelId && (
                 <button
                   onClick={knowledge.embedAll}
                   disabled={knowledge.progress !== null}
@@ -127,14 +130,19 @@ export function KnowledgePage() {
                   <Sparkles size={12} /> embed all
                 </button>
               )}
-              <button
-                onClick={() => setNewLibraryOpen(true)}
-                className="flex items-center gap-1 font-mono text-[11px] px-2.5 py-1.5 border border-accent/60 text-accent hover:bg-accent/10"
-              >
-                <Plus size={12} /> New library
-              </button>
-            </div>
-          )}
+            <button
+              onClick={() => setNewLibraryOpen(true)}
+              className="flex items-center gap-1 font-mono text-[11px] px-2.5 py-1.5 border border-line text-mute hover:text-accent hover:border-accent/40"
+            >
+              <Plus size={12} /> New library
+            </button>
+            <button
+              onClick={() => setAddDocsOpen(true)}
+              className="flex items-center gap-1 font-mono text-[11px] px-2.5 py-1.5 border border-accent/60 text-accent hover:bg-accent/10"
+            >
+              <Upload size={12} /> Add documents
+            </button>
+          </div>
         </div>
 
         {/* Embedding progress + error banner — visible across both tabs. */}
@@ -169,7 +177,7 @@ export function KnowledgePage() {
               busyDocIds={knowledge.busyDocIds}
               selectedDocId={selectedDoc?.doc.id ?? null}
               onSelect={(id) => setSelectedDocId(id)}
-              onUpload={knowledge.uploadFiles}
+              onAdd={() => setAddDocsOpen(true)}
             />
             <DocumentDetail
               selected={selectedDoc}
@@ -192,6 +200,14 @@ export function KnowledgePage() {
         defaultProviderId={defaultProviderId}
         defaultModelId={defaultModelId}
         onCreate={(input) => knowledge.createLibrary(input)}
+      />
+
+      <AddDocumentsModal
+        open={addDocsOpen}
+        onClose={() => setAddDocsOpen(false)}
+        libraries={knowledge.libraries}
+        defaultLibraryId={knowledge.activeLibraryId}
+        onUpload={knowledge.uploadFiles}
       />
 
       <EmbeddingModelModal
@@ -232,32 +248,46 @@ function TabButton({
 }
 
 /**
- * Middle column — list of docs in the active library plus the drop zone.
- * Compact rows; the right column owns the detail view.
+ * Middle column — list of docs in the active library. Adding files
+ * happens through the AddDocumentsModal, so this column stays focused
+ * on browsing/selection. The header gets a small `+` shortcut to open
+ * the modal pre-targeted to the active library.
  */
 function DocumentsColumn({
   docs,
   busyDocIds,
   selectedDocId,
   onSelect,
-  onUpload,
+  onAdd,
 }: {
   docs: ReturnType<typeof useKnowledge>['docs'];
   busyDocIds: Set<string>;
   selectedDocId: string | null;
   onSelect: (id: string) => void;
-  onUpload: (files: File[]) => void;
+  onAdd: () => void;
 }) {
   return (
     <div className="flex flex-col border-r border-line min-w-[260px] w-[300px]">
-      <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest">
-        documents · {docs.length}
+      <div className="px-3 py-2 border-b border-line flex items-center justify-between">
+        <span className="font-mono text-[10px] text-mute uppercase tracking-widest">
+          documents · {docs.length}
+        </span>
+        <button
+          onClick={onAdd}
+          title="Add documents to this library"
+          className="text-mute hover:text-accent"
+        >
+          <Plus size={12} />
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto">
         {docs.length === 0 ? (
-          <div className="px-3 py-6 font-mono text-[10px] text-mute text-center">
-            empty — drop files below
-          </div>
+          <button
+            onClick={onAdd}
+            className="w-full px-3 py-6 font-mono text-[10px] text-mute text-center hover:bg-surface2/50 hover:text-text transition-colors"
+          >
+            empty — click to add documents
+          </button>
         ) : (
           docs.map(({ doc, status, embeddedChunks }) => {
             const selected = doc.id === selectedDocId;
@@ -290,9 +320,6 @@ function DocumentsColumn({
             );
           })
         )}
-      </div>
-      <div className="border-t border-line p-2">
-        <DocumentUpload onUpload={onUpload} />
       </div>
     </div>
   );

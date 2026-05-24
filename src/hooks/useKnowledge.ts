@@ -155,13 +155,16 @@ export function useKnowledge() {
     [activeLibraryId, refreshLibraries],
   );
 
-  /** Ingest files into the active library. */
+  /** Ingest files into a library. Defaults to the active one so simple
+   *  callers (drop zone) don't have to pass an id; the AddDocumentsModal
+   *  passes an explicit target since it has its own library picker. */
   const uploadFiles = useCallback(
-    async (files: File[]): Promise<void> => {
+    async (files: File[], libraryId?: string): Promise<void> => {
+      const targetId = libraryId ?? activeLibraryId;
       setError(null);
       for (const file of files) {
         try {
-          await ingestFile(file, activeLibraryId);
+          await ingestFile(file, targetId);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           setError(`${file.name}: ${msg}`);
