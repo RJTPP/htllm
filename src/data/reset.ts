@@ -1,6 +1,16 @@
 import { getDb } from './db';
 
-const STORES = ['threads', 'messages', 'keys', 'settings', 'promptTemplates', 'folders'] as const;
+const STORES = [
+  'threads',
+  'messages',
+  'keys',
+  'settings',
+  'promptTemplates',
+  'folders',
+  'documents',
+  'chunks',
+  'embeddings',
+] as const;
 
 /**
  * Wipes every trace of the app from this browser: all IndexedDB object stores,

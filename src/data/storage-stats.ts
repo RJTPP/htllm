@@ -8,7 +8,17 @@ export interface StoreStats {
 /** Count records in each IndexedDB object store. */
 export async function getStoreStats(): Promise<StoreStats[]> {
   const db = await getDb();
-  const stores = ['threads', 'messages', 'keys', 'settings', 'promptTemplates', 'folders'] as const;
+  const stores = [
+    'threads',
+    'messages',
+    'keys',
+    'settings',
+    'promptTemplates',
+    'folders',
+    'documents',
+    'chunks',
+    'embeddings',
+  ] as const;
   const results: StoreStats[] = [];
   for (const name of stores) {
     const tx = db.transaction(name, 'readonly');
@@ -76,7 +86,16 @@ export async function deleteCache(cacheName: string): Promise<void> {
 
 /** Clear a single IndexedDB object store. */
 export async function clearStore(
-  storeName: 'threads' | 'messages' | 'keys' | 'settings' | 'promptTemplates' | 'folders',
+  storeName:
+    | 'threads'
+    | 'messages'
+    | 'keys'
+    | 'settings'
+    | 'promptTemplates'
+    | 'folders'
+    | 'documents'
+    | 'chunks'
+    | 'embeddings',
 ): Promise<void> {
   const db = await getDb();
   const tx = db.transaction(storeName, 'readwrite');

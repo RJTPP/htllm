@@ -9,6 +9,10 @@ interface ExportData {
   promptTemplates: unknown[];
   /** Added later — absent in older exports, which import as no folders. */
   folders?: unknown[];
+  /** Phase 3 — knowledge base. Embeddings are intentionally omitted: they're
+   *  large, model-specific, and re-derivable from chunks. */
+  documents?: unknown[];
+  chunks?: unknown[];
 }
 
 export async function exportAllData(): Promise<string> {
@@ -21,6 +25,8 @@ export async function exportAllData(): Promise<string> {
     settings: await db.getAll('settings'),
     promptTemplates: await db.getAll('promptTemplates'),
     folders: await db.getAll('folders'),
+    documents: await db.getAll('documents'),
+    chunks: await db.getAll('chunks'),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -33,11 +39,22 @@ export async function importAllData(json: string): Promise<void> {
 
   const db = await getDb();
 
-  const stores = ['threads', 'messages', 'settings', 'promptTemplates', 'folders'] as const;
+  // Clear embeddings too — imported chunks are detached from their old
+  // vectors. The user can re-embed from the Knowledge page.
+  const stores = [
+    'threads',
+    'messages',
+    'settings',
+    'promptTemplates',
+    'folders',
+    'documents',
+    'chunks',
+    'embeddings',
+  ] as const;
   for (const storeName of stores) {
     const tx = db.transaction(storeName, 'readwrite');
     await tx.store.clear();
-    const items = data[storeName];
+    const items = (data as unknown as Record<string, unknown>)[storeName];
     if (Array.isArray(items)) {
       for (const item of items) {
         await tx.store.put(item as never);
