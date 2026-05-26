@@ -3,6 +3,28 @@ import { Search, Loader2 } from 'lucide-react';
 import type { EmbeddingProvider } from '../../providers/types';
 import { hybridSearch, type SearchResult } from '../../lib/hybrid-search';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
+import { Modal } from '../ui/Modal';
+
+/**
+ * Module-level cache so the user's last query + results survive when the
+ * Knowledge page swaps tabs (Documents <-> Global search). The cache is
+ * intentionally not persisted to IDB — search hits go stale fast as the
+ * library evolves, and recomputing on demand is cheap.
+ */
+interface SearchCache {
+  query: string;
+  results: SearchResult[];
+  scope: 'all' | string;
+  searched: boolean;
+  error: string | null;
+}
+const searchCache: SearchCache = {
+  query: '',
+  results: [],
+  scope: 'all',
+  searched: false,
+  error: null,
+};
 
 /**
  * Semantic search panel for the Knowledge page. Embeds the query through
@@ -25,11 +47,32 @@ export function SemanticSearch({
   /** True when at least one embedding exists under the active model. */
   ready: boolean;
 }) {
-  const [query, setQuery] = useState('');
+  // Initialize from the module-level cache so a tab switch (Documents
+  // <-> Global search) restores the last query + results instead of
+  // resetting to a blank page. Each setter mirrors back into the cache.
+  const [query, setQueryState] = useState(searchCache.query);
   const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
+  const [results, setResultsState] = useState<SearchResult[]>(searchCache.results);
+  const [error, setErrorState] = useState<string | null>(searchCache.error);
+  const [searched, setSearchedState] = useState(searchCache.searched);
+  const [previewing, setPreviewing] = useState<SearchResult | null>(null);
+
+  const setQuery = (v: string) => {
+    searchCache.query = v;
+    setQueryState(v);
+  };
+  const setResults = (v: SearchResult[]) => {
+    searchCache.results = v;
+    setResultsState(v);
+  };
+  const setError = (v: string | null) => {
+    searchCache.error = v;
+    setErrorState(v);
+  };
+  const setSearched = (v: boolean) => {
+    searchCache.searched = v;
+    setSearchedState(v);
+  };
 
   // Compatible libraries — share the active library's pinned model.
   // "All compatible" is the cross-library default scope; per-library
@@ -47,10 +90,18 @@ export function SemanticSearch({
   // Default to the active library so the search inherits the user's
   // current context — they're reading library A's docs, asking a
   // question should hit library A unless they widen explicitly.
-  const [scope, setScope] = useState<'all' | string>(() => {
+  const [scope, setScopeState] = useState<'all' | string>(() => {
+    if (searchCache.scope === 'all') return 'all';
+    if (searchCache.scope && compatible.some((c) => c.lib.id === searchCache.scope)) {
+      return searchCache.scope;
+    }
     const activeIsCompatible = compatible.some((c) => c.lib.id === activeLibraryId);
     return activeIsCompatible ? activeLibraryId : 'all';
   });
+  const setScope = (v: 'all' | string) => {
+    searchCache.scope = v;
+    setScopeState(v);
+  };
 
   // If the active library or compat set shifts (model change, library
   // delete, etc.) and our narrow scope no longer exists, fall back to
@@ -219,9 +270,10 @@ export function SemanticSearch({
         {results.length > 0 && (
           <div className="space-y-2">
             {results.map((r) => (
-              <div
+              <button
                 key={r.chunkId}
-                className="border border-line bg-surface/40 p-3 space-y-1.5"
+                onClick={() => setPreviewing(r)}
+                className="w-full text-left border border-line bg-surface/40 hover:border-accent/40 p-3 space-y-1.5 transition-colors"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-mono text-[10px] text-mute truncate">
@@ -238,11 +290,36 @@ export function SemanticSearch({
                 <div className="font-sans text-[12.5px] text-text/90 leading-relaxed whitespace-pre-wrap line-clamp-6">
                   {r.text}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
       </div>
+
+      <Modal
+        open={previewing !== null}
+        onClose={() => setPreviewing(null)}
+        title={previewing?.filename ?? ''}
+        subtitle={
+          previewing ? (
+            <span>
+              {previewing.headingPath ? (
+                <span className="text-accent/70">{previewing.headingPath} · </span>
+              ) : null}
+              score {previewing.score.toFixed(3)} · vec {previewing.vectorScore.toFixed(2)} · bm25{' '}
+              {previewing.bm25Score.toFixed(2)}
+            </span>
+          ) : undefined
+        }
+        width="max-w-3xl"
+        stableHeight
+      >
+        <div className="p-4">
+          <div className="font-sans text-[13px] text-text leading-relaxed whitespace-pre-wrap break-words">
+            {previewing?.text}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
