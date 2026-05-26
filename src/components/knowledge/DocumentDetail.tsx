@@ -1,9 +1,15 @@
 import { useState, useEffect } from 'react';
-import { FileText, Trash2, Sparkles, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
+import { FileText, Trash2, Sparkles, Loader2, AlertTriangle, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { fmtBytes, fmtRelativeTime } from '../../lib/format';
 import { getChunksForDocument } from '../../data/chunks';
+import { getSetting, setSetting } from '../../data/settings';
 import type { Chunk } from '../../providers/types';
 import type { DocWithStatus } from '../../hooks/useKnowledge';
+
+/** Persisted under this key: whether to expand chunk previews by default.
+ *  Lives in IDB, so it survives tab close and is shared across tabs (each
+ *  tab still loads its own copy on mount — good enough; no live sync). */
+const CHUNK_PREVIEW_EXPANDED_KEY = 'chunkPreviewExpanded';
 
 const STATUS_LABEL: Record<DocWithStatus['status'], string> = {
   none: 'not embedded',
@@ -51,6 +57,30 @@ export function DocumentDetail({
   // render the first slice. "Load more" expands the window without
   // re-hitting IDB.
   const [visibleCount, setVisibleCount] = useState(INITIAL_CHUNK_PREVIEW);
+  // User-wide toggle: false = chunk bodies line-clamped to 3 lines,
+  // true = show the full body. Persisted to IDB so the choice carries
+  // across documents and across tabs (loaded once per mount; close
+  // enough for a single-user app).
+  const [expanded, setExpanded] = useState(false);
+
+  // Load the persisted preference once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    getSetting<boolean>(CHUNK_PREVIEW_EXPANDED_KEY).then((v) => {
+      if (!cancelled && v === true) setExpanded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleExpanded = () => {
+    setExpanded((prev) => {
+      const next = !prev;
+      void setSetting(CHUNK_PREVIEW_EXPANDED_KEY, next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!selected) {
@@ -92,8 +122,21 @@ export function DocumentDetail({
 
   return (
     <div className="flex-1 min-w-0 flex flex-col">
-      <div className="px-3 py-2 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest">
-        document preview
+      <div className="px-3 py-2 border-b border-line flex items-center justify-between">
+        <span className="font-mono text-[10px] text-mute uppercase tracking-widest">
+          document preview
+        </span>
+        {chunks.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleExpanded}
+            title={expanded ? 'Collapse all chunks' : 'Expand all chunks'}
+            className="flex items-center gap-1 font-mono text-[9px] text-mute hover:text-accent uppercase tracking-widest"
+          >
+            {expanded ? <ChevronsDownUp size={11} /> : <ChevronsUpDown size={11} />}
+            {expanded ? 'collapse' : 'expand'}
+          </button>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         <div className="border border-line p-3 bg-bg/40 space-y-3">
@@ -144,7 +187,11 @@ export function DocumentDetail({
                       chunk #{c.index + 1}
                       {c.headingPath && <span className="ml-1 text-accent/60">· {c.headingPath}</span>}
                     </div>
-                    <div className="leading-relaxed line-clamp-3 whitespace-pre-wrap">
+                    <div
+                      className={`leading-relaxed whitespace-pre-wrap break-words ${
+                        expanded ? '' : 'line-clamp-3'
+                      }`}
+                    >
                       {c.text}
                     </div>
                   </div>
