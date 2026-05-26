@@ -98,10 +98,9 @@ machine (same trust model as Ollama/LM Studio).
 
 ## Phase plan
 
-### Phase 1 — Foundation
+### Phase 1 — Foundation ✅ shipped
 
-Core local-inference chat. Mostly built; remaining items complete the core
-experience before any new surface area.
+Core local-inference chat. Complete.
 
 | Feature | Status |
 |---|---|
@@ -113,32 +112,32 @@ experience before any new surface area.
 | Model picker popup — search, family grouping, fit heuristics | ✅ |
 | System detection rail | ✅ |
 | Streaming chat + throughput display | ✅ |
-| Vision / image attach | ◐ built, unverified |
-| Prompt templates with `/` trigger | ◐ built, unverified |
-| Data import / export | ◐ built, unverified |
-| WebGPU block screen | ◐ gap — not implemented |
-| Per-thread parameter UI (data layer exists; UI only edits globals) | ◐ gap |
-| Navigation shell (Chat live; Knowledge/Storage stubs) | ✦ ☐ |
-| Chat rename | ✦ ☐ |
-| System prompt edit — per-thread, with a configurable global default in Settings | ✦ ☐ |
-| Regenerate response | ✦ ☐ |
-| First-run landing — landing shown once; returning visitors redirect `/` → `/app` via a `localStorage` flag set on app entry | ✦ ☐ |
+| Vision / image attach | ✅ |
+| Prompt templates with `/` trigger | ✅ |
+| Data import / export | ✅ |
+| WebGPU block screen | ✅ |
+| Per-thread parameter UI | ✅ |
+| Navigation shell (Chat live; Knowledge/Storage stubs) | ✅ |
+| Chat rename | ✅ |
+| System prompt edit — per-thread, with a configurable global default in Settings | ✅ |
+| Regenerate response | ✅ |
+| First-run landing — landing shown once; returning visitors redirect `/` → `/app` via a `localStorage` flag set on app entry | ✅ |
 
-### Phase 2 — External providers + chat quality
+### Phase 2 — External providers + chat quality ✅ shipped
 
 | Feature | Status |
 |---|---|
-| Ollama, LM Studio providers (localhost) | ☐ |
-| OpenAI-compatible API provider — BYOK, base URL + key (covers Groq / OpenRouter / custom) | ✦ ☐ |
-| Markdown rendering + code block syntax highlighting | ✦ ☐ (D3) |
-| Context controls — context-window size + history window (messages attached per request) | ✦ ☐ |
-| Auto-generated session names — model-written thread titles from the conversation (replaces the first-message slice) | ✦ ☐ |
-| Prompt-template management UI — create / edit / delete, plus collections, search and import / export | ◐ data layer exists; no UI |
-| Storage manager — basic (model cache list, IDB usage, clear data) | ✦ ☐ |
-| Global conversation search — full-text over all threads/messages | ✦ ☐ |
-| Chat folders / thread organization | ✦ ☐ |
-| Edit any user message + regenerate from that point | ✦ ☐ (extends Phase 1 regenerate) |
-| Keyboard-first navigation — shortcuts + command palette | ✦ ☐ |
+| Ollama, LM Studio providers (localhost) | ✅ |
+| OpenAI-compatible API provider — BYOK, base URL + key (covers Groq / OpenRouter / custom) | ✅ |
+| Markdown rendering + code block syntax highlighting (D3) | ✅ |
+| Context controls — context-window size + history window (messages attached per request) | ✅ |
+| Auto-generated session names — model-written thread titles from the conversation | ✅ |
+| Prompt-template management UI — create / edit / delete, plus collections, search and import / export | ✅ |
+| Storage manager — basic (model cache list, IDB usage, clear data) | ✅ |
+| Global conversation search — full-text over all threads/messages (wired into Cmd/Ctrl+K palette) | ✅ |
+| Chat folders / thread organization | ✅ |
+| Edit any user message + regenerate from that point | ✅ |
+| Keyboard-first navigation — shortcuts + command palette | ✅ |
 
 ### Phase 3 Part 1 — Knowledge / RAG ✅ shipped
 
