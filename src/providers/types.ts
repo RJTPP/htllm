@@ -220,6 +220,32 @@ export interface Chunk {
   startOffset: number;
   /** Heading breadcrumb for markdown chunks, e.g. "Intro > Setup". */
   headingPath?: string;
+  /**
+   * Hierarchical chunking (D8): the larger "parent" chunk this child
+   * belongs to. Children are what gets embedded + retrieved; parents
+   * are what gets returned to the LLM for context. Undefined on legacy
+   * (flat) chunks — retrieval falls back to using the chunk's own text.
+   */
+  parentId?: string;
+}
+
+/**
+ * Parent chunk in the hierarchical chunking scheme (D8). One parent spans
+ * several child Chunks. Children are embedded and searched; parents are
+ * fetched and returned to the LLM. Stored in its own IDB store so we can
+ * keep children small (good retrieval precision) without bloating the
+ * chunks table with redundant parent copies.
+ */
+export interface ParentChunk {
+  id: string;
+  documentId: string;
+  /** 0-based position within the document. */
+  index: number;
+  text: string;
+  /** Character offset within the original document text. */
+  startOffset: number;
+  /** Heading breadcrumb for markdown parents, e.g. "Intro > Setup". */
+  headingPath?: string;
 }
 
 export interface EmbeddingRecord {

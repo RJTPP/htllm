@@ -9,15 +9,17 @@
  * triggers embedding as a separate step.
  */
 
-import type { Document, Chunk } from '../providers/types';
+import type { Document, Chunk, ParentChunk } from '../providers/types';
 import { addDocument } from '../data/documents';
 import { addChunks } from '../data/chunks';
-import { chunkText, type ChunkOpts } from './chunking';
+import { addParents } from '../data/parents';
+import { chunkTextHierarchical, type HierarchicalChunkOpts } from './chunking';
 import { extractPdfText, UnsupportedPdfError } from './pdf';
 
 export interface IngestResult {
   document: Document;
   chunks: Chunk[];
+  parents: ParentChunk[];
 }
 
 export class UnsupportedFileTypeError extends Error {
@@ -68,7 +70,7 @@ function isPdfFile(file: File): boolean {
 export async function ingestFile(
   file: File,
   libraryId: string,
-  opts: ChunkOpts = {},
+  opts: HierarchicalChunkOpts = {},
 ): Promise<IngestResult> {
   let text: string;
   let isMarkdown = false;
@@ -85,27 +87,45 @@ export async function ingestFile(
     throw new UnsupportedFileTypeError(file.type, file.name);
   }
 
-  const rawChunks = chunkText(text, { ...opts, isMarkdown });
+  // D8: hierarchical chunking. Children get embedded + searched; parents
+  // get returned to the LLM. Persist parents first so we have stable ids
+  // to stamp onto the children's parentId field.
+  const hierarchy = chunkTextHierarchical(text, { ...opts, isMarkdown });
 
   const document = await addDocument({
     libraryId,
     filename: file.name,
     mimeType: file.type || (isMarkdown ? 'text/markdown' : 'text/plain'),
     sizeBytes: file.size,
-    chunkCount: rawChunks.length,
+    chunkCount: hierarchy.children.length,
   });
 
-  const chunks = await addChunks(
-    rawChunks.map((c, i) => ({
+  const parents = await addParents(
+    hierarchy.parents.map((p, i) => ({
       documentId: document.id,
       index: i,
-      text: c.text,
-      startOffset: c.startOffset,
-      ...(c.headingPath ? { headingPath: c.headingPath } : {}),
+      text: p.text,
+      startOffset: p.startOffset,
+      ...(p.headingPath ? { headingPath: p.headingPath } : {}),
     })),
   );
 
-  return { document, chunks };
+  const chunks = await addChunks(
+    hierarchy.children.map((c, i) => {
+      const parentIdx = hierarchy.childParentIndex[i] ?? 0;
+      const parent = parents[parentIdx];
+      return {
+        documentId: document.id,
+        index: i,
+        text: c.text,
+        startOffset: c.startOffset,
+        ...(c.headingPath ? { headingPath: c.headingPath } : {}),
+        ...(parent ? { parentId: parent.id } : {}),
+      };
+    }),
+  );
+
+  return { document, chunks, parents };
 }
 
 export { UnsupportedPdfError };

@@ -1,9 +1,11 @@
 /**
- * Markdown-aware recursive text chunking.
+ * Markdown-aware recursive text chunking — flat and hierarchical (D8).
  *
- * Research (LangChain, LlamaIndex, 2025-2026) consistently shows recursive
- * structure-aware splitting outperforms fixed-size windows for retrieval
- * quality. The strategy here:
+ * Research (Vecta 2026, NAACL 2025 Findings, LangChain
+ * ParentDocumentRetriever) converges on parent-child hierarchical
+ * recursive splitting as the production winner: small chunks for
+ * embedding/retrieval precision, larger parent blocks returned to the
+ * LLM for context. The strategy here:
  *
  *   1. For markdown, split by ATX headers first so each chunk carries its
  *      heading breadcrumb (used as source attribution at retrieval time).
@@ -11,17 +13,19 @@
  *      boundaries to pack chunks up to `chunkSize` characters.
  *   3. Adjacent chunks overlap by `overlap` characters so a query phrase
  *      that straddles a boundary still hits at least one chunk fully.
+ *   4. For hierarchical mode, repeat steps 1-3 at a larger parent size
+ *      and map each child to the parent whose offset range contains it.
  *
  * Character-count is a coarse but provider-agnostic stand-in for token
- * count (~4 chars/token for English). The defaults (~400 char chunks,
- * ~80 char overlap) target the 256-512 token sweet spot most embedding
- * models train on.
+ * count (~4 chars/token for English). Child default ~1600 chars (~400
+ * tokens) with 15% overlap; parent default ~6000 chars (~1500 tokens)
+ * with no overlap. These match D8's "400 child / 1500 parent" target.
  */
 
 export interface ChunkOpts {
   /** Target chunk size in characters. Default 1600 (~400 tokens). */
   chunkSize?: number;
-  /** Overlap between adjacent chunks in characters. Default 320 (~20%). */
+  /** Overlap between adjacent chunks in characters. Default 240 (~15%). */
   overlap?: number;
   /** When true, parse ATX headers and track a heading breadcrumb. */
   isMarkdown?: boolean;
@@ -42,7 +46,8 @@ interface Section {
 }
 
 const DEFAULT_CHUNK_SIZE = 1600;
-const DEFAULT_OVERLAP = 320;
+const DEFAULT_OVERLAP = 240;
+const DEFAULT_PARENT_SIZE = 6000;
 
 /**
  * Split markdown into sections at ATX headers, tracking the heading
@@ -188,6 +193,83 @@ function splitWithOffsets(
     result.push({ text: tail, offsetInSection: lastIndex });
   }
   return result;
+}
+
+export interface HierarchicalChunkOpts extends ChunkOpts {
+  /** Target parent chunk size in characters. Default 6000 (~1500 tokens). */
+  parentSize?: number;
+}
+
+/**
+ * Pairing of a parent chunk with the child indices that fall inside it.
+ * `parentIndex` is the position of the parent in the returned `parents`
+ * array; ingest.ts uses it to resolve the (yet-unassigned) parent id and
+ * stamp `parentId` onto the corresponding child rows.
+ */
+export interface HierarchicalChunkResult {
+  parents: RawChunk[];
+  children: RawChunk[];
+  /**
+   * For each child (same index as `children`), the index into `parents`
+   * of the parent it belongs to. Always defined — every child belongs
+   * to exactly one parent (the nearest parent whose offset range
+   * contains the child's startOffset).
+   */
+  childParentIndex: number[];
+}
+
+/**
+ * Hierarchical chunker — produces both parent and child chunks, plus the
+ * mapping from each child to its parent. Children get embedded and
+ * retrieved; parents get returned to the LLM. (D8)
+ *
+ * The mapping is positional: parents and children are generated from the
+ * same source text at different granularities. For each child we pick
+ * the last parent whose `startOffset` is ≤ the child's `startOffset` —
+ * the parent that "encloses" it. This works because both passes walk
+ * the document in the same order.
+ */
+export function chunkTextHierarchical(
+  text: string,
+  opts: HierarchicalChunkOpts = {},
+): HierarchicalChunkResult {
+  const childSize = opts.chunkSize ?? DEFAULT_CHUNK_SIZE;
+  const childOverlap = Math.min(
+    opts.overlap ?? DEFAULT_OVERLAP,
+    Math.floor(childSize / 2),
+  );
+  const parentSize = opts.parentSize ?? DEFAULT_PARENT_SIZE;
+
+  // Parents get no overlap — they're context, not retrieval targets.
+  const parents = chunkText(text, {
+    chunkSize: parentSize,
+    overlap: 0,
+    ...(opts.isMarkdown ? { isMarkdown: true } : {}),
+  });
+  const children = chunkText(text, {
+    chunkSize: childSize,
+    overlap: childOverlap,
+    ...(opts.isMarkdown ? { isMarkdown: true } : {}),
+  });
+
+  // Map each child to its enclosing parent via offsets. Parents are
+  // emitted in document order, so a linear scan works and is O(N+M).
+  const childParentIndex: number[] = [];
+  let parentCursor = 0;
+  for (const child of children) {
+    while (
+      parentCursor + 1 < parents.length &&
+      parents[parentCursor + 1]!.startOffset <= child.startOffset
+    ) {
+      parentCursor++;
+    }
+    // Defensive: if there are somehow no parents (empty doc), drop the
+    // child mapping by pointing at 0 — chunkText would have returned []
+    // for both, so this branch is unreachable in practice.
+    childParentIndex.push(parents.length === 0 ? 0 : parentCursor);
+  }
+
+  return { parents, children, childParentIndex };
 }
 
 /**

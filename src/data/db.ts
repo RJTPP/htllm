@@ -40,6 +40,13 @@ export interface HtllmDB {
   chunks: {
     key: string;
     value: import('../providers/types').Chunk;
+    indexes: { byDocument: string; byParent: string };
+  };
+  parents: {
+    // Hierarchical chunking (D8): the larger context block returned to
+    // the LLM after a child chunk hit. One parent spans several chunks.
+    key: string;
+    value: import('../providers/types').ParentChunk;
     indexes: { byDocument: string };
   };
   embeddings: {
@@ -53,7 +60,7 @@ export interface HtllmDB {
 }
 
 const DB_NAME = 'htllm';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 /** Stable id for the auto-created "Default" library so migrations and
  *  fresh installs both reference the same record. */
@@ -164,6 +171,21 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
               await cursor.update({ ...doc, libraryId: DEFAULT_LIBRARY_ID });
             }
             cursor = await cursor.continue();
+          }
+        }
+        if (oldVersion < 7) {
+          // D8 — hierarchical chunking. Adds a parents store and a
+          // byParent index on chunks. Existing flat chunks (no parentId)
+          // continue to work; retrieval falls back to the chunk's own
+          // text when parentId is undefined. No backfill — only new
+          // ingestion produces parents.
+          if (!db.objectStoreNames.contains('parents')) {
+            const parentStore = db.createObjectStore('parents', { keyPath: 'id' });
+            parentStore.createIndex('byDocument', 'documentId');
+          }
+          const chunkStore = tx.objectStore('chunks');
+          if (!chunkStore.indexNames.contains('byParent')) {
+            chunkStore.createIndex('byParent', 'parentId');
           }
         }
       },
