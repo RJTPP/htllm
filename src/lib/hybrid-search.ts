@@ -13,14 +13,24 @@ import type { Chunk, Document } from '../providers/types';
 import { getAllChunks } from '../data/chunks';
 import { getDocument, listDocuments } from '../data/documents';
 import { getAllEmbeddingsForModel } from '../data/embeddings';
+import { getParents } from '../data/parents';
 import { cosineSimilarity, minMaxNormalize } from './vector-search';
 
 export interface SearchResult {
   chunkId: string;
   documentId: string;
   filename: string;
+  /**
+   * Text returned to the caller for grounding. With D8 hierarchical
+   * chunking this is the *parent* chunk's text when the matched child
+   * has a parentId; otherwise it falls back to the child's own text
+   * (legacy flat chunks). Either way, downstream callers don't need to
+   * branch — `text` is what to show / inject.
+   */
   text: string;
   headingPath?: string;
+  /** Parent id when the hit came from hierarchical chunking. */
+  parentId?: string;
   /** Combined normalized score in [0, 1]. */
   score: number;
   /** Component scores for debugging / UI display. */
@@ -180,11 +190,44 @@ export async function hybridSearch(
   );
   combined.sort((a, b) => b.combined - a.combined);
 
-  // Hydrate top results with chunk + document metadata.
-  const docCache = new Map<string, Document | undefined>();
-  const results: SearchResult[] = [];
+  // D8 dedupe pass: walk combined in score order, and for chunks that
+  // have a parentId, keep only the first (best-scoring) hit per parent.
+  // Children without a parent (legacy flat chunks) are kept as-is.
+  // Cap at topK *parents* (or unique items), not topK raw chunks —
+  // otherwise multiple children of the same parent would crowd out
+  // hits from other docs.
+  const seenParents = new Set<string>();
+  const deduped: typeof combined = [];
   for (const c of combined) {
     if (c.combined < minScore) continue;
+    const chunk = chunkById.get(c.id);
+    if (!chunk) continue;
+    if (chunk.parentId) {
+      if (seenParents.has(chunk.parentId)) continue;
+      seenParents.add(chunk.parentId);
+    }
+    deduped.push(c);
+    if (deduped.length >= topK) break;
+  }
+  if (deduped.length === 0) return [];
+
+  // Batch-fetch the parents we need so we don't hit IDB once per hit.
+  const parentIds: string[] = [];
+  for (const c of deduped) {
+    const chunk = chunkById.get(c.id);
+    if (chunk?.parentId) parentIds.push(chunk.parentId);
+  }
+  const parentRecords = await getParents(parentIds);
+  const parentById = new Map<string, (typeof parentRecords)[number]>();
+  for (let i = 0; i < parentIds.length; i++) {
+    parentById.set(parentIds[i]!, parentRecords[i]);
+  }
+
+  // Hydrate results — text comes from the parent when present, otherwise
+  // from the chunk itself.
+  const docCache = new Map<string, Document | undefined>();
+  const results: SearchResult[] = [];
+  for (const c of deduped) {
     const chunk = chunkById.get(c.id);
     if (!chunk) continue;
     let doc = docCache.get(chunk.documentId);
@@ -192,17 +235,20 @@ export async function hybridSearch(
       doc = await getDocument(chunk.documentId);
       docCache.set(chunk.documentId, doc);
     }
+    const parent = chunk.parentId ? parentById.get(chunk.parentId) : undefined;
+    const text = parent?.text ?? chunk.text;
+    const headingPath = parent?.headingPath ?? chunk.headingPath;
     results.push({
       chunkId: chunk.id,
       documentId: chunk.documentId,
       filename: doc?.filename ?? '(deleted)',
-      text: chunk.text,
-      headingPath: chunk.headingPath,
+      text,
+      ...(headingPath ? { headingPath } : {}),
+      ...(chunk.parentId ? { parentId: chunk.parentId } : {}),
       score: c.combined,
       vectorScore: c.vec,
       bm25Score: c.bm25,
     });
-    if (results.length >= topK) break;
   }
   return results;
 }

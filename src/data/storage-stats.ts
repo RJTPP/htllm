@@ -21,6 +21,7 @@ export async function getStoreStats(): Promise<StoreStats[]> {
     'libraries',
     'documents',
     'chunks',
+    'parents',
     'embeddings',
   ] as const;
   const results: StoreStats[] = [];
@@ -105,6 +106,7 @@ export async function clearStore(
     | 'libraries'
     | 'documents'
     | 'chunks'
+    | 'parents'
     | 'embeddings',
 ): Promise<void> {
   const db = await getDb();

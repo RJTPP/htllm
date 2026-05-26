@@ -3,6 +3,7 @@ import type { Document } from '../providers/types';
 import { getDb } from './db';
 import { deleteChunksForDocument } from './chunks';
 import { deleteEmbeddingsForDocument } from './embeddings';
+import { deleteParentsForDocument } from './parents';
 
 /**
  * Create a Document record. Chunks and embeddings are persisted separately
@@ -55,6 +56,7 @@ export async function updateDocument(
 export async function deleteDocument(id: string): Promise<void> {
   await deleteEmbeddingsForDocument(id);
   await deleteChunksForDocument(id);
+  await deleteParentsForDocument(id);
   const db = await getDb();
   await db.delete('documents', id);
 }
