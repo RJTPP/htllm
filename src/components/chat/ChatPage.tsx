@@ -1,7 +1,8 @@
-import { useRef, useEffect, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
 import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
+import type { ConversationBudget } from '../../hooks/useChat';
 import { SystemPromptBar } from './SystemPromptBar';
 import { MessageView } from './MessageView';
 import { EmptyState } from './EmptyState';
@@ -10,6 +11,7 @@ import { Composer } from './Composer';
 export function ChatPage({
   thread,
   messages,
+  budget,
   models,
   loadedModelId,
   modelReady,
@@ -34,6 +36,10 @@ export function ChatPage({
 }: {
   thread: Thread | null;
   messages: Message[];
+  /** Token-budget snapshot from useChat — drives the composer meter
+   *  and surfaces sliding-window drop counts. Null while no thread is
+   *  loaded; otherwise updated whenever messages/params/system change. */
+  budget: ConversationBudget | null;
   models: ModelInfo[];
   loadedModelId: string | null;
   modelReady: boolean;
@@ -65,13 +71,19 @@ export function ChatPage({
     }
   }, [messages]);
 
-  const contextUsed = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const u = messages[i]?.usage;
-      if (u) return u.promptTokens + u.completionTokens;
-    }
-    return 0;
-  }, [messages]);
+  // Token meter source: prefer the live budget snapshot (predicts what
+  // *would* be sent on the next request). Falls back to the model's
+  // last reported usage when budget is unavailable (e.g. fresh thread
+  // with no params yet). Both estimates only.
+  const contextUsed = budget
+    ? budget.systemTokens + budget.conversationTokens
+    : (() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const u = messages[i]?.usage;
+          if (u) return u.promptTokens + u.completionTokens;
+        }
+        return 0;
+      })();
 
   const handleRegenerate = useCallback(() => {
     if (!modelReady) {
@@ -127,6 +139,7 @@ export function ChatPage({
         templates={templates}
         contextUsed={contextUsed}
         contextTotal={params.contextWindow}
+        droppedCount={budget?.droppedCount ?? 0}
         reasoningCapability={reasoningCapability}
         reasoningEffort={params.reasoningEffort}
         onReasoningChange={onReasoningChange}

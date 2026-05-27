@@ -153,12 +153,16 @@ export default function App() {
 
   const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
 
-  // RAG binding: per-thread libraryId. Resolution prefers the
-  // thread's explicit binding; falls back to the user's preferred
-  // default-library setting; undefined means RAG is off for this
-  // chat. useChat resolves the library + its model internally.
+  // RAG binding: per-thread libraryId. Three-way resolution so the
+  // composer's "None" choice sticks:
+  //   - undefined on thread → inherit from defaultLibraryId
+  //   - null      on thread → explicit OFF, ignore the default
+  //   - string    on thread → bound to that library
+  // useChat takes the resolved id (or null) and handles the rest.
   const ragLibraryId =
-    activeThread?.libraryId ?? defaultLibraryId ?? null;
+    activeThread?.libraryId === undefined
+      ? defaultLibraryId ?? null
+      : activeThread.libraryId;
   const ragConfig: RagConfig = { libraryId: ragLibraryId };
 
   // Shared library list — the composer KnowledgeChip uses it for its
@@ -228,7 +232,7 @@ export default function App() {
     return { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
   }, [rawParams, activeThread?.modelParams, activeReasoningCapability]);
 
-  const { messages, generating, send, regenerate, editAndResend, stop } = useChat(
+  const { messages, generating, budget, send, regenerate, editAndResend, stop } = useChat(
     activeProvider,
     activeModelId,
     activeThreadId,
@@ -549,7 +553,10 @@ export default function App() {
   const handleChangeRagLibrary = useCallback(
     (id: string | null) => {
       if (!activeThreadId) return;
-      updateThread(activeThreadId, { libraryId: id ?? undefined });
+      // Write null directly when the user clears — undefined would let
+      // the defaultLibraryId fallback re-bind silently on next render.
+      // The resolution path treats null as explicit OFF.
+      updateThread(activeThreadId, { libraryId: id });
       if (rememberLastLibrary && id !== null && id !== defaultLibraryId) {
         setDefaultLibraryIdState(id);
         setSetting('defaultLibraryId', id).catch(() => {
@@ -681,6 +688,7 @@ export default function App() {
                 <ChatPage
                   thread={activeThread}
                   messages={messages}
+                  budget={budget}
                   models={models}
                   loadedModelId={activeModelId || null}
                   modelReady={modelReady}
