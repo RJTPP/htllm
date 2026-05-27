@@ -15,6 +15,8 @@ interface CreateLibraryInput {
   name: string;
   embeddingModelId?: string;
   embeddingProviderId?: string;
+  /** D8 Part B — opt in to contextual retrieval at creation time. */
+  useContextualRetrieval?: boolean;
 }
 
 export async function createLibrary(input: CreateLibraryInput): Promise<Library> {
@@ -23,6 +25,7 @@ export async function createLibrary(input: CreateLibraryInput): Promise<Library>
     name: input.name.trim() || 'Untitled library',
     embeddingModelId: input.embeddingModelId ?? '',
     ...(input.embeddingProviderId ? { embeddingProviderId: input.embeddingProviderId } : {}),
+    ...(input.useContextualRetrieval ? { useContextualRetrieval: true } : {}),
     createdAt: Date.now(),
   };
   const db = await getDb();

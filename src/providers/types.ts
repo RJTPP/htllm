@@ -201,6 +201,22 @@ export interface Library {
   /** Optional provider hint — handy when the same model id is served by
    *  multiple providers and we want to remember which one. */
   embeddingProviderId?: string;
+  /**
+   * D8 Part B — Contextual Retrieval (Anthropic, 2024). When true,
+   * embedding runs a chat-model pass per chunk to generate a 50-100
+   * token "situating" blurb (parent doc context + section), prepends
+   * it to the chunk text, then embeds the result. The chunk text in
+   * IndexedDB stays clean — only the *vector* reflects the blurb.
+   *
+   * Trade-off: significantly slower indexing (one LLM call per chunk)
+   * for 35-49% retrieval failure reduction per Anthropic's evals.
+   * Defaults to false; the create/edit UI surfaces the cost upfront.
+   *
+   * Requires (a) chunks with a `parentId` (D8 Part A hierarchical
+   * chunking) — legacy flat chunks are silently skipped during embed
+   * — and (b) a chat model loaded/configured at embed time.
+   */
+  useContextualRetrieval?: boolean;
   createdAt: number;
 }
 

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Search, FileText, Plus, Upload, Sparkles, Trash2, Loader2 } from 'lucide-react';
-import { useKnowledge } from '../../hooks/useKnowledge';
+import { useKnowledge, type ContextualizerFactory } from '../../hooks/useKnowledge';
 import { ActiveLibraryBar } from './ActiveLibraryBar';
 import { LibraryList } from './LibraryList';
 import { DocumentDetail } from './DocumentDetail';
@@ -22,8 +22,18 @@ type Tab = 'search' | 'documents';
  * Libraries are first-class; every document belongs to one. The active
  * library's pinned embedding model drives embedding and search.
  */
-export function KnowledgePage() {
-  const knowledge = useKnowledge();
+export function KnowledgePage({
+  getContextualizer,
+}: {
+  /** D8 Part B — App wires this from the currently active chat
+   *  provider/model. Returns null when no chat model is available;
+   *  embed pipeline then falls back to vanilla (with a console warning
+   *  if the library opted into contextual retrieval). */
+  getContextualizer?: ContextualizerFactory;
+} = {}) {
+  const knowledge = useKnowledge({
+    ...(getContextualizer ? { getContextualizer } : {}),
+  });
 
   const [tab, setTab] = useState<Tab>('search');
   const [newLibraryOpen, setNewLibraryOpen] = useState(false);

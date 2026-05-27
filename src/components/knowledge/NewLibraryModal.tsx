@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { EmbeddingModelModal } from './EmbeddingModelSelector';
-import { Check, Pencil } from 'lucide-react';
+import { Check, Pencil, Sparkles, AlertTriangle } from 'lucide-react';
 
 /**
  * Create-a-library modal. Library name plus the embedding model the
@@ -28,11 +28,13 @@ export function NewLibraryModal({
     name: string;
     embeddingProviderId?: string;
     embeddingModelId?: string;
+    useContextualRetrieval?: boolean;
   }) => void;
 }) {
   const [name, setName] = useState('');
   const [providerId, setProviderId] = useState<string | null>(defaultProviderId);
   const [modelId, setModelId] = useState<string | null>(defaultModelId);
+  const [useContextualRetrieval, setUseContextualRetrieval] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Reset to defaults whenever the modal is opened.
@@ -41,6 +43,7 @@ export function NewLibraryModal({
       setName('');
       setProviderId(defaultProviderId);
       setModelId(defaultModelId);
+      setUseContextualRetrieval(false);
     }
   }, [open, defaultProviderId, defaultModelId]);
 
@@ -53,6 +56,7 @@ export function NewLibraryModal({
       ...(providerId && modelId
         ? { embeddingProviderId: providerId, embeddingModelId: modelId }
         : {}),
+      ...(useContextualRetrieval ? { useContextualRetrieval: true } : {}),
     });
     onClose();
   };
@@ -105,6 +109,41 @@ export function NewLibraryModal({
               Switching this later requires re-embedding every document in the
               library. You can leave it unset and pick on first embed.
             </p>
+          </div>
+
+          {/* D8 Part B — Contextual Retrieval toggle. Worth flagging the
+              cost honestly because it's per-chunk LLM-bound, not per-batch. */}
+          <div className="space-y-1.5">
+            <label className="flex items-start gap-2.5 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={useContextualRetrieval}
+                onChange={(e) => setUseContextualRetrieval(e.target.checked)}
+                className="accent-accent mt-0.5"
+              />
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex items-center gap-1.5 font-mono text-[12px] text-text group-hover:text-accent">
+                  <Sparkles size={11} className="text-accent/80" />
+                  Use contextual retrieval
+                </div>
+                <p className="font-mono text-[10px] text-mute/70 leading-relaxed">
+                  Each chunk gets a short "where this fits" blurb generated
+                  by your chat model and prepended before embedding (~35-49%
+                  retrieval lift). The blurb does not change the stored
+                  chunk text.
+                </p>
+                {useContextualRetrieval && (
+                  <div className="flex items-start gap-1.5 font-mono text-[10px] text-warn pt-1">
+                    <AlertTriangle size={11} className="shrink-0 mt-px" />
+                    <span>
+                      Indexing runs one chat-model call per chunk —
+                      significantly slower. Requires a chat model to be
+                      loaded or configured when embedding.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </label>
           </div>
 
           <div className="flex justify-end gap-2 pt-1">

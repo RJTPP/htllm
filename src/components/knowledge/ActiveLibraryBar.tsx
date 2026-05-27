@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Cloud, HardDrive, AlertTriangle } from 'lucide-react';
+import { Cloud, HardDrive, AlertTriangle, Sparkles } from 'lucide-react';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { localityOf } from '../../lib/network';
 import { getProvider } from '../../providers/registry';
@@ -57,6 +57,14 @@ export function ActiveLibraryBar({
           >
             {lib.name}
           </button>
+          {lib.useContextualRetrieval && (
+            <span
+              title="Contextual retrieval enabled — embeddings include a chat-model-generated situating blurb per chunk"
+              className="shrink-0 inline-flex items-center gap-0.5 font-mono text-[9px] uppercase tracking-wider text-accent border border-accent/40 bg-accent/5 px-1 leading-[14px]"
+            >
+              <Sparkles size={9} />ctx
+            </span>
+          )}
           <span className="font-mono text-[10.5px] text-mute truncate">
             · {docCount} doc{docCount === 1 ? '' : 's'}, {chunkCount} chunk
             {chunkCount === 1 ? '' : 's'}
