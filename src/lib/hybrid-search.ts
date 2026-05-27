@@ -224,14 +224,18 @@ export async function hybridSearch(
   }
 
   // Hydrate results — text comes from the parent when present, otherwise
-  // from the chunk itself.
+  // from the chunk itself. `docCache.has()` (not `get() === undefined`)
+  // so deleted-doc misses are cached too — otherwise every hit on a
+  // deleted document re-hits IDB.
   const docCache = new Map<string, Document | undefined>();
   const results: SearchResult[] = [];
   for (const c of deduped) {
     const chunk = chunkById.get(c.id);
     if (!chunk) continue;
-    let doc = docCache.get(chunk.documentId);
-    if (doc === undefined) {
+    let doc: Document | undefined;
+    if (docCache.has(chunk.documentId)) {
+      doc = docCache.get(chunk.documentId);
+    } else {
       doc = await getDocument(chunk.documentId);
       docCache.set(chunk.documentId, doc);
     }

@@ -134,8 +134,14 @@ export interface Thread {
   /**
    * Library this thread retrieves from for RAG. Undefined means no
    * retrieval — RAG is opt-in per thread. Set by clicking the
-   * knowledge chip in the composer; new threads inherit
-   * settings.defaultLibraryId if it's set, otherwise stay undefined.
+   * knowledge chip in the composer.
+   *
+   * NOTE: `createThread()` does NOT persist `libraryId` at creation
+   * time. The "new threads inherit defaultLibraryId" behavior is
+   * implemented as a runtime fallback in App.tsx (`activeThread?.libraryId
+   * ?? defaultLibraryId ?? null`) — so changing the default later affects
+   * existing un-bound threads too. Set `libraryId` here explicitly to
+   * pin a thread regardless of future default changes.
    *
    * Replaces the old ragEnabled boolean: library presence IS the
    * state ("none" = off, any library id = on, scoped to that library

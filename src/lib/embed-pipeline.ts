@@ -28,8 +28,10 @@ export interface EmbedPipelineOpts {
 const DEFAULT_BATCH_SIZE = 32;
 
 /**
- * Embed every chunk of a single document. Existing embeddings for the same
- * chunkIds are overwritten (keyed by chunkId in IDB).
+ * Embed every chunk of a single document. Existing embeddings for the
+ * same (chunkId, modelId) pair are overwritten — the embeddings store
+ * uses a composite key `[chunkId, embeddingModelId]` (D2) so vectors
+ * from different models coexist instead of clobbering each other.
  */
 export async function embedDocument(
   documentId: string,

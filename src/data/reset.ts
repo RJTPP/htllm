@@ -10,6 +10,7 @@ const STORES = [
   'libraries',
   'documents',
   'chunks',
+  'parents',
   'embeddings',
 ] as const;
 
