@@ -12,6 +12,12 @@ import { stripThinking } from '../lib/thinking';
 import { buildRagContext } from '../lib/rag-context';
 import { getLibrary } from '../data/libraries';
 import { getEmbeddingProvider } from '../providers/registry';
+import {
+  fitToBudget,
+  reserveForResponse,
+  sliceByUserTurns,
+} from '../lib/conversation-budget';
+import { estimateMessageTokens, estimateStringTokens } from '../lib/tokens';
 
 /** Extract plain text from a Message.content payload (string or parts). */
 function userMessageText(msg: Message): string {
@@ -37,6 +43,25 @@ export interface RagConfig {
   libraryId: string | null;
 }
 
+/**
+ * Snapshot of the most recent prompt's token budget. Updated on every
+ * send() and lightly recomputed when messages/system/params change so
+ * the token meter has something to show before the user sends.
+ *
+ * Counts are estimates (chars/4 + per-message overhead) — accurate
+ * within ~10%, plenty for the green/amber/red threshold bands. Never
+ * trusted for exact fit decisions; that's what the response reserve
+ * is for.
+ */
+export interface ConversationBudget {
+  contextWindow: number;
+  systemTokens: number;
+  conversationTokens: number;
+  droppedTokens: number;
+  droppedCount: number;
+  responseReserve: number;
+}
+
 export function useChat(
   provider: ChatProvider,
   modelId: string,
@@ -49,6 +74,7 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [budget, setBudget] = useState<ConversationBudget | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Ref keeps the latest messages accessible from callbacks without adding
   // `messages` to their dependency arrays (which would destabilize them).
@@ -57,6 +83,46 @@ export function useChat(
 
   // Abort any in-flight stream on unmount to prevent stale setState calls.
   useEffect(() => () => { abortRef.current?.abort(); }, []);
+
+  // Passive budget snapshot — recompute whenever the loaded thread,
+  // params, or system prompt change so the token meter has something
+  // accurate to show before the user sends. We don't run RAG here
+  // (it's async + costs an embed call); the actual send updates the
+  // snapshot with the RAG block included.
+  useEffect(() => {
+    if (!threadId) {
+      setBudget(null);
+      return;
+    }
+    const trimmed = sliceByUserTurns(messages, params.historyMsgs);
+    const responseReserve = reserveForResponse(
+      params.contextWindow,
+      params.maxTokens,
+    );
+    const sysTokens = systemPrompt.trim()
+      ? estimateStringTokens(systemPrompt.trim()) + 4
+      : 0;
+    const conversationBudget = Math.max(
+      0,
+      params.contextWindow - responseReserve - sysTokens,
+    );
+    const fit = fitToBudget(trimmed, conversationBudget);
+    setBudget({
+      contextWindow: params.contextWindow,
+      systemTokens: sysTokens,
+      conversationTokens: fit.keptTokens,
+      droppedTokens: fit.droppedTokens,
+      droppedCount: fit.dropped.length,
+      responseReserve,
+    });
+  }, [
+    threadId,
+    messages,
+    params.historyMsgs,
+    params.contextWindow,
+    params.maxTokens,
+    systemPrompt,
+  ]);
 
   // Load messages when thread changes; cancelled flag prevents race condition
   // if the user switches threads before the prior load resolves.
@@ -95,7 +161,12 @@ export function useChat(
       let finalUsage: UsageStats | undefined;
 
       try {
-        const trimmed = params.historyMsgs > 0 ? history.slice(-params.historyMsgs) : history;
+        // Layer 1 (user-turn slicing): cap how many of the user's most
+        // recent messages are included. Each user message brings its
+        // associated assistant reply along — counting only user turns
+        // matches how users think about "history" ("the last N things
+        // I asked"). historyMsgs=0 means no cap.
+        const trimmed = sliceByUserTurns(history, params.historyMsgs);
 
         // Strip reasoning from assistant messages in history so the model
         // doesn't see its own chain-of-thought. Handles both:
@@ -170,7 +241,47 @@ export function useChat(
               createdAt: 0,
             }
           : null;
-        const sendMessages = sysMsg ? [sysMsg, ...cleaned] : cleaned;
+        // Layer 2 (token-budget sliding window): always-on safety net.
+        // System message is always sent and counts toward the budget but
+        // is never sliced. The conversation tail is fit to whatever room
+        // remains after the system message + response reservation.
+        const responseReserve = reserveForResponse(
+          params.contextWindow,
+          params.maxTokens,
+        );
+        const sysTokens = sysMsg ? estimateMessageTokens(sysMsg) : 0;
+        const conversationBudget = Math.max(
+          0,
+          params.contextWindow - responseReserve - sysTokens,
+        );
+        const fit = fitToBudget(cleaned, conversationBudget);
+        if (fit.singleMessageOverflow) {
+          console.warn(
+            '[chat] latest message exceeds the conversation budget on its own — ' +
+              'the provider will likely error. Increase contextWindow or shorten ' +
+              'the message.',
+            { budget: conversationBudget, used: fit.keptTokens },
+          );
+        }
+        if (fit.dropped.length > 0) {
+          console.debug(
+            `[chat] sliding window dropped ${fit.dropped.length} message(s) ` +
+              `(${fit.droppedTokens} tokens) to fit the budget.`,
+          );
+        }
+        const sendMessages = sysMsg ? [sysMsg, ...fit.kept] : fit.kept;
+
+        // Surface the latest budget snapshot to consumers (token meter
+        // in the chat header reads from here). Estimates only — never
+        // exact, but accurate enough for the 50/75/90% color tiers.
+        setBudget({
+          contextWindow: params.contextWindow,
+          systemTokens: sysTokens,
+          conversationTokens: fit.keptTokens,
+          droppedTokens: fit.droppedTokens,
+          droppedCount: fit.dropped.length,
+          responseReserve,
+        });
 
         // Throttle UI updates to ~60 fps via requestAnimationFrame.
         // Token chunks arrive at 100+ per second from fast models; flushing
@@ -344,5 +455,5 @@ export function useChat(
     abortRef.current?.abort();
   }, []);
 
-  return { messages, generating, send, regenerate, editAndResend, stop };
+  return { messages, generating, budget, send, regenerate, editAndResend, stop };
 }

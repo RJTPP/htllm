@@ -67,6 +67,7 @@ export function Composer({
   templates,
   contextUsed,
   contextTotal,
+  droppedCount = 0,
   reasoningCapability,
   reasoningEffort,
   onReasoningChange,
@@ -85,6 +86,10 @@ export function Composer({
   templates: PromptTemplate[];
   contextUsed: number;
   contextTotal: number;
+  /** D10a — number of older messages dropped by the token-budget
+   *  sliding window. When > 0, a small "trimmed" chip appears next
+   *  to the context meter so the user knows older context is gone. */
+  droppedCount?: number;
   reasoningCapability?: ReasoningCapability;
   reasoningEffort: ReasoningEffort;
   onReasoningChange: (effort: ReasoningEffort) => void;
@@ -290,11 +295,21 @@ export function Composer({
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
-          {contextTotal > 0 ? (
-            <ContextRing used={contextUsed} total={contextTotal} />
-          ) : (
-            <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
-          )}
+          <div className="flex items-center gap-2">
+            {contextTotal > 0 ? (
+              <ContextRing used={contextUsed} total={contextTotal} />
+            ) : (
+              <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
+            )}
+            {droppedCount > 0 && (
+              <span
+                title={`${droppedCount} older message${droppedCount === 1 ? '' : 's'} dropped to fit the context window`}
+                className="font-mono text-[9px] text-warn/80 border border-warn/40 px-1 leading-[14px] uppercase tracking-wider"
+              >
+                −{droppedCount} trimmed
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <KnowledgeChip
               libraryId={ragLibraryId}
