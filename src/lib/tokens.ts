@@ -10,6 +10,7 @@
  * fit. The token-budget slider leaves ~10% headroom for this reason.
  */
 import type { ContentPart, Message } from '../providers/types';
+import { stripThinking } from './thinking';
 
 /** Average chars per token for English-ish content. Empirical across
  *  OpenAI cl100k / Anthropic / Llama tokenizers — close enough that the
@@ -31,15 +32,29 @@ export function estimateStringTokens(s: string): number {
 /** Estimate the token count of a single Message, including the per-msg
  *  envelope overhead. Image parts are counted at a fixed ~85 tokens
  *  (rough OpenAI vision "low detail" estimate) — accurate enough since
- *  vision usage in chat tends to be a handful of images, not a flood. */
+ *  vision usage in chat tends to be a handful of images, not a flood.
+ *
+ *  Mirrors what `useChat` strips before sending: for assistant messages,
+ *  in-content `<think>...</think>` tags don't reach the provider, so
+ *  they shouldn't count toward the budget either. (Local reasoning
+ *  models — Qwen3, DeepSeek-R1 — bake reasoning into `content`; API
+ *  providers use the separate `reasoning` field, which we already skip
+ *  since only `content` is counted.) */
 export function estimateMessageTokens(msg: Message): number {
   let body = 0;
   if (typeof msg.content === 'string') {
-    body = estimateStringTokens(msg.content);
+    const text =
+      msg.role === 'assistant' ? stripThinking(msg.content) : msg.content;
+    body = estimateStringTokens(text);
   } else {
     for (const part of msg.content as ContentPart[]) {
-      if (part.type === 'text') body += estimateStringTokens(part.text);
-      else if (part.type === 'image_url') body += 85;
+      if (part.type === 'text') {
+        const text =
+          msg.role === 'assistant' ? stripThinking(part.text) : part.text;
+        body += estimateStringTokens(text);
+      } else if (part.type === 'image_url') {
+        body += 85;
+      }
     }
   }
   return body + PER_MESSAGE_OVERHEAD_TOKENS;
