@@ -28,8 +28,12 @@ async function loadOnce(): Promise<void> {
   if (loadingPromise) return loadingPromise;
   loadingPromise = (async () => {
     await ensureDefaultLibrary();
-    await refreshStore();
+    // Flip the flag BEFORE refreshStore — its internal notify() is the
+    // first chance subscribers get to see `loaded === true`. Setting it
+    // after the notify would leave subscribers with a stale snapshot
+    // (loaded=false) and no second notification to correct them.
     loaded = true;
+    await refreshStore();
   })();
   return loadingPromise;
 }

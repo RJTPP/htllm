@@ -14,6 +14,10 @@ interface ExportData {
   libraries?: unknown[];
   documents?: unknown[];
   chunks?: unknown[];
+  /** Hierarchical chunking parents (D8). Older exports lack this; their
+   *  chunks have undefined `parentId` and retrieval falls back to chunk
+   *  text, so the absence is graceful. */
+  parents?: unknown[];
 }
 
 export async function exportAllData(): Promise<string> {
@@ -29,6 +33,7 @@ export async function exportAllData(): Promise<string> {
     libraries: await db.getAll('libraries'),
     documents: await db.getAll('documents'),
     chunks: await db.getAll('chunks'),
+    parents: await db.getAll('parents'),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -52,6 +57,7 @@ export async function importAllData(json: string): Promise<void> {
     'libraries',
     'documents',
     'chunks',
+    'parents',
     'embeddings',
   ] as const;
   for (const storeName of stores) {

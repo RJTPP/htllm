@@ -177,8 +177,14 @@ export function useKnowledge() {
         lib && lib.embeddingProviderId ? getEmbeddingProvider(lib.embeddingProviderId) : null;
       const canAutoEmbed = Boolean(lib && lib.embeddingModelId && libProvider);
 
-      // Pre-compute the total chunk count across all files for a single
-      // progress bar that spans both ingestion and embedding.
+      // Single progress bar that spans both ingestion and embedding.
+      // `cumulativeEmbedded` is the running embedded count across all
+      // files processed so far in this batch. `plannedTotal` is the
+      // running denominator — it only grows as each file is ingested
+      // (we don't know chunk counts until ingest finishes). Per-file
+      // total = plannedTotal directly; never add `chunks.length - p.embedded`
+      // on top, that double-counts the current doc and makes the bar
+      // shrink as it fills.
       let cumulativeEmbedded = 0;
       let plannedTotal = 0;
       if (canAutoEmbed) setBusyLibraryId(targetId);
@@ -195,7 +201,7 @@ export function useKnowledge() {
               (p) => {
                 setProgress({
                   embedded: cumulativeEmbedded + p.embedded,
-                  total: plannedTotal + (chunks.length - p.embedded),
+                  total: plannedTotal,
                   documentId: document.id,
                 });
               },
