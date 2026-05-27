@@ -228,7 +228,7 @@ export default function App() {
     return { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
   }, [rawParams, activeThread?.modelParams, activeReasoningCapability]);
 
-  const { messages, generating, send, regenerate, editAndResend, stop } = useChat(
+  const { messages, generating, budget, send, regenerate, editAndResend, stop } = useChat(
     activeProvider,
     activeModelId,
     activeThreadId,
@@ -681,6 +681,7 @@ export default function App() {
                 <ChatPage
                   thread={activeThread}
                   messages={messages}
+                  budget={budget}
                   models={models}
                   loadedModelId={activeModelId || null}
                   modelReady={modelReady}
