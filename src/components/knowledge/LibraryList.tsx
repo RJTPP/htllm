@@ -56,7 +56,17 @@ export function LibraryList({
                 onClick={() => onSelect(lib.id)}
                 className="w-full text-left px-3 py-2"
               >
-                <div className="text-[12.5px] text-text truncate pr-12">{lib.name}</div>
+                <div className="flex items-center gap-1.5 pr-12">
+                  <span className="text-[12.5px] text-text truncate">{lib.name}</span>
+                  {lib.useContextualRetrieval && (
+                    <span
+                      title="Contextual retrieval enabled — embeddings include a chat-model-generated situating blurb"
+                      className="shrink-0 inline-flex items-center gap-0.5 font-mono text-[9px] uppercase tracking-wider text-accent border border-accent/40 bg-accent/5 px-1 leading-[14px]"
+                    >
+                      <Sparkles size={8} />ctx
+                    </span>
+                  )}
+                </div>
                 <div className="font-mono text-[10px] text-mute mt-0.5 flex items-center gap-1">
                   <span>
                     {docCount} doc{docCount === 1 ? '' : 's'} · {chunkCount} chunk

@@ -22,6 +22,15 @@ export interface EmbedProgress {
    *  embedding. Bumped per-chunk; lets the UI show a "contextualizing…"
    *  affordance while the long pass runs. */
   contextualized?: number;
+  /** When a multi-file pass (upload, embed-all) is running, these
+   *  surface the per-file granularity so the UI can render
+   *  "file 2/3 · chunk 18/50". 0-based fileIndex; fileTotal is set
+   *  whenever fileIndex is. Single-doc flows leave both undefined. */
+  fileIndex?: number;
+  fileTotal?: number;
+  /** Chunk counts for the file currently being processed. */
+  fileChunks?: number;
+  fileEmbedded?: number;
 }
 
 export interface EmbedPipelineOpts {

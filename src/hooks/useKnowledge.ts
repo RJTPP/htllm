@@ -220,7 +220,8 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
         );
       }
 
-      for (const file of files) {
+      for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        const file = files[fileIndex]!;
         try {
           const { document, chunks } = await ingestFile(file, targetId);
           if (canAutoEmbed && lib && libProvider) {
@@ -234,6 +235,10 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
                   embedded: cumulativeEmbedded + p.embedded,
                   total: plannedTotal,
                   documentId: document.id,
+                  fileIndex,
+                  fileTotal: files.length,
+                  fileChunks: chunks.length,
+                  fileEmbedded: p.embedded,
                   ...(p.contextualized !== undefined
                     ? { contextualized: p.contextualized }
                     : {}),
@@ -327,7 +332,8 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
         const list = await listDocumentsByLibrary(lib.id);
         const totalChunks = list.reduce((sum, d) => sum + d.chunkCount, 0);
         let done = 0;
-        for (const d of list) {
+        for (let i = 0; i < list.length; i++) {
+          const d = list[i]!;
           await embedDocument(
             d.id,
             libProvider,
@@ -337,6 +343,10 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
                 embedded: done + p.embedded,
                 total: totalChunks,
                 documentId: d.id,
+                fileIndex: i,
+                fileTotal: list.length,
+                fileChunks: d.chunkCount,
+                fileEmbedded: p.embedded,
                 ...(p.contextualized !== undefined
                   ? { contextualized: p.contextualized }
                   : {}),
@@ -374,7 +384,8 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
       const list = await listDocumentsByLibrary(activeLibrary.id);
       const totalChunks = list.reduce((sum, d) => sum + d.chunkCount, 0);
       let done = 0;
-      for (const d of list) {
+      for (let i = 0; i < list.length; i++) {
+        const d = list[i]!;
         await embedDocument(
           d.id,
           activeEmbeddingProvider,
@@ -384,6 +395,10 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
               embedded: done + p.embedded,
               total: totalChunks,
               documentId: d.id,
+              fileIndex: i,
+              fileTotal: list.length,
+              fileChunks: d.chunkCount,
+              fileEmbedded: p.embedded,
               ...(p.contextualized !== undefined
                 ? { contextualized: p.contextualized }
                 : {}),
