@@ -132,22 +132,27 @@ export interface Thread {
   /** Folder this thread belongs to; undefined means ungrouped. */
   folderId?: string;
   /**
-   * Library this thread retrieves from for RAG. Undefined means no
-   * retrieval — RAG is opt-in per thread. Set by clicking the
-   * knowledge chip in the composer.
+   * Library this thread retrieves from for RAG. Three states:
+   *
+   *   - undefined: never explicitly chosen → use defaultLibraryId (the
+   *     "inherit from settings" path). New threads start here.
+   *   - null:      explicitly turned OFF for this thread. Overrides
+   *     the default; RAG stays off even if defaultLibraryId is set.
+   *   - string:    bound to that specific library.
+   *
+   * The null state is what the composer's "None" picker writes.
+   * Without it, picking None would silently revert to defaultLibraryId
+   * on the next render — the bug fixed in D10a.
    *
    * NOTE: `createThread()` does NOT persist `libraryId` at creation
-   * time. The "new threads inherit defaultLibraryId" behavior is
-   * implemented as a runtime fallback in App.tsx (`activeThread?.libraryId
-   * ?? defaultLibraryId ?? null`) — so changing the default later affects
-   * existing un-bound threads too. Set `libraryId` here explicitly to
-   * pin a thread regardless of future default changes.
+   * time. The "inherit defaultLibraryId" behavior is implemented as a
+   * runtime fallback in App.tsx — undefined falls through to the
+   * default, null does not.
    *
    * Replaces the old ragEnabled boolean: library presence IS the
-   * state ("none" = off, any library id = on, scoped to that library
-   * and its pinned embedding model).
+   * state.
    */
-  libraryId?: string;
+  libraryId?: string | null;
   /**
    * @deprecated Replaced by libraryId. Older threads may still carry
    * this flag; the runtime ignores it. Safe to remove in a future
