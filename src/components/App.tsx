@@ -7,6 +7,7 @@ import type {
   ModelParams,
   ChatProvider,
   ReasoningEffort,
+  Library,
 } from '../providers/types';
 import { getProvider, getWebLLMProvider, getHttpProviders } from '../providers/registry';
 import { useSystem } from '../hooks/useSystem';
@@ -28,6 +29,7 @@ import {
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
 import { generateTitle } from '../lib/title';
+import { createContextualizer, type Contextualizer } from '../lib/contextualizer';
 import { detectReasoning, defaultEffort } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
@@ -172,6 +174,22 @@ export default function App() {
   const activeProviderId = activeProvider.id;
   const isApiThread = !activeProvider.needsModelLoad;
   const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
+
+  // D8 Part B — factory for Contextual Retrieval. Knowledge page passes
+  // this into useKnowledge; when a library has opted in, the embed pipeline
+  // invokes the returned contextualizer per chunk. Falls back to null
+  // (vanilla embedding) when no chat model is currently ready, so the
+  // user can still embed — just without the retrieval-quality lift.
+  const getContextualizer = useCallback(
+    (_lib: Library): Contextualizer | null => {
+      if (!activeModelId) return null;
+      // WebLLM needs the model actually loaded; HTTP providers are ready
+      // as soon as they have an id. Mirrors the title-generation guard.
+      if (activeProvider.needsModelLoad && !loadedModelId) return null;
+      return createContextualizer(activeProvider, activeModelId);
+    },
+    [activeProvider, activeModelId, loadedModelId],
+  );
 
   // New threads get a title from the first message: a trimmed slice always
   // (instant), then optionally upgraded to a model-generated title. If
@@ -687,7 +705,9 @@ export default function App() {
                 />
               </>
             )}
-            {page === 'knowledge' && <KnowledgePage />}
+            {page === 'knowledge' && (
+              <KnowledgePage getContextualizer={getContextualizer} />
+            )}
             {page === 'storage' && (
                   <StorageManager
                     models={models}

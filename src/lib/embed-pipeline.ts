@@ -9,13 +9,19 @@ import type { EmbeddingProvider, EmbeddingRecord } from '../providers/types';
 import { getChunksForDocument } from '../data/chunks';
 import { saveEmbeddings } from '../data/embeddings';
 import { listDocuments } from '../data/documents';
+import { getParents } from '../data/parents';
 import { invalidateHybridSearchCache } from './hybrid-search';
+import { type Contextualizer, formatContextualizedChunk } from './contextualizer';
 
 export interface EmbedProgress {
   embedded: number;
   total: number;
   /** Current document being processed, if available. */
   documentId?: string;
+  /** D8 Part B — chunks that ran a contextualization pass before
+   *  embedding. Bumped per-chunk; lets the UI show a "contextualizing…"
+   *  affordance while the long pass runs. */
+  contextualized?: number;
 }
 
 export interface EmbedPipelineOpts {
@@ -23,6 +29,15 @@ export interface EmbedPipelineOpts {
   batchSize?: number;
   /** Abort the in-flight embed. */
   signal?: AbortSignal;
+  /**
+   * D8 Part B — when set, each chunk gets a chat-model-generated
+   * situating blurb prepended before embedding (Anthropic's Contextual
+   * Retrieval). Slow: one LLM call per chunk. The chunk text in IDB
+   * stays unchanged; only the vector reflects the blurb. Chunks without
+   * a parentId (legacy flat chunking) are skipped silently — vanilla
+   * embedding only.
+   */
+  contextualizer?: Contextualizer | null;
 }
 
 const DEFAULT_BATCH_SIZE = 32;
@@ -44,13 +59,57 @@ export async function embedDocument(
   const chunks = await getChunksForDocument(documentId);
   if (chunks.length === 0) return 0;
 
+  // D8 Part B — when contextualizing, pre-fetch every parent in a single
+  // pass so we don't hit IDB per chunk. Map by id for O(1) lookup. If
+  // there's no contextualizer we skip this entirely.
+  const parentTextById = new Map<string, string>();
+  if (opts.contextualizer) {
+    const parentIds = Array.from(
+      new Set(chunks.map((c) => c.parentId).filter((id): id is string => !!id)),
+    );
+    const parents = await getParents(parentIds);
+    for (let i = 0; i < parentIds.length; i++) {
+      const p = parents[i];
+      if (p) parentTextById.set(parentIds[i]!, p.text);
+    }
+  }
+
   let embedded = 0;
+  let contextualized = 0;
   for (let i = 0; i < chunks.length; i += batchSize) {
     if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     const batch = chunks.slice(i, i + batchSize);
+
+    // Resolve the actual input string per chunk. Contextualization is
+    // sequential within a batch — running it concurrently would explode
+    // LLM-side queueing on local models. The embed call below stays
+    // batched, so we only pay the LLM cost serially, not the embed cost.
+    const inputs: string[] = [];
+    for (const chunk of batch) {
+      if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      let inputText = chunk.text;
+      if (opts.contextualizer && chunk.parentId) {
+        const parentText = parentTextById.get(chunk.parentId);
+        if (parentText) {
+          const blurb = await opts.contextualizer(chunk.text, parentText, opts.signal);
+          if (blurb) {
+            inputText = formatContextualizedChunk(blurb, chunk.text);
+            contextualized++;
+            onProgress?.({
+              embedded,
+              total: chunks.length,
+              documentId,
+              contextualized,
+            });
+          }
+        }
+      }
+      inputs.push(inputText);
+    }
+
     const result = await provider.embed({
       modelId,
-      inputs: batch.map((c) => c.text),
+      inputs,
       signal: opts.signal,
     });
     const records: EmbeddingRecord[] = batch.map((chunk, idx) => {
@@ -67,7 +126,7 @@ export async function embedDocument(
     });
     await saveEmbeddings(records);
     embedded += records.length;
-    onProgress?.({ embedded, total: chunks.length, documentId });
+    onProgress?.({ embedded, total: chunks.length, documentId, contextualized });
   }
 
   // Vectors changed — drop the BM25 cache too, since chunks may be new.

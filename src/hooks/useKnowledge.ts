@@ -16,6 +16,22 @@ import { embedDocument, type EmbedProgress } from '../lib/embed-pipeline';
 import { invalidateHybridSearchCache } from '../lib/hybrid-search';
 import { refreshLibrariesShared } from './useLibraries';
 import { getEmbeddingProvider } from '../providers/registry';
+import type { Contextualizer } from '../lib/contextualizer';
+
+/**
+ * D8 Part B — caller supplies a contextualizer factory. Given a library
+ * that has opted into Contextual Retrieval, the factory returns a
+ * Contextualizer closed over an available chat provider/model, or null
+ * if no chat model is currently available (in which case the embed
+ * pipeline falls back to vanilla embedding for that library and logs
+ * a warning).
+ *
+ * Pushing the factory through props (rather than importing a chat
+ * provider directly inside this hook) keeps useKnowledge unaware of
+ * chat-side state and lets App.tsx wire whatever provider it considers
+ * "active" right now.
+ */
+export type ContextualizerFactory = (lib: Library) => Contextualizer | null;
 
 /**
  * Per-document embedding status under the active library's pinned model.
@@ -35,7 +51,8 @@ export interface LibraryWithStats {
   chunkCount: number;
 }
 
-export function useKnowledge() {
+export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory } = {}) {
+  const { getContextualizer } = opts;
   const [libraries, setLibraries] = useState<LibraryWithStats[]>([]);
   const [activeLibraryId, setActiveLibraryId] = useState<string>(DEFAULT_LIBRARY_ID);
   const [docs, setDocs] = useState<DocWithStatus[]>([]);
@@ -116,6 +133,7 @@ export function useKnowledge() {
       name: string;
       embeddingProviderId?: string;
       embeddingModelId?: string;
+      useContextualRetrieval?: boolean;
     }) => {
       const lib = await createLibraryRecord(input);
       await refreshLibraries();
@@ -189,6 +207,19 @@ export function useKnowledge() {
       let plannedTotal = 0;
       if (canAutoEmbed) setBusyLibraryId(targetId);
 
+      // Resolve the contextualizer once per upload (it's the same
+      // library + same chat provider for the whole batch).
+      const contextualizer =
+        lib && lib.useContextualRetrieval && getContextualizer
+          ? getContextualizer(lib)
+          : null;
+      if (lib?.useContextualRetrieval && !contextualizer) {
+        console.warn(
+          `[useKnowledge] library "${lib.name}" opts into contextual retrieval ` +
+            'but no chat model is available — embedding vanilla.',
+        );
+      }
+
       for (const file of files) {
         try {
           const { document, chunks } = await ingestFile(file, targetId);
@@ -203,8 +234,12 @@ export function useKnowledge() {
                   embedded: cumulativeEmbedded + p.embedded,
                   total: plannedTotal,
                   documentId: document.id,
+                  ...(p.contextualized !== undefined
+                    ? { contextualized: p.contextualized }
+                    : {}),
                 });
               },
+              contextualizer ? { contextualizer } : {},
             );
             cumulativeEmbedded += chunks.length;
           }
@@ -218,7 +253,7 @@ export function useKnowledge() {
       invalidateHybridSearchCache();
       await refreshLibraries();
     },
-    [activeLibraryId, refreshLibraries],
+    [activeLibraryId, refreshLibraries, getContextualizer],
   );
 
   /** Resolve the active library's embedding provider. Returns null if
@@ -238,6 +273,10 @@ export function useKnowledge() {
         setError('Pin an embedding model to this library before embedding.');
         return;
       }
+      const contextualizer =
+        activeLibrary.useContextualRetrieval && getContextualizer
+          ? getContextualizer(activeLibrary)
+          : null;
       setBusyDocIds((s) => new Set(s).add(docId));
       setError(null);
       try {
@@ -246,6 +285,7 @@ export function useKnowledge() {
           activeEmbeddingProvider,
           activeLibrary.embeddingModelId,
           (p) => setProgress(p),
+          contextualizer ? { contextualizer } : {},
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -259,7 +299,7 @@ export function useKnowledge() {
         await refreshDocs();
       }
     },
-    [activeLibrary, activeEmbeddingProvider, refreshDocs],
+    [activeLibrary, activeEmbeddingProvider, refreshDocs, getContextualizer],
   );
 
   /** Embed every doc in a specific library under its pinned model.
@@ -277,6 +317,10 @@ export function useKnowledge() {
         setError(`Provider "${lib.embeddingProviderId}" is no longer registered.`);
         return;
       }
+      const contextualizer =
+        lib.useContextualRetrieval && getContextualizer
+          ? getContextualizer(lib)
+          : null;
       setError(null);
       setBusyLibraryId(lib.id);
       try {
@@ -293,7 +337,11 @@ export function useKnowledge() {
                 embedded: done + p.embedded,
                 total: totalChunks,
                 documentId: d.id,
+                ...(p.contextualized !== undefined
+                  ? { contextualized: p.contextualized }
+                  : {}),
               }),
+            contextualizer ? { contextualizer } : {},
           );
           done += d.chunkCount;
         }
@@ -305,7 +353,7 @@ export function useKnowledge() {
         await refreshLibraries();
       }
     },
-    [refreshLibraries],
+    [refreshLibraries, getContextualizer],
   );
 
   /** Embed every doc in the active library that isn't fully covered. */
@@ -314,6 +362,10 @@ export function useKnowledge() {
       setError('Pin an embedding model to this library before embedding.');
       return;
     }
+    const contextualizer =
+      activeLibrary.useContextualRetrieval && getContextualizer
+        ? getContextualizer(activeLibrary)
+        : null;
     setError(null);
     setBusyLibraryId(activeLibrary.id);
     try {
@@ -327,7 +379,16 @@ export function useKnowledge() {
           d.id,
           activeEmbeddingProvider,
           activeLibrary.embeddingModelId,
-          (p) => setProgress({ embedded: done + p.embedded, total: totalChunks, documentId: d.id }),
+          (p) =>
+            setProgress({
+              embedded: done + p.embedded,
+              total: totalChunks,
+              documentId: d.id,
+              ...(p.contextualized !== undefined
+                ? { contextualized: p.contextualized }
+                : {}),
+            }),
+          contextualizer ? { contextualizer } : {},
         );
         done += d.chunkCount;
       }
@@ -338,7 +399,7 @@ export function useKnowledge() {
       setBusyLibraryId(null);
       await refreshDocs();
     }
-  }, [activeLibrary, activeEmbeddingProvider, refreshDocs]);
+  }, [activeLibrary, activeEmbeddingProvider, refreshDocs, getContextualizer]);
 
   const removeDoc = useCallback(
     async (docId: string): Promise<void> => {
