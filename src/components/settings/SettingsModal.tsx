@@ -1,7 +1,7 @@
 import { useState, memo, type Dispatch, type SetStateAction } from 'react';
 import type { PromptTemplate, ModelParams } from '../../providers/types';
 import { createTemplate, deleteTemplate, updateTemplate } from '../../data/prompt-templates';
-import { type TitleMode, type AccentColor, type CompressionMode, ACCENT_PRESETS } from '../../data/settings';
+import { type TitleMode, type AccentColor, type CompressionMode, ACCENT_PRESETS, MIN_AUTO_COMPACT_CONTEXT_TOKENS } from '../../data/settings';
 import { resetEverything } from '../../data/reset';
 import { Modal } from '../ui/Modal';
 import { Badge } from '../ui/Badge';
@@ -201,8 +201,8 @@ export function SettingsModal({
   setRememberLastLibrary,
   compressionMode,
   setCompressionMode,
-  rememberLastModel,
-  setRememberLastModel,
+  rememberPerSessionModel,
+  setRememberPerSessionModel,
   tab,
   onTabChange,
 }: {
@@ -229,9 +229,9 @@ export function SettingsModal({
   /** D10b — compression mode (auto-summarize / drop / off). */
   compressionMode: CompressionMode;
   setCompressionMode: (value: CompressionMode) => void;
-  /** When on, restore + auto-load the previous session's model. */
-  rememberLastModel: boolean;
-  setRememberLastModel: (value: boolean) => void;
+  /** On: each chat keeps its own model. Off: one global model for all. */
+  rememberPerSessionModel: boolean;
+  setRememberPerSessionModel: (value: boolean) => void;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
 }) {
@@ -517,18 +517,19 @@ export function SettingsModal({
             <label className="flex items-start gap-2.5 cursor-pointer group">
               <input
                 type="checkbox"
-                checked={rememberLastModel}
-                onChange={(e) => setRememberLastModel(e.target.checked)}
+                checked={rememberPerSessionModel}
+                onChange={(e) => setRememberPerSessionModel(e.target.checked)}
                 className="accent-accent mt-0.5"
               />
               <div className="min-w-0">
                 <div className="font-mono text-[12px] text-text group-hover:text-accent transition-colors">
-                  Remember last model
+                  Remember per-session model
                 </div>
                 <div className="font-mono text-[10px] text-mute/80 leading-relaxed mt-0.5">
-                  Reload the model from your previous session and auto-load it when
-                  you send. Off by default — local models can be multi-gigabyte, so
-                  htllm won&apos;t download one without you picking it.
+                  On: each chat keeps the model you last used in it. Off (default):
+                  one global model — picking a model anywhere applies to every chat.
+                  (A cached local model still auto-loads on send; htllm never
+                  downloads one without you picking it.)
                 </div>
               </div>
             </label>
@@ -540,7 +541,7 @@ export function SettingsModal({
             <div className="flex gap-1.5">
               {(
                 [
-                  ['auto', 'Auto-summarize'],
+                  ['auto', 'Auto-compact'],
                   ['drop', 'Drop oldest'],
                   ['off', 'Off'],
                 ] as [CompressionMode, string][]
@@ -559,24 +560,27 @@ export function SettingsModal({
               ))}
             </div>
             <div className="font-mono text-[10px] text-mute mt-2 leading-relaxed">
-              What happens when the conversation exceeds the context window.{' '}
-              <span className="text-accent/70">Auto-summarize</span> runs a chat-model
-              call on the dropped messages and injects the result as a{' '}
-              <code className="text-accent/70">&lt;summary&gt;</code> block — slower
-              indexing, less context lost. <span className="text-accent/70">Drop oldest</span>{' '}
-              silently trims older messages (cheaper, lossy).{' '}
-              <span className="text-accent/70">Off</span> sends the full history
-              untouched — no summarizing, no trimming; the provider becomes the real
-              limit and reports if it doesn&apos;t fit (zero hidden LLM activity).
-              Auto-summarize needs a context window of at least 4k tokens; falls back
-              to dropping below that.
+              What happens as the conversation approaches the context window.{' '}
+              <span className="text-accent/70">Auto-compact</span> summarizes older
+              turns into a <code className="text-accent/70">&lt;summary&gt;</code> block
+              (a chat-model call) and keeps recent turns verbatim — less context lost.{' '}
+              <span className="text-accent/70">Drop oldest</span> silently trims older
+              messages (cheaper, lossy). <span className="text-accent/70">Off</span>{' '}
+              sends the full history untouched; the provider becomes the real limit and
+              reports if it doesn&apos;t fit (zero hidden LLM activity). Auto-compact
+              needs a context window of at least {MIN_AUTO_COMPACT_CONTEXT_TOKENS / 1024}k
+              tokens; falls back to dropping below that.
             </div>
           </div>
           <div className="border-t border-line pt-4">
             <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
               default generation parameters
             </div>
-            <ParamControls params={globalDefaults} onChange={setGlobalDefaults} />
+            <ParamControls
+              params={globalDefaults}
+              onChange={setGlobalDefaults}
+              contextMin={compressionMode === 'auto' ? MIN_AUTO_COMPACT_CONTEXT_TOKENS : undefined}
+            />
             <div className="font-mono text-[10px] text-mute mt-2">
               New threads inherit these. Each thread can override them independently.
             </div>

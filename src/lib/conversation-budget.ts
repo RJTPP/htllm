@@ -1,61 +1,16 @@
 /**
- * Conversation budgeting for chat prompts — D10a (sliding window).
+ * Conversation budgeting for chat prompts.
  *
- * Two layers compose to decide which conversation messages make it into
- * a chat request:
- *
- *   1. User-turn slicing (`sliceByUserTurns`) — caps how many of the
- *      user's most recent messages are included. Each user message
- *      brings its associated assistant reply along. Driven by the user's
- *      `historyMsgs` setting; 0 = no cap.
- *
- *   2. Token-budget sliding window (`fitToBudget`) — always-on safety
- *      net. Walks backwards from the latest message and includes as
- *      many as fit under the budget. The latest user message is
- *      preserved verbatim even if it alone exceeds the budget — the
- *      provider will error in that case, but we never silently drop
- *      the active intent.
- *
- * Compaction (D10b) plugs in on top of `fitToBudget`: when messages
- * are dropped, the dropped portion can be summarized and reinjected.
- * This module owns the pure budget math; the integration with the
- * chat provider lives in `useChat`.
+ * The whole conversation flows into the prompt; context is managed by
+ * compaction (D10b) and, in drop mode, the token-budget sliding window
+ * (`fitToBudget`) — both keyed on token estimates, not a message count.
+ * `recencyBoundaryIndex` decides how much recent context compaction
+ * must keep verbatim. This module owns the pure budget math; the
+ * integration with the chat provider lives in `useChat`.
  */
 
 import type { Message } from '../providers/types';
 import { estimateMessageTokens } from './tokens';
-
-/**
- * Return the tail of `messages` that contains at most `n` user
- * messages. Walks backwards: counts a user message as 1, includes
- * everything from the Nth-most-recent user message onward.
- *
- * Edge cases:
- *  - n <= 0 → returns the original array unchanged (no cap)
- *  - fewer than n user messages exist → returns everything
- *  - trailing assistant message after the last user message is kept
- *    (it's part of the current exchange)
- *  - leading assistant messages BEFORE the first kept user message
- *    are dropped (their paired user is older than the cap)
- */
-export function sliceByUserTurns(messages: Message[], n: number): Message[] {
-  if (n <= 0 || messages.length === 0) return messages;
-
-  let userSeen = 0;
-  // Find the earliest index we want to keep. We're walking backwards,
-  // so the first time `userSeen === n` we have our anchor — we keep
-  // that index and everything after.
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]!.role === 'user') {
-      userSeen++;
-      if (userSeen === n) {
-        return messages.slice(i);
-      }
-    }
-  }
-  // Ran off the start without hitting N — return everything.
-  return messages;
-}
 
 /**
  * Index of the first message to KEEP verbatim when compacting, given

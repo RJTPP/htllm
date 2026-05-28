@@ -6,10 +6,10 @@
  * sliding window would otherwise drop messages AND the user opted in
  * via Compression=auto.
  *
- * Prompt structure synthesized from Claude Code, Codex, and Anthropic
- * API defaults — five required elements (goal, decisions, facts
- * verbatim, code, current state). Tool-call JSON is kept verbatim now
- * as cheap insurance for Phase 4.
+ * Prompt is Codex's open-source "context checkpoint compaction" handoff,
+ * used unconditionally. When a prior summary exists it is included as
+ * data so the prompt's Historical Context rule carries earlier history
+ * forward cumulatively — re-compaction never discards it.
  *
  * Modeled on lib/contextualizer.ts: abort-aware, per-call timeout,
  * reasoning stripped from the output, hard cap on the result text.
@@ -19,6 +19,9 @@ import type { ChatProvider, Message } from '../providers/types';
 import { stripThinking } from './thinking';
 
 const COMPACT_TIMEOUT_MS = 60_000;
+/** Rough chars-per-token, matching lib/tokens.ts. Used to size the stored
+ *  summary cap in chars. */
+const CHARS_PER_TOKEN = 4;
 
 /** Render the messages-to-summarize as a single transcript the model
  *  can read. We strip <think> tags from assistant content (same as the
@@ -48,36 +51,34 @@ function renderTranscript(messages: Message[]): string {
 }
 
 function buildPrompt(transcript: string, priorSummary: string | null): string {
+  // The prior summary, when present, is included as data so the
+  // "if this conversation already contains a compacted summary"
+  // instruction below has something to act on. The instruction text
+  // itself is unconditional.
   const priorBlock = priorSummary
-    ? '\nThere is an existing summary from earlier in this thread — treat ' +
-      'it as ground truth and ONLY add information from the new turns ' +
-      'below.\n\n<existing-summary>\n' +
+    ? '\n\n<previous-compaction-summary>\n' +
       priorSummary +
-      '\n</existing-summary>\n'
+      '\n</previous-compaction-summary>'
     : '';
 
   return (
-    'You are summarizing part of a chat conversation so it can continue ' +
-    'in a smaller context window. The full transcript below will be ' +
-    'replaced in subsequent requests by your summary — keep what matters.' +
+    'You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff ' +
+    'summary for another LLM that will resume the task.\n\n' +
+    'Include:\n' +
+    '- Current progress and key decisions made\n' +
+    '- Important context, constraints, or user preferences\n' +
+    '- What remains to be done (clear next steps)\n' +
+    '- Any critical data, examples, or references needed to continue\n\n' +
+    'Be concise, structured, and focused on helping the next LLM seamlessly ' +
+    'continue the work.\n\n' +
+    'If this conversation already contains a compacted summary from a ' +
+    'previous compaction, extract its key historical thread (what was done, ' +
+    'key decisions and WHY, outcomes, direction) and include it as a ' +
+    'cumulative Historical Context section at the top of your new summary. ' +
+    'Each compaction adds 3-5 sentences. Never discard entries from previous ' +
+    'compactions.' +
     priorBlock +
-    '\n\nPreserve in the summary, in this order:\n' +
-    "1. The user's original goal and any explicit constraints/preferences.\n" +
-    '2. Key decisions made and their rationale.\n' +
-    '3. Facts established (file paths, identifiers, error messages, API\n' +
-    '   shapes) — keep VERBATIM, do not paraphrase.\n' +
-    '4. Code blocks the user authored or asked about — keep verbatim if\n' +
-    '   short; otherwise keep signatures + one-line description.\n' +
-    '5. Current state: what is done, what is in progress, what is next.\n' +
-    '6. Any tool calls and their results — keep the JSON verbatim.\n' +
-    '\n' +
-    'Drop: small talk, retracted ideas, intermediate reasoning the user\n' +
-    'did not act on. Do NOT invent details. If uncertain, omit.\n' +
-    '\n' +
-    'Output a single <summary>...</summary> block, under 800 tokens,\n' +
-    'plain text inside (no markdown wrappers around the tag).\n' +
-    '\n' +
-    '<transcript>\n' +
+    '\n\n<transcript>\n' +
     transcript +
     '\n</transcript>'
   );
@@ -100,7 +101,14 @@ export async function compact(
   messages: Message[],
   provider: ChatProvider,
   modelId: string,
-  opts: { priorSummary?: string | null; signal?: AbortSignal } = {},
+  opts: {
+    priorSummary?: string | null;
+    signal?: AbortSignal;
+    /** The chat model's context window (tokens). Only used to size the cap
+     *  on the STORED summary so it can't dominate the system prompt and
+     *  re-trip the auto-compaction trigger. */
+    contextWindow?: number;
+  } = {},
 ): Promise<CompactResult | null> {
   if (!modelId || messages.length === 0) return null;
 
@@ -110,30 +118,39 @@ export async function compact(
   const timer = setTimeout(() => controller.abort(), COMPACT_TIMEOUT_MS);
 
   try {
-    const prompt = buildPrompt(renderTranscript(messages), opts.priorSummary ?? null);
+    const transcript = renderTranscript(messages);
+    const window = opts.contextWindow ?? 0;
+
+    // Cap on the STORED summary. It lives in the system prompt on every
+    // later request and counts toward the auto-compaction trigger, so a
+    // runaway summary would keep the prompt perched above the trigger
+    // ("compaction treadmill"). Floor at 2048 tok so even a tiny window
+    // keeps a usable summary, scaling to 30% of the window for larger
+    // models.
+    const summaryTokenCap = window
+      ? Math.max(2048, Math.round(window * 0.3))
+      : 2048;
+
+    // Single call — pass the whole transcript. No chunk/fold machinery:
+    // for API providers the backend window is large, and for WebLLM the
+    // 60s timeout + graceful null-on-error (caller falls back to a plain
+    // trim) cover an oversized transcript. No maxTokens — a hard cap
+    // truncates thinking models mid-reason into an empty summary.
+    const prompt = buildPrompt(transcript, opts.priorSummary ?? null);
     let out = '';
-    for await (const chunk of provider.chat({
+    for await (const c of provider.chat({
       messages: [
-        {
-          id: '__compact',
-          threadId: '',
-          role: 'user',
-          content: prompt,
-          createdAt: 0,
-        },
+        { id: '__compact', threadId: '', role: 'user', content: prompt, createdAt: 0 },
       ],
       modelId,
-      temperature: 0.2,
-      // Generous output budget — reasoning models burn tokens before
-      // emitting visible text. A tight cap would truncate them mid-think
-      // and leave the summary empty.
-      maxTokens: 2048,
       reasoningEffort: 'off',
       signal: controller.signal,
     })) {
-      out += chunk.delta;
+      out += c.delta;
     }
-    const text = cleanSummary(out);
+    // Trim the stored summary to the cap so it can't bloat the ongoing
+    // budget or re-trip the trigger.
+    const text = cleanSummary(out, summaryTokenCap * CHARS_PER_TOKEN);
     if (!text) {
       console.warn('[compact] empty/unusable summary from model');
       return null;
@@ -152,15 +169,17 @@ export async function compact(
   }
 }
 
-/** Strip reasoning + <summary> wrapper + leading/trailing junk. */
-function cleanSummary(raw: string): string | null {
+/** Strip reasoning + <summary> wrapper + leading/trailing junk. `maxChars`
+ *  scales with the model's window so the summary can't outgrow it. */
+function cleanSummary(raw: string, maxChars: number): string | null {
   let s = stripThinking(raw).trim();
   // Strip <summary> wrappers if the model included them verbatim.
   s = s.replace(/^<summary>\s*/i, '').replace(/\s*<\/summary>\s*$/i, '');
   s = s.replace(/^["'`*]+|["'`*]+$/g, '').trim();
   if (!s) return null;
   // Hard cap to keep a runaway summary from defeating the purpose.
-  if (s.length > 6000) s = `${s.slice(0, 6000).trim()}…`;
+  const cap = Math.max(800, Math.floor(maxChars));
+  if (s.length > cap) s = `${s.slice(0, cap).trim()}…`;
   return s;
 }
 
@@ -173,5 +192,18 @@ export function formatSummaryBlock(summaryText: string): string {
     '<summary>\n' +
     summaryText +
     '\n</summary>'
+  );
+}
+
+/** Separate block for a recent exchange that was too long to keep
+ *  verbatim — summarized on its own and kept distinct from the history
+ *  <summary> above. */
+export function formatTailBlock(summaryText: string): string {
+  return (
+    'A recent turn was too long to include verbatim — here is its ' +
+    'summary:\n' +
+    '<recent-context>\n' +
+    summaryText +
+    '\n</recent-context>'
   );
 }

@@ -178,7 +178,6 @@ export interface ModelParams {
   presencePenalty: number;
   frequencyPenalty: number;
   contextWindow: number;
-  historyMsgs: number;
   reasoningEffort: ReasoningEffort;
 }
 
@@ -300,9 +299,17 @@ export interface EmbeddingRecord {
  * summaries stay in the store for the UI's "show previous summaries"
  * view but are not used in prompt construction.
  */
+export type SummaryKind = 'history' | 'tail';
+
 export interface ConversationSummary {
   id: string;
   threadId: string;
+  /** Which block this summary feeds. 'history' = older turns folded as
+   *  the conversation grows. 'tail' = a recent user+assistant exchange
+   *  that was itself too large to keep verbatim, summarized into its own
+   *  separate block. At most one active row per (thread, kind). Absent on
+   *  legacy rows — treated as 'history'. */
+  kind: SummaryKind;
   /** The summary text the model produced (no XML wrappers). */
   text: string;
   /** Message ids replaced by this summary, in original order. They

@@ -81,12 +81,16 @@ export function ParamControls({
   params,
   onChange,
   reasoningCapability,
+  contextMin = 1024,
 }: {
   params: ModelParams;
   onChange: (patch: Partial<ModelParams>) => void;
   /** Pass the active model's reasoning capability to show the right control.
    *  Omit to always show the full control (e.g. in global defaults). */
   reasoningCapability?: ReasoningCapability | null;
+  /** Lower bound for the context_window slider. Raised to the auto-compaction
+   *  floor when Compression=auto, since below it compaction can't run. */
+  contextMin?: number;
 }) {
   const levels = reasoningCapability === 'toggle' ? TOGGLE_LEVELS : EFFORT_LEVELS;
 
@@ -124,40 +128,11 @@ export function ParamControls({
       <ParamSlider
         label="context_window"
         value={params.contextWindow}
-        min={1024}
+        min={contextMin}
         max={32768}
         step={512}
         onChange={set('contextWindow')}
       />
-      <div className="flex items-center gap-3">
-        <label className="font-mono text-[11px] text-mute w-28 shrink-0">history_msgs</label>
-        {params.historyMsgs === 0 ? (
-          <span className="flex-1 font-mono text-[11px] text-accent">all messages</span>
-        ) : (
-          <>
-            <input
-              type="range"
-              min={1}
-              max={128}
-              step={1}
-              value={params.historyMsgs}
-              onChange={(e) => onChange({ historyMsgs: parseInt(e.target.value) })}
-              className="flex-1 h-1 accent-accent"
-            />
-            <span className="font-mono text-[11px] text-text w-16 text-right">{params.historyMsgs}</span>
-          </>
-        )}
-        <button
-          onClick={() => onChange({ historyMsgs: params.historyMsgs === 0 ? 12 : 0 })}
-          className={`font-mono text-[10px] px-1.5 py-0.5 border ${
-            params.historyMsgs === 0
-              ? 'border-accent/60 text-accent bg-accent/10'
-              : 'border-line text-mute hover:text-text'
-          }`}
-        >
-          all
-        </button>
-      </div>
       <ParamSlider
         label="temperature"
         value={params.temperature}
@@ -175,10 +150,10 @@ export function ParamControls({
         onChange={set('topP')}
       />
       <ParamSlider
-        label="max_tokens"
+        label="max_output_tokens"
         value={params.maxTokens}
         min={64}
-        max={16384}
+        max={32768}
         step={64}
         onChange={set('maxTokens')}
       />

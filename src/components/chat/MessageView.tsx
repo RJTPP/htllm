@@ -84,6 +84,7 @@ export const MessageView = memo(function MessageView({
   generating,
   onRegenerate,
   onEditAndResend,
+  locked = false,
 }: {
   message: Message;
   modelId: string | null;
@@ -93,6 +94,10 @@ export const MessageView = memo(function MessageView({
   generating: boolean;
   onRegenerate: () => void;
   onEditAndResend: (messageId: string, newText: string) => void;
+  /** True for messages folded into the active summary — they're no
+   *  longer sent verbatim, so editing them is meaningless. Hides the
+   *  edit affordance. */
+  locked?: boolean;
 }) {
   const [showUsage, setShowUsage] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -231,7 +236,7 @@ export const MessageView = memo(function MessageView({
               </div>
               <div className="mt-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyButton text={text} />
-                {!generating && (
+                {!generating && !locked && (
                   <button
                     onClick={startEditing}
                     className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border border-transparent text-mute hover:text-text"

@@ -4,11 +4,10 @@ import { getDb } from './db';
 export const DEFAULT_MODEL_PARAMS: ModelParams = {
   temperature: 1.0,
   topP: 1.0,
-  maxTokens: 4000,
+  maxTokens: 8192,
   presencePenalty: 0,
   frequencyPenalty: 0,
-  contextWindow: 4096,
-  historyMsgs: 12,
+  contextWindow: 8192,
   reasoningEffort: 'low',
 };
 
@@ -91,9 +90,12 @@ export const COMPRESSION_MODE_KEY = 'compressionMode';
 export const DEFAULT_COMPRESSION_MODE: CompressionMode = 'auto';
 
 /** Minimum context window for auto-compaction to actually run. Below
- *  this, summary overhead dominates what it would save — silently
- *  falls back to 'drop' for the request, surfaced in the meter tooltip. */
-export const MIN_AUTO_COMPACT_CONTEXT_TOKENS = 4096;
+ *  this the summary floor (2048) plus the generation/reasoning reserve
+ *  (~0.4×window, floored at 2048) leave no room to feed the transcript
+ *  in, so compaction can't help — auto falls back to trimming to fit for
+ *  the request instead. In 'auto' the context_window control is clamped
+ *  to this value. */
+export const MIN_AUTO_COMPACT_CONTEXT_TOKENS = 8192;
 
 /** Hard cap on re-compactions per thread (warn at 3). Beyond this,
  *  quality decay makes the summary unreliable — recommend new chat. */
@@ -104,6 +106,7 @@ export const WARN_COMPACTIONS_PER_THREAD = 3;
  *  of the available conversation budget — proactive headroom rather than
  *  waiting for a hard 100% overflow. */
 export const COMPACT_TRIGGER_FRACTION = 0.75;
+
 
 /** Recent exchanges kept verbatim and never summarized. 1 = keep the
  *  last completed user/assistant pair (plus the pending user turn). */
