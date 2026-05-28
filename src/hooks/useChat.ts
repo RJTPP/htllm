@@ -479,12 +479,12 @@ export function useChat(
           };
         } else if (compressionMode === 'auto') {
           const fullConversationTokens = estimateMessagesTokens(cleaned, calRatio);
-          // Measure against the usable input budget (window minus the
-          // output reservation) so the trigger matches what the context
-          // ring shows: compact at 75% of inputBudget, trim at 100%.
+          // Trigger off the full context window so it matches the meter
+          // (which shows used / contextWindow): compact at 75% of the
+          // window. Trimming still happens later, at the conversation
+          // budget (~window minus the small output floor).
           const usedInput = sysTokens + fullConversationTokens;
-          const triggerAt =
-            COMPACT_TRIGGER_FRACTION * (conversationBudget + sysTokens);
+          const triggerAt = COMPACT_TRIGGER_FRACTION * params.contextWindow;
           if (
             usedInput > triggerAt &&
             params.contextWindow >= MIN_AUTO_COMPACT_CONTEXT_TOKENS
@@ -573,12 +573,22 @@ export function useChat(
           });
         };
 
+        // Cap output to whatever room remains so prompt + output stays
+        // within the window — the user's maxTokens is the ceiling, not a
+        // fixed reservation. When the prompt is small this is the full
+        // maxTokens; near a full context it shrinks gracefully.
+        const usedInputTokens = sysTokens + fit.keptTokens;
+        const effectiveMaxTokens = Math.max(
+          64,
+          Math.min(params.maxTokens, params.contextWindow - usedInputTokens),
+        );
+
         for await (const chunk of provider.chat({
           messages: sendMessages,
           modelId,
           temperature: params.temperature,
           topP: params.topP,
-          maxTokens: params.maxTokens,
+          maxTokens: effectiveMaxTokens,
           presencePenalty: params.presencePenalty,
           frequencyPenalty: params.frequencyPenalty,
           reasoningEffort: params.reasoningEffort,

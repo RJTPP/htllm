@@ -190,14 +190,22 @@ export function fitToBudget(
   };
 }
 
+/** Minimum output room guaranteed by trimming/compaction. Small on
+ *  purpose — the prompt should be able to use most of the window, and
+ *  the actual output cap is computed dynamically at send (min of the
+ *  user's maxTokens and whatever space remains). */
+export const RESPONSE_RESERVE_FLOOR = 512;
+
 /**
- * Compute the response-side reservation so the prompt budget leaves
- * room for the model's output. Caps at half the context window so a
- * generous `maxTokens` setting doesn't accidentally starve the prompt.
+ * Response-side reservation for budget math. Only a small floor — NOT
+ * the full maxTokens — so the usable input budget stays close to the
+ * context window. (Previously reserved up to half the window, which made
+ * a 4096 window's budget read as 2k.) Actual output length is bounded
+ * separately at send time.
  */
 export function reserveForResponse(
-  contextWindow: number,
+  _contextWindow: number,
   maxTokens: number,
 ): number {
-  return Math.min(maxTokens, Math.floor(contextWindow / 2));
+  return Math.min(maxTokens, RESPONSE_RESERVE_FLOOR);
 }

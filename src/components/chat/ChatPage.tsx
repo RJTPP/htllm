@@ -102,12 +102,11 @@ export function ChatPage({
         return 0;
       })();
 
-  // Ring measures against the usable INPUT budget (window minus the
-  // output reservation), not the raw window — so its 75% red tier lines
-  // up exactly with where auto-compaction fires and 100% with trimming.
-  const contextTotal = budget
-    ? Math.max(1, budget.contextWindow - budget.responseReserve)
-    : params.contextWindow;
+  // Ring measures against the full context window (what the user set),
+  // so "X / 4.0k" matches their setting. Auto-compaction fires at 75%
+  // of the window and the small output-reserve floor means trimming
+  // happens just shy of 100% — both line up with this denominator.
+  const contextTotal = budget?.contextWindow ?? params.contextWindow;
 
   const handleRegenerate = useCallback(() => {
     if (!modelReady) {
