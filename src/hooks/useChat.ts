@@ -370,14 +370,21 @@ export function useChat(
         // persist, rebuild the system message, and re-fit the remaining
         // tail. Returns true if a summary was written. Shared by the
         // normal pass and the fat-tail fallback so they can't drift.
-        const compactUpTo = async (newUpTo: number): Promise<boolean> => {
+        const compactUpTo = async (
+          newUpTo: number,
+          force = false,
+        ): Promise<boolean> => {
           const eligible = cleaned.slice(compactedUpTo, newUpTo);
           if (eligible.length === 0) return false;
           const eligibleTokens = eligible.reduce(
             (s, m) => s + estimateMessageTokens(m),
             0,
           );
-          if (eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) return false;
+          // The min-eligible guard avoids burning an LLM call on a sliver
+          // during the proactive 75% pass. `force` (the overflow fallback)
+          // bypasses it: at true overflow, compacting even a little beats
+          // trimming it away.
+          if (!force && eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) return false;
 
           const nextGeneration = curGeneration + 1;
           if (nextGeneration > MAX_COMPACTIONS_PER_THREAD) {
@@ -461,19 +468,26 @@ export function useChat(
             (s, m) => s + estimateMessageTokens(m),
             0,
           );
-          const triggerAt = COMPACT_TRIGGER_FRACTION * conversationBudget;
+          // Measure against the usable input budget (window minus the
+          // output reservation) so the trigger matches what the context
+          // ring shows: compact at 75% of inputBudget, trim at 100%.
+          const usedInput = sysTokens + fullConversationTokens;
+          const triggerAt =
+            COMPACT_TRIGGER_FRACTION * (conversationBudget + sysTokens);
           if (
-            fullConversationTokens > triggerAt &&
+            usedInput > triggerAt &&
             params.contextWindow >= MIN_AUTO_COMPACT_CONTEXT_TOKENS
           ) {
-            // Pass 1 — keep the last exchange verbatim.
+            // Pass 1 — keep the last exchange verbatim (proactive, honors
+            // the min-eligible guard).
             const boundary = recencyBoundaryIndex(cleaned, COMPACT_KEEP_EXCHANGES);
             if (boundary > compactedUpTo) await compactUpTo(boundary);
 
             // Pass 2 (fat-tail fallback) — the protected tail itself still
             // overflows (a huge recent message). Yield the recency floor
-            // down to just the current user query and compact the rest.
-            // We never summarize the active query itself.
+            // down to just the current user query and compact the rest,
+            // forcing past the min-eligible guard — compacting beats
+            // trimming. We never summarize the active query itself.
             if (fit.dropped.length > 0) {
               let lastUserIdx = -1;
               for (let i = cleaned.length - 1; i >= 0; i--) {
@@ -482,7 +496,7 @@ export function useChat(
                   break;
                 }
               }
-              if (lastUserIdx > compactedUpTo) await compactUpTo(lastUserIdx);
+              if (lastUserIdx > compactedUpTo) await compactUpTo(lastUserIdx, true);
             }
           }
         }

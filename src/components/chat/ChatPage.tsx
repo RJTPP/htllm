@@ -102,6 +102,13 @@ export function ChatPage({
         return 0;
       })();
 
+  // Ring measures against the usable INPUT budget (window minus the
+  // output reservation), not the raw window — so its 75% red tier lines
+  // up exactly with where auto-compaction fires and 100% with trimming.
+  const contextTotal = budget
+    ? Math.max(1, budget.contextWindow - budget.responseReserve)
+    : params.contextWindow;
+
   const handleRegenerate = useCallback(() => {
     if (!modelReady) {
       onOpenPicker();
@@ -202,7 +209,7 @@ export function ChatPage({
         generating={generating}
         templates={templates}
         contextUsed={contextUsed}
-        contextTotal={params.contextWindow}
+        contextTotal={contextTotal}
         compacting={compacting}
         slashCommands={slashCommands}
         reasoningCapability={reasoningCapability}
