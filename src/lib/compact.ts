@@ -139,27 +139,28 @@ export async function compact(
     const calRatio = opts.calRatio && opts.calRatio > 0 ? opts.calRatio : 1;
     const window = opts.contextWindow ?? 0;
 
-    // Output budget per summarize call. Floor of 2048 so thinking models
-    // (which burn tokens reasoning before emitting, even with
-    // reasoning_effort off) aren't truncated mid-think and left with an
-    // empty summary. Scales up with the window, capped so it can't eat
-    // the whole context.
-    const summaryOutTokens = window
-      ? Math.min(8192, Math.max(2048, Math.round(window * 0.25)))
+    // Room reserved (per call) for the model's generation. We DON'T send
+    // this as max_tokens — thinking models burn tokens reasoning before
+    // emitting, and a hard cap truncates them mid-think into an empty
+    // summary. Instead we leave this much of the window free and let the
+    // model generate until it stops on its own (the 60s timeout guards
+    // runaway). ~40% of the window, floored at 2048, so even reasoning-
+    // heavy models have space to think and finish.
+    const outputReserveTokens = window
+      ? Math.min(8192, Math.max(2048, Math.round(window * 0.4)))
       : 2048;
 
-    // Per-call input budget (chars). Each fold call's prompt is:
-    //   instructions (~300 tok) + prior summary (≤ summaryOut) + chunk
-    //   + the reserved output (summaryOut).
-    // So chunk ≤ window − 2·summaryOut − 300, with a 0.9 safety factor
-    // to absorb token-estimate error and keep the call off the window
-    // edge.
+    // Per-call input budget (chars). The prompt is instructions (~300) +
+    // prior summary (≤ the stored cap, also ~outputReserve) + chunk, and
+    // we leave outputReserve free for generation:
+    //   chunk ≤ window − outputReserve(generation) − outputReserve(prior)
+    //           − 300, with a 0.9 safety factor.
     const instructionTokens = 300;
     let inputTokenBudget = window
       ? Math.max(
           256,
           Math.floor(
-            (window - 2 * summaryOutTokens - instructionTokens) * 0.9,
+            (window - 2 * outputReserveTokens - instructionTokens) * 0.9,
           ),
         )
       : Number.POSITIVE_INFINITY;
@@ -179,23 +180,25 @@ export async function compact(
       chunk: string,
       prior: string | null,
     ): Promise<string | null> => {
-      const prompt = buildPrompt(chunk, prior, summaryOutTokens);
+      const prompt = buildPrompt(chunk, prior, outputReserveTokens);
       let out = '';
       for await (const c of provider.chat({
+        // No maxTokens — let the model finish on its own (the window is
+        // the real limit; a hard cap truncates thinking models). The
+        // result is trimmed below if it overruns the reserve.
         messages: [
           { id: '__compact', threadId: '', role: 'user', content: prompt, createdAt: 0 },
         ],
         modelId,
         temperature: 0.2,
-        maxTokens: summaryOutTokens,
         reasoningEffort: 'off',
         signal: controller.signal,
       })) {
         out += c.delta;
       }
-      // Cap the stored summary near its token budget (×4 chars/token,
-      // with headroom) so it can't outgrow what the window can hold.
-      return cleanSummary(out, summaryOutTokens * CHARS_PER_TOKEN * 1.2);
+      // Trim the stored summary to the reserve so it can't bloat the
+      // ongoing budget or overflow when fed back as a prior next round.
+      return cleanSummary(out, outputReserveTokens * CHARS_PER_TOKEN);
     };
 
     // Fast path: the whole transcript fits in one call.
