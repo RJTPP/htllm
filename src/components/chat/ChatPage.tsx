@@ -37,7 +37,8 @@ export function ChatPage({
   ragLibraryId,
   onChangeRagLibrary,
   onNewLibrary,
-  activeSummary,
+  historySummary,
+  tailSummary,
   compacting,
   slashCommands,
 }: {
@@ -47,10 +48,13 @@ export function ChatPage({
    *  and surfaces sliding-window drop counts. Null while no thread is
    *  loaded; otherwise updated whenever messages/params/system change. */
   budget: ConversationBudget | null;
-  /** D10b — active compaction summary for this thread (null if none).
-   *  Renders as the inline "compacted context" divider above the
-   *  message list. */
-  activeSummary: ConversationSummary | null;
+  /** D10b — active history summary (older turns folded). Renders as the
+   *  "context compacted" divider. Null if none. */
+  historySummary: ConversationSummary | null;
+  /** D10b — active tail summary (a recent oversized exchange summarized
+   *  into its own block). Renders as a separate "last turn summarized"
+   *  divider. Null if none. */
+  tailSummary: ConversationSummary | null;
   /** True while a compaction LLM call is in flight — shows the
    *  "compacting context…" indicator in place of the empty reply. */
   compacting: boolean;
@@ -141,16 +145,34 @@ export function ChatPage({
         ) : (
           <div className="max-w-3xl mx-auto px-6 pt-6 pb-6 space-y-5">
             {(() => {
-              // D10b — render the SummaryDivider above the first message
-              // NOT covered by the active summary. Covered messages stay
-              // visible in the UI (we never delete them from IDB) but the
-              // divider visually marks "from here down is what the model
-              // sees verbatim; above is captured by the summary."
-              const coveredIds = activeSummary
-                ? new Set(activeSummary.replacedMessageIds)
+              // D10b — two summary dividers. Covered messages stay visible
+              // in the UI (we never delete them from IDB) but a divider
+              // marks "above is captured by a summary block; below is sent
+              // verbatim." History divider sits above the first message NOT
+              // in the history summary; the tail divider sits above the
+              // first fully-fresh message (not covered by either summary).
+              const historyCovered = historySummary
+                ? new Set(historySummary.replacedMessageIds)
                 : null;
-              const firstFreshIdx = coveredIds
-                ? messages.findIndex((m) => !coveredIds.has(m.id))
+              const tailCovered = tailSummary
+                ? new Set(tailSummary.replacedMessageIds)
+                : null;
+              const allCovered =
+                historyCovered || tailCovered
+                  ? new Set([
+                      ...(historySummary?.replacedMessageIds ?? []),
+                      ...(tailSummary?.replacedMessageIds ?? []),
+                    ])
+                  : null;
+              const historyDividerIdx = historyCovered
+                ? messages.findIndex((m) => !historyCovered.has(m.id))
+                : -1;
+              const tailDividerIdx = tailSummary
+                ? messages.findIndex((m) => !allCovered!.has(m.id))
+                : -1;
+              // For the trim divider math below: first fully-fresh message.
+              const firstFreshIdx = allCovered
+                ? messages.findIndex((m) => !allCovered.has(m.id))
                 : -1;
 
               // Trim horizon: the oldest message actually sent verbatim on
@@ -174,8 +196,11 @@ export function ChatPage({
                   compacting && isLast && m.role === 'assistant';
                 return (
                   <div key={m.id}>
-                    {activeSummary && i === firstFreshIdx && (
-                      <SummaryDivider summary={activeSummary} />
+                    {historySummary && i === historyDividerIdx && (
+                      <SummaryDivider summary={historySummary} />
+                    )}
+                    {tailSummary && i === tailDividerIdx && (
+                      <SummaryDivider summary={tailSummary} label="last turn summarized" />
                     )}
                     {trimmedCount > 0 && i === trimIdx && (
                       <TrimDivider count={trimmedCount} />
@@ -192,7 +217,7 @@ export function ChatPage({
                         generating={generating}
                         onRegenerate={handleRegenerate}
                         onEditAndResend={onEditAndResend}
-                        locked={coveredIds?.has(m.id) ?? false}
+                        locked={allCovered?.has(m.id) ?? false}
                       />
                     )}
                   </div>

@@ -90,9 +90,12 @@ export const COMPRESSION_MODE_KEY = 'compressionMode';
 export const DEFAULT_COMPRESSION_MODE: CompressionMode = 'auto';
 
 /** Minimum context window for auto-compaction to actually run. Below
- *  this, summary overhead dominates what it would save — silently
- *  falls back to 'drop' for the request, surfaced in the meter tooltip. */
-export const MIN_AUTO_COMPACT_CONTEXT_TOKENS = 4096;
+ *  this the summary floor (2048) plus the generation/reasoning reserve
+ *  (~0.4×window, floored at 2048) leave no room to feed the transcript
+ *  in, so compaction can't help — auto falls back to trimming to fit for
+ *  the request instead. In 'auto' the context_window control is clamped
+ *  to this value. */
+export const MIN_AUTO_COMPACT_CONTEXT_TOKENS = 8192;
 
 /** Hard cap on re-compactions per thread (warn at 3). Beyond this,
  *  quality decay makes the summary unreliable — recommend new chat. */

@@ -1,7 +1,7 @@
 import { useState, memo, type Dispatch, type SetStateAction } from 'react';
 import type { PromptTemplate, ModelParams } from '../../providers/types';
 import { createTemplate, deleteTemplate, updateTemplate } from '../../data/prompt-templates';
-import { type TitleMode, type AccentColor, type CompressionMode, ACCENT_PRESETS } from '../../data/settings';
+import { type TitleMode, type AccentColor, type CompressionMode, ACCENT_PRESETS, MIN_AUTO_COMPACT_CONTEXT_TOKENS } from '../../data/settings';
 import { resetEverything } from '../../data/reset';
 import { Modal } from '../ui/Modal';
 import { Badge } from '../ui/Badge';
@@ -568,15 +568,19 @@ export function SettingsModal({
               messages (cheaper, lossy). <span className="text-accent/70">Off</span>{' '}
               sends the full history untouched; the provider becomes the real limit and
               reports if it doesn&apos;t fit (zero hidden LLM activity). Auto-compact
-              needs a context window of at least 4k tokens; falls back to dropping
-              below that.
+              needs a context window of at least {MIN_AUTO_COMPACT_CONTEXT_TOKENS / 1024}k
+              tokens; falls back to dropping below that.
             </div>
           </div>
           <div className="border-t border-line pt-4">
             <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
               default generation parameters
             </div>
-            <ParamControls params={globalDefaults} onChange={setGlobalDefaults} />
+            <ParamControls
+              params={globalDefaults}
+              onChange={setGlobalDefaults}
+              contextMin={compressionMode === 'auto' ? MIN_AUTO_COMPACT_CONTEXT_TOKENS : undefined}
+            />
             <div className="font-mono text-[10px] text-mute mt-2">
               New threads inherit these. Each thread can override them independently.
             </div>

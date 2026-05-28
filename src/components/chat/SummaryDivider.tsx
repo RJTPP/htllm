@@ -12,7 +12,15 @@ import type { ConversationSummary } from '../../providers/types';
  * automatically (re-compaction replaces it), and removing it by hand
  * would just desync the prompt from the visible transcript.
  */
-export function SummaryDivider({ summary }: { summary: ConversationSummary }) {
+export function SummaryDivider({
+  summary,
+  label = 'context compacted',
+}: {
+  summary: ConversationSummary;
+  /** Divider caption — distinguishes the history block from the separate
+   *  tail block (a recent oversized turn summarized on its own). */
+  label?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const replacedCount = summary.replacedMessageIds.length;
 
@@ -26,7 +34,7 @@ export function SummaryDivider({ summary }: { summary: ConversationSummary }) {
       >
         <div className="flex-1 h-px bg-line group-hover:bg-line/80" />
         <span className="font-mono text-[10px] text-mute group-hover:text-text/70 uppercase tracking-widest transition-colors">
-          context compacted · {replacedCount} turn
+          {label} · {replacedCount} turn
           {replacedCount === 1 ? '' : 's'} · {summary.replacedTokens}→
           {summary.summaryTokens} tok
         </span>

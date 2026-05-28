@@ -61,6 +61,7 @@ export function ModelPicker({
   apiModelId,
   onSelectApiModel,
   onConfigureProvider,
+  contextMin,
 }: {
   open: boolean;
   onClose: () => void;
@@ -78,6 +79,7 @@ export function ModelPicker({
   apiModelId: string | null;
   onSelectApiModel: (providerId: string, modelId: string) => void;
   onConfigureProvider: () => void;
+  contextMin?: number;
 }) {
   const [search, setSearch] = useState('');
   const [family, setFamily] = useState<string | null>(null);
@@ -158,7 +160,7 @@ export function ModelPicker({
       </button>
       {showParams && (
         <div className="px-4 pb-4">
-          <ParamControls params={globalDefaults} onChange={onParamsChange} />
+          <ParamControls params={globalDefaults} onChange={onParamsChange} contextMin={contextMin} />
           <div className="font-mono text-[10px] text-mute mt-2.5">
             Applied to new threads. Per-thread overrides live in thread parameters.
           </div>

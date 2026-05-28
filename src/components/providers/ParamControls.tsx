@@ -81,12 +81,16 @@ export function ParamControls({
   params,
   onChange,
   reasoningCapability,
+  contextMin = 1024,
 }: {
   params: ModelParams;
   onChange: (patch: Partial<ModelParams>) => void;
   /** Pass the active model's reasoning capability to show the right control.
    *  Omit to always show the full control (e.g. in global defaults). */
   reasoningCapability?: ReasoningCapability | null;
+  /** Lower bound for the context_window slider. Raised to the auto-compaction
+   *  floor when Compression=auto, since below it compaction can't run. */
+  contextMin?: number;
 }) {
   const levels = reasoningCapability === 'toggle' ? TOGGLE_LEVELS : EFFORT_LEVELS;
 
@@ -124,7 +128,7 @@ export function ParamControls({
       <ParamSlider
         label="context_window"
         value={params.contextWindow}
-        min={1024}
+        min={contextMin}
         max={32768}
         step={512}
         onChange={set('contextWindow')}

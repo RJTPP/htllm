@@ -26,8 +26,8 @@ import {
   getCalibrationRatio,
   recordCalibrationSample,
 } from '../lib/token-calibration';
-import { compact, formatSummaryBlock } from '../lib/compact';
-import { getActiveSummary, saveSummary } from '../data/summaries';
+import { compact, formatSummaryBlock, formatTailBlock } from '../lib/compact';
+import { getActiveSummaries, saveSummary } from '../data/summaries';
 import {
   type CompressionMode,
   COMPACT_KEEP_EXCHANGES,
@@ -105,7 +105,10 @@ export function useChat(
   // D10b — current active summary for the loaded thread, kept in state so
   // the inline divider in MessageView can render the "── summarized N
   // turns ──" block and the budget snapshot can reflect summary cost.
-  const [activeSummary, setActiveSummary] = useState<
+  const [historySummary, setHistorySummary] = useState<
+    import('../providers/types').ConversationSummary | null
+  >(null);
+  const [tailSummary, setTailSummary] = useState<
     import('../providers/types').ConversationSummary | null
   >(null);
   const [compacting, setCompacting] = useState(false);
@@ -118,17 +121,21 @@ export function useChat(
   // Abort any in-flight stream on unmount to prevent stale setState calls.
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
-  // D10b — load the active summary whenever the thread changes. The
-  // summary lives in the system prompt at send time and on the inline
-  // divider in the message list. Null when no compaction has run yet.
+  // D10b — load both active summaries whenever the thread changes. They
+  // live in the system prompt at send time and on the inline dividers in
+  // the message list. Null when no compaction of that kind has run.
   useEffect(() => {
     if (!threadId) {
-      setActiveSummary(null);
+      setHistorySummary(null);
+      setTailSummary(null);
       return;
     }
     let cancelled = false;
-    getActiveSummary(threadId).then((s) => {
-      if (!cancelled) setActiveSummary(s);
+    getActiveSummaries(threadId).then(({ history, tail }) => {
+      if (!cancelled) {
+        setHistorySummary(history);
+        setTailSummary(tail);
+      }
     });
     return () => {
       cancelled = true;
@@ -145,18 +152,22 @@ export function useChat(
       setBudget(null);
       return;
     }
-    // Exclude messages already covered by the active summary — they're
-    // represented by the summary block in the system prompt, not by
-    // their own rows in the conversation tail.
-    const coveredIds = new Set(activeSummary?.replacedMessageIds ?? []);
+    // Exclude messages already covered by either summary — they're
+    // represented by a summary block in the system prompt, not by their
+    // own rows in the conversation tail.
+    const coveredIds = new Set([
+      ...(historySummary?.replacedMessageIds ?? []),
+      ...(tailSummary?.replacedMessageIds ?? []),
+    ]);
     const candidates = coveredIds.size
       ? messages.filter((m) => !coveredIds.has(m.id))
       : messages;
     const calRatio = getCalibrationRatio(provider.id, modelId);
-    const summaryBlock = activeSummary
-      ? formatSummaryBlock(activeSummary.text)
+    const historyBlock = historySummary
+      ? formatSummaryBlock(historySummary.text)
       : '';
-    const sysParts = [summaryBlock, systemPrompt.trim()].filter(Boolean);
+    const tailBlock = tailSummary ? formatTailBlock(tailSummary.text) : '';
+    const sysParts = [historyBlock, tailBlock, systemPrompt.trim()].filter(Boolean);
     const sysText = sysParts.join('\n\n');
     const sysTokens = sysText ? estimateStringTokens(sysText, calRatio) + 4 : 0;
     // Pre-send estimate for the meter — the full tail (no trim); the
@@ -175,7 +186,8 @@ export function useChat(
     params.contextWindow,
     params.maxTokens,
     systemPrompt,
-    activeSummary,
+    historySummary,
+    tailSummary,
     provider.id,
     modelId,
   ]);
@@ -217,16 +229,20 @@ export function useChat(
       let finalUsage: UsageStats | undefined;
 
       try {
-        // D10b — load the active summary for this thread (if any). It
-        // covers some prefix of `history`, which we filter out here so
-        // those messages aren't doubly represented (as both a covered
-        // row and a <summary> block).
-        const currentSummary = threadId
-          ? await getActiveSummary(threadId)
-          : null;
-        const coveredIds = new Set(currentSummary?.replacedMessageIds ?? []);
-        const trimmed = coveredIds.size
-          ? history.filter((m) => !coveredIds.has(m.id))
+        // D10b — load both active summaries for this thread (if any).
+        // 'history' covers older turns; 'tail' covers a recent oversized
+        // exchange summarized into its own block. We filter the union of
+        // their covered ids out of `history` so those messages aren't
+        // doubly represented (a covered row AND a summary block).
+        const { history: histRec, tail: tailRec } = threadId
+          ? await getActiveSummaries(threadId)
+          : { history: null, tail: null };
+        const loadedCovered = new Set([
+          ...(histRec?.replacedMessageIds ?? []),
+          ...(tailRec?.replacedMessageIds ?? []),
+        ]);
+        const trimmed = loadedCovered.size
+          ? history.filter((m) => !loadedCovered.has(m.id))
           : history;
 
         // Strip reasoning from assistant messages in history so the model
@@ -290,15 +306,16 @@ export function useChat(
         }
 
         // Compose the system message: retrieved context (if any) sits
-        // above the summary block (D10b — older turns compacted), which
-        // sits above the persona prompt so model-side instructions still
-        // have the last word.
-        let summaryText = currentSummary?.text ?? '';
+        // above the history <summary> block (older turns compacted), then
+        // the separate tail <recent-context> block (a recent oversized
+        // exchange), then the persona prompt so model-side instructions
+        // still have the last word.
+        let historyText = histRec?.text ?? '';
+        let tailText = tailRec?.text ?? '';
         const buildSysContent = () => {
-          const summaryBlock = summaryText
-            ? formatSummaryBlock(summaryText)
-            : '';
-          return [ragBlock, summaryBlock, systemPrompt.trim()]
+          const historyBlock = historyText ? formatSummaryBlock(historyText) : '';
+          const tailBlock = tailText ? formatTailBlock(tailText) : '';
+          return [ragBlock, historyBlock, tailBlock, systemPrompt.trim()]
             .filter(Boolean)
             .join('\n\n');
         };
@@ -330,36 +347,57 @@ export function useChat(
           params.contextWindow - responseReserve - sysTokens,
         );
 
-        // Mutable compaction bookkeeping — `cleaned` already excludes
-        // messages covered by the existing summary, so compactedUpTo
-        // starts at 0 and advances as each pass summarizes more of the
-        // verbatim prefix. The verbatim tail is always
-        // cleaned.slice(compactedUpTo).
-        let compactedUpTo = 0;
-        let curReplacedIds = currentSummary?.replacedMessageIds ?? [];
-        let curReplacedTokens = currentSummary?.replacedTokens ?? 0;
-        let curGeneration = currentSummary?.generation ?? 0;
+        // Mutable compaction bookkeeping. `cleaned` already excludes
+        // messages covered by the loaded summaries. `newlyCovered` tracks
+        // ids summarized during THIS send (history prefix and/or tail
+        // exchange); the verbatim send-set is `cleaned` minus that set.
+        const newlyCovered = new Set<string>();
+        let histReplacedIds = histRec?.replacedMessageIds ?? [];
+        let histReplacedTokens = histRec?.replacedTokens ?? 0;
+        let histGeneration = histRec?.generation ?? 0;
+        let tailReplacedIds = tailRec?.replacedMessageIds ?? [];
+        let tailReplacedTokens = tailRec?.replacedTokens ?? 0;
+        let tailGeneration = tailRec?.generation ?? 0;
 
-        // Compact cleaned[compactedUpTo, newUpTo) into the active summary,
-        // persist, and rebuild the system message. Returns true if a
-        // summary was written. Does NOT trim — the caller decides what to
-        // send. Used by the single proactive pass.
-        const compactUpTo = async (newUpTo: number): Promise<boolean> => {
-          const eligible = cleaned.slice(compactedUpTo, newUpTo);
-          if (eligible.length === 0) return false;
-          const eligibleTokens = eligible.reduce(
+        // Messages still sent verbatim, and their estimated tokens.
+        const verbatim = () => cleaned.filter((m) => !newlyCovered.has(m.id));
+        const verbatimTokens = () =>
+          estimateMessagesTokens(verbatim(), calRatio);
+
+        const rebuildSys = () => {
+          sysContent = buildSysContent();
+          sysMsg = sysContent
+            ? { id: '__system', threadId, role: 'system', content: sysContent, createdAt: 0 }
+            : null;
+          sysTokens = sysMsg ? estimateMessageTokens(sysMsg, calRatio) : 0;
+          conversationBudget = Math.max(
+            0,
+            params.contextWindow - responseReserve - sysTokens,
+          );
+        };
+
+        // Summarize `slice` into the summary of `kind`, persist, mark its
+        // ids covered, and rebuild the system message. 'history' and
+        // 'tail' are tracked independently and each cumulative (the prior
+        // summary of the same kind is fed back). Returns true on success.
+        const compactSlice = async (
+          slice: Message[],
+          kind: 'history' | 'tail',
+        ): Promise<boolean> => {
+          if (slice.length === 0) return false;
+          const tokens = slice.reduce(
             (s, m) => s + estimateMessageTokens(m, calRatio),
             0,
           );
-          // Don't burn an LLM call summarizing a sliver — crossing the
-          // 75% trigger by a hair isn't worth it.
-          if (eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) return false;
+          // Don't burn an LLM call summarizing a sliver.
+          if (tokens < COMPACT_MIN_ELIGIBLE_TOKENS) return false;
 
-          const nextGeneration = curGeneration + 1;
+          const isTail = kind === 'tail';
+          const nextGeneration = (isTail ? tailGeneration : histGeneration) + 1;
           if (nextGeneration > MAX_COMPACTIONS_PER_THREAD) {
             console.warn(
-              `[compact] cap of ${MAX_COMPACTIONS_PER_THREAD} compactions ` +
-                'reached for this thread — leaving context as-is. Consider ' +
+              `[compact] cap of ${MAX_COMPACTIONS_PER_THREAD} ${kind} ` +
+                'compactions reached — leaving context as-is. Consider ' +
                 'starting a new chat for the best quality.',
             );
             return false;
@@ -367,90 +405,117 @@ export function useChat(
           if (nextGeneration === WARN_COMPACTIONS_PER_THREAD) {
             console.warn(
               `[compact] approaching the cap of ${MAX_COMPACTIONS_PER_THREAD} ` +
-                'compactions for this thread — quality degrades with each round.',
+                `${kind} compactions — quality degrades with each round.`,
             );
           }
 
           setCompacting(true);
           try {
-            const result = await compact(eligible, provider, modelId, {
-              priorSummary: summaryText || null,
+            const result = await compact(slice, provider, modelId, {
+              priorSummary: (isTail ? tailText : historyText) || null,
               signal: controller.signal,
               contextWindow: params.contextWindow,
-              calRatio,
-              trustWindow: provider.needsModelLoad,
             });
             if (!result) return false;
-            curReplacedIds = [...curReplacedIds, ...eligible.map((m) => m.id)];
-            curReplacedTokens += eligibleTokens;
-            const saved = await saveSummary({
-              threadId: threadId!,
-              text: result.text,
-              replacedMessageIds: curReplacedIds,
-              replacedTokens: curReplacedTokens,
-              summaryTokens: estimateStringTokens(result.text, calRatio),
-              source: 'auto',
-            });
-            setActiveSummary(saved);
-            curGeneration = saved.generation;
-            summaryText = result.text;
-            compactedUpTo = newUpTo;
-
-            // Rebuild the system message with the new summary.
-            sysContent = buildSysContent();
-            sysMsg = sysContent
-              ? { id: '__system', threadId, role: 'system', content: sysContent, createdAt: 0 }
-              : null;
-            sysTokens = sysMsg ? estimateMessageTokens(sysMsg, calRatio) : 0;
-            conversationBudget = Math.max(
-              0,
-              params.contextWindow - responseReserve - sysTokens,
-            );
+            const ids = slice.map((m) => m.id);
+            for (const id of ids) newlyCovered.add(id);
+            const summaryTokens = estimateStringTokens(result.text, calRatio);
+            if (isTail) {
+              tailReplacedIds = [...tailReplacedIds, ...ids];
+              tailReplacedTokens += tokens;
+              const saved = await saveSummary({
+                threadId: threadId!,
+                kind: 'tail',
+                text: result.text,
+                replacedMessageIds: tailReplacedIds,
+                replacedTokens: tailReplacedTokens,
+                summaryTokens,
+                source: 'auto',
+              });
+              setTailSummary(saved);
+              tailGeneration = saved.generation;
+              tailText = result.text;
+            } else {
+              histReplacedIds = [...histReplacedIds, ...ids];
+              histReplacedTokens += tokens;
+              const saved = await saveSummary({
+                threadId: threadId!,
+                kind: 'history',
+                text: result.text,
+                replacedMessageIds: histReplacedIds,
+                replacedTokens: histReplacedTokens,
+                summaryTokens,
+                source: 'auto',
+              });
+              setHistorySummary(saved);
+              histGeneration = saved.generation;
+              historyText = result.text;
+            }
+            rebuildSys();
             return true;
           } finally {
             setCompacting(false);
           }
         };
 
-        // Estimated tokens of the current verbatim tail (everything not
-        // yet folded into the summary).
-        const tailTokens = () =>
-          estimateMessagesTokens(cleaned.slice(compactedUpTo), calRatio);
-
         // D10b — compression handling. Modes:
         //   'off'  → send everything; backend is the real limit.
         //   'drop' → trim oldest to fit the budget (the explicit "lose
         //            old context" choice).
-        //   'auto' → summarize at the 75% trigger, then send the result
-        //            as-is. No silent trimming — if compaction can't make
-        //            it fit, the backend reports the overflow (our token
-        //            estimate is approximate and, for API providers, the
-        //            real window is the backend's anyway).
+        //   'auto' → at/above the floor: two independent triggers (history
+        //            + last-turn), then send as-is. Below the floor
+        //            compaction can't run, so trim to fit instead.
         if (compressionMode === 'auto' && !opts.skipCompaction) {
           // skipCompaction (regenerate / edit-resend) reuses the existing
-          // summary as-is — re-rolling the same turn shouldn't spend
+          // summaries as-is — re-rolling the same turn shouldn't spend
           // another summarize call or change the context.
           const triggerAt = COMPACT_TRIGGER_FRACTION * params.contextWindow;
           if (
-            sysTokens + tailTokens() > triggerAt &&
+            sysTokens + verbatimTokens() > triggerAt &&
             params.contextWindow >= MIN_AUTO_COMPACT_CONTEXT_TOKENS
           ) {
-            // Single proactive pass — keep the last exchange verbatim and
-            // fold everything before it into the summary. We deliberately
-            // do NOT chase a lower target here: if one pass doesn't free
-            // enough (e.g. a huge recent message), the user compacts
-            // further with `/compact`. One automatic pass per send avoids
-            // burning multiple summarize calls in a row.
+            // recencyBoundaryIndex keeps the last completed exchange (+ the
+            // pending user turn) verbatim; `boundary` is that exchange's
+            // start index.
             const boundary = recencyBoundaryIndex(cleaned, COMPACT_KEEP_EXCHANGES);
-            if (boundary > compactedUpTo) await compactUpTo(boundary);
+
+            // Trigger 1 — history: summarize everything BEFORE the last
+            // completed exchange into the history <summary> block.
+            if (boundary > 0) await compactSlice(cleaned.slice(0, boundary), 'history');
+
+            // Trigger 2 — last turn: if the last completed exchange is
+            // ITSELF large enough that the verbatim tail is still over the
+            // threshold, summarize that exchange specifically into the
+            // SEPARATE tail block and drop its verbatim form — keeping only
+            // the pending user query verbatim. (Independent path: it never
+            // merges into the history <summary>.)
+            if (sysTokens + verbatimTokens() > triggerAt) {
+              let pendingUserIdx = -1;
+              for (let i = cleaned.length - 1; i >= 0; i--) {
+                if (cleaned[i]!.role === 'user') {
+                  pendingUserIdx = i;
+                  break;
+                }
+              }
+              if (pendingUserIdx > boundary) {
+                await compactSlice(cleaned.slice(boundary, pendingUserIdx), 'tail');
+              }
+            }
           }
         }
 
-        // Decide the send-set. Only 'drop' trims; auto + off send the
+        // Decide the send-set. 'drop' always trims; 'auto' trims only when
+        // the window is below the compaction floor (where the proactive
+        // pass can't run) — trimming to fit beats a silent overflow there.
+        // Otherwise (auto above the floor, or 'off') send the
         // (post-compaction) tail as-is.
-        const tail = cleaned.slice(compactedUpTo);
+        const tail = verbatim();
+        const trimToFit =
+          compressionMode === 'drop' ||
+          (compressionMode === 'auto' &&
+            params.contextWindow < MIN_AUTO_COMPACT_CONTEXT_TOKENS);
         let fit: import('../lib/conversation-budget').FitResult;
-        if (compressionMode === 'drop') {
+        if (trimToFit) {
           fit = fitToBudget(tail, conversationBudget, calRatio);
         } else {
           fit = {
@@ -459,7 +524,7 @@ export function useChat(
             keptTokens: estimateMessagesTokens(tail, calRatio),
             droppedTokens: 0,
             singleMessageOverflow:
-              tail.length <= 1 && sysTokens + tailTokens() > params.contextWindow,
+              tail.length <= 1 && sysTokens + verbatimTokens() > params.contextWindow,
           };
         }
 
@@ -705,14 +770,18 @@ export function useChat(
     const all = messagesRef.current;
     if (all.length === 0) return false;
 
-    const current = await getActiveSummary(threadId);
-    const coveredIds = new Set(current?.replacedMessageIds ?? []);
+    const { history: current, tail: tailCur } = await getActiveSummaries(threadId);
+    const coveredIds = new Set([
+      ...(current?.replacedMessageIds ?? []),
+      ...(tailCur?.replacedMessageIds ?? []),
+    ]);
 
     // Manual compaction is AGGRESSIVE — keep only the single most recent
-    // message verbatim and summarize everything before it that isn't
-    // already covered. (Auto keeps a whole exchange; manual is an
-    // explicit "free space now", and keeping just the last message means
-    // /compact still has work to do even after auto already ran.)
+    // message verbatim and fold everything before it that isn't already
+    // covered (by either summary) into the history block. (Auto keeps a
+    // whole exchange; manual is an explicit "free space now", and keeping
+    // just the last message means /compact still has work to do even
+    // after auto already ran.)
     const recencyStart = all.length - 1;
     const toCompact: Message[] = [];
     for (let i = 0; i < recencyStart; i++) {
@@ -742,8 +811,6 @@ export function useChat(
       const result = await compact(toCompact, provider, modelId, {
         priorSummary: current?.text ?? null,
         contextWindow: params.contextWindow,
-        calRatio: getCalibrationRatio(provider.id, modelId),
-        trustWindow: provider.needsModelLoad,
       });
       if (!result) return false;
 
@@ -757,13 +824,14 @@ export function useChat(
       );
       const saved = await saveSummary({
         threadId,
+        kind: 'history',
         text: result.text,
         replacedMessageIds: replacedIds,
         replacedTokens: (current?.replacedTokens ?? 0) + droppedTokens,
         summaryTokens: estimateStringTokens(result.text, getCalibrationRatio(provider.id, modelId)),
         source: 'manual',
       });
-      setActiveSummary(saved);
+      setHistorySummary(saved);
       return true;
     } finally {
       setCompacting(false);
@@ -774,7 +842,8 @@ export function useChat(
     messages,
     generating,
     budget,
-    activeSummary,
+    historySummary,
+    tailSummary,
     compacting,
     send,
     regenerate,

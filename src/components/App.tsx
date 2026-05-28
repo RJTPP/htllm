@@ -25,6 +25,7 @@ import {
   DEFAULT_ACCENT_COLOR,
   DEFAULT_COMPRESSION_MODE,
   COMPRESSION_MODE_KEY,
+  MIN_AUTO_COMPACT_CONTEXT_TOKENS,
   ACCENT_PRESETS,
   type TitleMode,
   type AccentColor,
@@ -174,7 +175,16 @@ export default function App() {
   const setCompressionMode = useCallback(async (value: CompressionMode) => {
     setCompressionModeState(value);
     await setSetting(COMPRESSION_MODE_KEY, value);
-  }, []);
+    // In 'auto' the context window can't go below the compaction floor.
+    // The slider min only blocks *new* lowering, so bump a previously-set
+    // sub-floor default up to the floor when auto is selected.
+    if (
+      value === 'auto' &&
+      globalDefaults.contextWindow < MIN_AUTO_COMPACT_CONTEXT_TOKENS
+    ) {
+      setGlobalDefaults({ contextWindow: MIN_AUTO_COMPACT_CONTEXT_TOKENS });
+    }
+  }, [globalDefaults.contextWindow, setGlobalDefaults]);
 
   const handleSetAccentColor = useCallback(async (value: AccentColor) => {
     setAccentColorState(value);
@@ -277,7 +287,8 @@ export default function App() {
     messages,
     generating,
     budget,
-    activeSummary,
+    historySummary,
+    tailSummary,
     compacting,
     send,
     regenerate,
@@ -823,7 +834,8 @@ export default function App() {
                   ragLibraryId={ragLibraryId}
                   onChangeRagLibrary={handleChangeRagLibrary}
                   onNewLibrary={handleNewLibraryRequest}
-                  activeSummary={activeSummary}
+                  historySummary={historySummary}
+                  tailSummary={tailSummary}
                   compacting={compacting}
                   slashCommands={slashCommands}
                 />
@@ -864,6 +876,7 @@ export default function App() {
         apiModelId={isApiThread ? activeThread?.modelId ?? null : null}
         onSelectApiModel={handleSelectApiModel}
         onConfigureProvider={handleConfigureProvider}
+        contextMin={compressionMode === 'auto' ? MIN_AUTO_COMPACT_CONTEXT_TOKENS : undefined}
       />
 
       <SettingsModal
@@ -899,6 +912,7 @@ export default function App() {
         params={params}
         defaults={globalDefaults}
         reasoningCapability={activeReasoningCapability}
+        contextMin={compressionMode === 'auto' ? MIN_AUTO_COMPACT_CONTEXT_TOKENS : undefined}
         onApply={handleThreadParamsApply}
         onReset={handleThreadParamsReset}
       />
