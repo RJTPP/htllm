@@ -17,7 +17,7 @@ export function SummaryDivider({ summary }: { summary: ConversationSummary }) {
   const replacedCount = summary.replacedMessageIds.length;
 
   return (
-    <div className="my-3">
+    <div className="mt-3 mb-6">
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
@@ -26,7 +26,7 @@ export function SummaryDivider({ summary }: { summary: ConversationSummary }) {
       >
         <div className="flex-1 h-px bg-line group-hover:bg-line/80" />
         <span className="font-mono text-[10px] text-mute group-hover:text-text/70 uppercase tracking-widest transition-colors">
-          compacted context · {replacedCount} turn
+          context compacted · {replacedCount} turn
           {replacedCount === 1 ? '' : 's'} · {summary.replacedTokens}→
           {summary.summaryTokens} tok
         </span>

@@ -7,7 +7,7 @@
  */
 export function CompactingIndicator() {
   return (
-    <div className="flex items-center gap-3 my-3 select-none animate-pulse">
+    <div className="flex items-center gap-3 mt-3 mb-6 select-none animate-pulse">
       <div className="flex-1 h-px bg-line" />
       <span className="font-mono text-[11px] text-mute uppercase tracking-widest">
         compacting context…

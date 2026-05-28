@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { PromptTemplate } from '../../providers/types';
 
 /**
@@ -35,10 +36,23 @@ export function SlashMenu({
   /** Hover sets the flat selection index (commands then templates). */
   onHover: (flatIndex: number) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Keep the keyboard-selected row in view as arrows move past the
+  // visible window (the menu is height-capped + scrollable).
+  useEffect(() => {
+    listRef.current
+      ?.querySelector(`[data-slash-index="${selectedIndex}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex]);
+
   if (commands.length === 0 && templates.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1.5 border border-line bg-surface max-h-64 overflow-y-auto z-20">
+    <div
+      ref={listRef}
+      className="absolute bottom-full left-0 right-0 mb-1.5 border border-line bg-surface max-h-64 overflow-y-auto z-20"
+    >
       {commands.length > 0 && (
         <>
           <div className="px-3 py-1.5 border-b border-line font-mono text-[10px] text-mute uppercase tracking-widest">
@@ -47,6 +61,7 @@ export function SlashMenu({
           {commands.map((c, i) => (
             <button
               key={c.id}
+              data-slash-index={i}
               onClick={() => onPickCommand(c)}
               onMouseMove={() => onHover(i)}
               className={`w-full text-left px-3 py-2 flex items-center justify-between ${
@@ -76,6 +91,7 @@ export function SlashMenu({
             return (
               <button
                 key={t.id}
+                data-slash-index={flatIndex}
                 onClick={() => onPickTemplate(t)}
                 onMouseMove={() => onHover(flatIndex)}
                 className={`w-full text-left px-3 py-2 flex items-center justify-between ${
