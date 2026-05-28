@@ -91,6 +91,9 @@ export default function App() {
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [defaultLibraryId, setDefaultLibraryIdState] = useState<string | null>(null);
   const [rememberLastLibrary, setRememberLastLibraryState] = useState(false);
+  // Off by default: don't silently re-load last session's model (which
+  // can trigger a multi-GB download). Opt in to restore + auto-load it.
+  const [rememberLastModel, setRememberLastModelState] = useState(false);
   const [compressionMode, setCompressionModeState] =
     useState<CompressionMode>(DEFAULT_COMPRESSION_MODE);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
@@ -132,6 +135,9 @@ export default function App() {
     });
     getSetting<boolean>('rememberLastLibrary').then((v) => {
       if (typeof v === 'boolean') setRememberLastLibraryState(v);
+    });
+    getSetting<boolean>('rememberLastModel').then((v) => {
+      if (typeof v === 'boolean') setRememberLastModelState(v);
     });
     getSetting<CompressionMode>(COMPRESSION_MODE_KEY).then((v) => {
       if (v === 'auto' || v === 'drop' || v === 'off') {
@@ -554,7 +560,7 @@ export default function App() {
       regenerate();
       return;
     }
-    if (!isApiThread && lastModelId && engineStatus === 'idle') {
+    if (rememberLastModel && !isApiThread && lastModelId && engineStatus === 'idle') {
       const cached = models.find((m) => m.id === lastModelId)?.cached;
       if (cached) {
         // Auto-load the cached model, then regenerate via the pending effect
@@ -564,7 +570,7 @@ export default function App() {
       }
     }
     setModal('picker');
-  }, [modelReady, isApiThread, lastModelId, engineStatus, models, regenerate, handleLoad]);
+  }, [modelReady, isApiThread, lastModelId, engineStatus, models, regenerate, handleLoad, rememberLastModel]);
 
   const handleSend = useCallback(
     (text: string, images?: import('../lib/image').ChatImage[]) => {
@@ -573,7 +579,7 @@ export default function App() {
         return;
       }
       // Deferred auto-load only applies to WebLLM; API threads have no load step.
-      if (!isApiThread && lastModelId && engineStatus === 'idle') {
+      if (rememberLastModel && !isApiThread && lastModelId && engineStatus === 'idle') {
         const cached = models.find((m) => m.id === lastModelId)?.cached;
         if (cached) {
           pendingRef.current = { text, images };
@@ -583,7 +589,7 @@ export default function App() {
       }
       setModal('picker');
     },
-    [modelReady, isApiThread, lastModelId, engineStatus, models, send, handleLoad],
+    [modelReady, isApiThread, lastModelId, engineStatus, models, send, handleLoad, rememberLastModel],
   );
 
   // Selecting a model from an HTTP provider binds the active thread to that
@@ -659,6 +665,11 @@ export default function App() {
     await setSetting('rememberLastLibrary', value);
   }, []);
 
+  const handleSetRememberLastModel = useCallback(async (value: boolean) => {
+    setRememberLastModelState(value);
+    await setSetting('rememberLastModel', value);
+  }, []);
+
   const handleThreadParamsApply = useCallback(
     (next: ModelParams) => {
       if (activeThreadId) updateThread(activeThreadId, { modelParams: next });
@@ -720,7 +731,7 @@ export default function App() {
               model={
                 isApiThread
                   ? activeThread?.modelId || null
-                  : loadedModelId ?? lastModelId
+                  : loadedModelId ?? (rememberLastModel ? lastModelId : null)
               }
               models={models}
               state={
@@ -845,6 +856,8 @@ export default function App() {
         setRememberLastLibrary={handleSetRememberLastLibrary}
         compressionMode={compressionMode}
         setCompressionMode={setCompressionMode}
+        rememberLastModel={rememberLastModel}
+        setRememberLastModel={handleSetRememberLastModel}
         tab={settingsTab}
         onTabChange={setSettingsTab}
       />

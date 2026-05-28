@@ -201,6 +201,8 @@ export function SettingsModal({
   setRememberLastLibrary,
   compressionMode,
   setCompressionMode,
+  rememberLastModel,
+  setRememberLastModel,
   tab,
   onTabChange,
 }: {
@@ -227,6 +229,9 @@ export function SettingsModal({
   /** D10b — compression mode (auto-summarize / drop / off). */
   compressionMode: CompressionMode;
   setCompressionMode: (value: CompressionMode) => void;
+  /** When on, restore + auto-load the previous session's model. */
+  rememberLastModel: boolean;
+  setRememberLastModel: (value: boolean) => void;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
 }) {
@@ -504,6 +509,29 @@ export function SettingsModal({
               How new threads are named. “Generate with model” asks the model for a
               concise title, falling back to the trimmed message if it times out.
             </div>
+          </div>
+          <div className="border-t border-line pt-4">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
+              model
+            </div>
+            <label className="flex items-start gap-2.5 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={rememberLastModel}
+                onChange={(e) => setRememberLastModel(e.target.checked)}
+                className="accent-accent mt-0.5"
+              />
+              <div className="min-w-0">
+                <div className="font-mono text-[12px] text-text group-hover:text-accent transition-colors">
+                  Remember last model
+                </div>
+                <div className="font-mono text-[10px] text-mute/80 leading-relaxed mt-0.5">
+                  Reload the model from your previous session and auto-load it when
+                  you send. Off by default — local models can be multi-gigabyte, so
+                  htllm won&apos;t download one without you picking it.
+                </div>
+              </div>
+            </label>
           </div>
           <div className="border-t border-line pt-4">
             <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
