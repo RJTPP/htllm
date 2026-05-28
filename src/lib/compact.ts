@@ -51,7 +51,11 @@ function renderTranscript(messages: Message[]): string {
   return lines.join('\n\n');
 }
 
-function buildPrompt(transcript: string, priorSummary: string | null): string {
+function buildPrompt(
+  transcript: string,
+  priorSummary: string | null,
+  maxSummaryTokens: number,
+): string {
   const priorBlock = priorSummary
     ? '\nThere is an existing summary from earlier in this thread — treat ' +
       'it as ground truth and ONLY add information from the new turns ' +
@@ -78,8 +82,8 @@ function buildPrompt(transcript: string, priorSummary: string | null): string {
     'Drop: small talk, retracted ideas, intermediate reasoning the user\n' +
     'did not act on. Do NOT invent details. If uncertain, omit.\n' +
     '\n' +
-    'Output a single <summary>...</summary> block, under 800 tokens,\n' +
-    'plain text inside (no markdown wrappers around the tag).\n' +
+    `Output a single <summary>...</summary> block, under ${maxSummaryTokens} ` +
+    'tokens, plain text inside (no markdown wrappers around the tag).\n' +
     '\n' +
     '<transcript>\n' +
     transcript +
@@ -160,7 +164,7 @@ export async function compact(
       chunk: string,
       prior: string | null,
     ): Promise<string | null> => {
-      const prompt = buildPrompt(chunk, prior);
+      const prompt = buildPrompt(chunk, prior, summaryOutTokens);
       let out = '';
       for await (const c of provider.chat({
         messages: [
@@ -174,7 +178,9 @@ export async function compact(
       })) {
         out += c.delta;
       }
-      return cleanSummary(out);
+      // Cap the stored summary near its token budget (×4 chars/token,
+      // with headroom) so it can't outgrow what the window can hold.
+      return cleanSummary(out, summaryOutTokens * CHARS_PER_TOKEN * 1.2);
     };
 
     // Fast path: the whole transcript fits in one call.
@@ -256,15 +262,17 @@ function splitToCharBudget(text: string, budget: number): string[] {
   return chunks;
 }
 
-/** Strip reasoning + <summary> wrapper + leading/trailing junk. */
-function cleanSummary(raw: string): string | null {
+/** Strip reasoning + <summary> wrapper + leading/trailing junk. `maxChars`
+ *  scales with the model's window so the summary can't outgrow it. */
+function cleanSummary(raw: string, maxChars: number): string | null {
   let s = stripThinking(raw).trim();
   // Strip <summary> wrappers if the model included them verbatim.
   s = s.replace(/^<summary>\s*/i, '').replace(/\s*<\/summary>\s*$/i, '');
   s = s.replace(/^["'`*]+|["'`*]+$/g, '').trim();
   if (!s) return null;
   // Hard cap to keep a runaway summary from defeating the purpose.
-  if (s.length > 6000) s = `${s.slice(0, 6000).trim()}…`;
+  const cap = Math.max(800, Math.floor(maxChars));
+  if (s.length > cap) s = `${s.slice(0, cap).trim()}…`;
   return s;
 }
 

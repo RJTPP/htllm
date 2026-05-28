@@ -227,7 +227,7 @@ export function useChat(
   // Streams an assistant reply for the given visible history. The history is
   // the user-visible message list to answer (no assistant placeholder yet).
   const runGeneration = useCallback(
-    async (history: Message[]) => {
+    async (history: Message[], opts: { skipCompaction?: boolean } = {}) => {
       if (!threadId) return;
 
       const assistantMsg = await addMessage({
@@ -479,7 +479,11 @@ export function useChat(
             droppedTokens: 0,
             singleMessageOverflow: false,
           };
-        } else if (compressionMode === 'auto') {
+        } else if (compressionMode === 'auto' && !opts.skipCompaction) {
+          // skipCompaction (regenerate / edit-resend) reuses the existing
+          // summary and the sliding window as-is — re-rolling the same
+          // turn shouldn't spend another summarize call or change the
+          // context the original answer was produced from.
           const fullConversationTokens = estimateMessagesTokens(cleaned, calRatio);
           // Trigger off the full context window so it matches the meter
           // (which shows used / contextWindow): compact at 75% of the
@@ -541,10 +545,6 @@ export function useChat(
         const finalSummaryTokens = finalSummaryBlock
           ? estimateStringTokens(finalSummaryBlock, calRatio)
           : 0;
-        // Raw (uncalibrated) estimate of exactly what we're sending —
-        // compared against the provider's reported promptTokens after
-        // the stream to refine this model's calibration ratio.
-        const rawPromptEstimate = estimateMessagesTokens(sendMessages, 1);
         setBudget({
           contextWindow: params.contextWindow,
           systemTokens: sysTokens,
@@ -613,15 +613,22 @@ export function useChat(
           usage: finalUsage,
         });
 
-        // Refine this model's token calibration from the real prompt
-        // token count the provider reported. Fire-and-forget; a missing
-        // promptTokens (some providers omit it) just skips the sample.
-        if (finalUsage?.promptTokens) {
+        // Refine this model's token calibration from the GENERATED
+        // output. completionTokens is the full real count (output isn't
+        // cached, unlike prompt tokens) and shares the tokenizer, so its
+        // chars/token bias applies to prompt estimation too. Compare it
+        // to a raw (ratio=1) estimate of everything generated — visible
+        // content plus any reasoning, since completionTokens counts both.
+        // Fire-and-forget; short / missing samples are dropped inside.
+        if (finalUsage?.completionTokens) {
+          const generated = fullReasoning
+            ? `${fullReasoning}\n${fullContent}`
+            : fullContent;
           void recordCalibrationSample(
             provider.id,
             modelId,
-            rawPromptEstimate,
-            finalUsage.promptTokens,
+            estimateStringTokens(generated, 1),
+            finalUsage.completionTokens,
           );
         }
       } catch (err) {
@@ -697,7 +704,7 @@ export function useChat(
     const trimmed = currentMessages.slice(0, -1);
     setMessages(trimmed);
 
-    await runGeneration(trimmed);
+    await runGeneration(trimmed, { skipCompaction: true });
   }, [threadId, generating, runGeneration]);
 
   /** Edit a user message and re-generate from that point (truncate-and-replace). */
@@ -741,8 +748,9 @@ export function useChat(
       kept[kept.length - 1] = editedMsg;
       setMessages(kept);
 
-      // Re-generate from the updated history.
-      await runGeneration(kept);
+      // Re-generate from the updated history. Skip compaction — editing
+      // re-rolls from this point and should reuse the existing summary.
+      await runGeneration(kept, { skipCompaction: true });
     },
     [threadId, generating, runGeneration],
   );

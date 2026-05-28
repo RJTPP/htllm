@@ -175,10 +175,10 @@ export function ParamControls({
         onChange={set('topP')}
       />
       <ParamSlider
-        label="max_tokens"
+        label="max_output_tokens"
         value={params.maxTokens}
         min={64}
-        max={16384}
+        max={32768}
         step={64}
         onChange={set('maxTokens')}
       />

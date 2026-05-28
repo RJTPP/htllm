@@ -4,10 +4,10 @@ import { getDb } from './db';
 export const DEFAULT_MODEL_PARAMS: ModelParams = {
   temperature: 1.0,
   topP: 1.0,
-  maxTokens: 4000,
+  maxTokens: 8192,
   presencePenalty: 0,
   frequencyPenalty: 0,
-  contextWindow: 4096,
+  contextWindow: 8192,
   historyMsgs: 12,
   reasoningEffort: 'low',
 };

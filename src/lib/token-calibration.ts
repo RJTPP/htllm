@@ -22,11 +22,14 @@ const CALIBRATION_KEY = 'tokenCalibration';
 /** EMA weight for each new sample. 0.3 → converges in a few turns while
  *  staying robust to a single noisy reading. */
 const ALPHA = 0.3;
-/** Ignore samples this far from the estimate — an estimate off by >4×
- *  usually means something we don't model (images, tool tokens), not a
- *  tokenization bias, and would poison the ratio. */
-const MIN_SAMPLE = 0.25;
-const MAX_SAMPLE = 4;
+/** Clamp samples to a sane tokenization-bias band. Outside this is
+ *  almost never real bias — it's noise (a tiny response) or a metric we
+ *  don't model — and would poison the ratio. */
+const MIN_SAMPLE = 0.5;
+const MAX_SAMPLE = 2;
+/** Skip samples from short generations — too few tokens to be a reliable
+ *  read on the tokenizer's chars/token ratio. */
+const MIN_ACTUAL_TOKENS = 200;
 
 let store: Record<string, number> = {};
 
@@ -49,9 +52,13 @@ export function getCalibrationRatio(providerId: string, modelId: string): number
 }
 
 /**
- * Fold a new observation into the model's ratio. `rawEstimate` MUST be
- * the uncalibrated (ratio=1) estimate of the exact prompt that produced
- * `actualTokens`, so the sample reflects pure tokenization bias.
+ * Fold a new observation into the model's ratio. We calibrate from the
+ * GENERATED OUTPUT, not the prompt: `completionTokens` is always the
+ * full real count (output is never cached, unlike prompt tokens, which
+ * providers under-report when a prefix is cached), and it runs through
+ * the same tokenizer — so its chars/token bias applies to prompt
+ * estimation too. `rawEstimate` MUST be the uncalibrated (ratio=1)
+ * estimate of the exact generated text that produced `actualTokens`.
  */
 export async function recordCalibrationSample(
   providerId: string,
@@ -59,7 +66,7 @@ export async function recordCalibrationSample(
   rawEstimate: number,
   actualTokens: number,
 ): Promise<void> {
-  if (!modelId || rawEstimate <= 0 || actualTokens <= 0) return;
+  if (!modelId || rawEstimate <= 0 || actualTokens < MIN_ACTUAL_TOKENS) return;
   const sample = actualTokens / rawEstimate;
   if (sample < MIN_SAMPLE || sample > MAX_SAMPLE) return;
   const key = keyOf(providerId, modelId);
