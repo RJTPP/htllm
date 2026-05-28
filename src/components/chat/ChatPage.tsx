@@ -3,7 +3,7 @@ import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, Reasoning
 import type { ChatImage } from '../../lib/image';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import type { ConversationBudget } from '../../hooks/useChat';
-import { SystemPromptBar } from './SystemPromptBar';
+import { ThreadMenu } from './ThreadMenu';
 import { MessageView } from './MessageView';
 import { EmptyState } from './EmptyState';
 import { Composer } from './Composer';
@@ -119,19 +119,21 @@ export function ChatPage({
   }
 
   return (
-    <div className="reveal reveal-3 flex flex-col h-full min-h-0 flex-1">
+    <div className="reveal reveal-3 flex flex-col h-full min-h-0 flex-1 relative">
+      {/* Floating per-thread menu — system prompt lives here now instead
+          of a permanent bar above the messages. */}
+      <div className="absolute top-3 right-3 z-10">
+        <ThreadMenu
+          value={thread.systemPrompt ?? defaultSystemPrompt}
+          defaultPrompt={defaultSystemPrompt}
+          onChange={onChangeSystemPrompt}
+        />
+      </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto grid-bg">
-        <div className="max-w-3xl mx-auto px-6 pt-6 pb-1">
-          <SystemPromptBar
-            value={thread.systemPrompt ?? defaultSystemPrompt}
-            defaultPrompt={defaultSystemPrompt}
-            onChange={onChangeSystemPrompt}
-          />
-        </div>
         {messages.length === 0 ? (
           <EmptyState onOpenPicker={onOpenPicker} modelReady={modelReady} model={loadedModelId} />
         ) : (
-          <div className="max-w-3xl mx-auto px-6 pb-6 space-y-5">
+          <div className="max-w-3xl mx-auto px-6 pt-6 pb-6 space-y-5">
             {(() => {
               // D10b — render the SummaryDivider above the first message
               // NOT covered by the active summary. Covered messages stay
