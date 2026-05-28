@@ -19,6 +19,10 @@ import type { ChatProvider, Message } from '../providers/types';
 import { stripThinking } from './thinking';
 
 const COMPACT_TIMEOUT_MS = 60_000;
+/** Rough chars-per-token, matching lib/tokens.ts. Used to size chunks
+ *  against the model's window when the transcript is too big for one
+ *  call. */
+const CHARS_PER_TOKEN = 4;
 
 /** Render the messages-to-summarize as a single transcript the model
  *  can read. We strip <think> tags from assistant content (same as the
@@ -100,7 +104,18 @@ export async function compact(
   messages: Message[],
   provider: ChatProvider,
   modelId: string,
-  opts: { priorSummary?: string | null; signal?: AbortSignal } = {},
+  opts: {
+    priorSummary?: string | null;
+    signal?: AbortSignal;
+    /** The chat model's context window (tokens). When set, oversized
+     *  transcripts are summarized in window-sized chunks instead of one
+     *  call that would overflow a small model. Falls back to a single
+     *  call when omitted. */
+    contextWindow?: number;
+    /** Per-model token calibration multiplier (lib/token-calibration).
+     *  Sizes chunks against the model's real tokenization. Default 1. */
+    calRatio?: number;
+  } = {},
 ): Promise<CompactResult | null> {
   if (!modelId || messages.length === 0) return null;
 
@@ -110,35 +125,93 @@ export async function compact(
   const timer = setTimeout(() => controller.abort(), COMPACT_TIMEOUT_MS);
 
   try {
-    const prompt = buildPrompt(renderTranscript(messages), opts.priorSummary ?? null);
-    let out = '';
-    for await (const chunk of provider.chat({
-      messages: [
-        {
-          id: '__compact',
-          threadId: '',
-          role: 'user',
-          content: prompt,
-          createdAt: 0,
-        },
-      ],
-      modelId,
-      temperature: 0.2,
-      // Generous output budget — reasoning models burn tokens before
-      // emitting visible text. A tight cap would truncate them mid-think
-      // and leave the summary empty.
-      maxTokens: 2048,
-      reasoningEffort: 'off',
-      signal: controller.signal,
-    })) {
-      out += chunk.delta;
+    const transcript = renderTranscript(messages);
+    const calRatio = opts.calRatio && opts.calRatio > 0 ? opts.calRatio : 1;
+    const window = opts.contextWindow ?? 0;
+
+    // Output budget per summarize call — adaptive to the window so a
+    // small model isn't asked to reserve more than it has, but generous
+    // enough that reasoning models can think before emitting.
+    const summaryOutTokens = window
+      ? Math.min(768, Math.max(256, Math.round(window * 0.2)))
+      : 1024;
+
+    // Per-call input budget (chars). Each fold call's prompt is:
+    //   instructions (~300 tok) + prior summary (≤ summaryOut) + chunk
+    //   + the reserved output (summaryOut).
+    // So chunk ≤ window − 2·summaryOut − 300, with a 0.9 safety factor
+    // to absorb token-estimate error and keep the call off the window
+    // edge.
+    const instructionTokens = 300;
+    const inputTokenBudget = window
+      ? Math.max(
+          256,
+          Math.floor(
+            (window - 2 * summaryOutTokens - instructionTokens) * 0.9,
+          ),
+        )
+      : Number.POSITIVE_INFINITY;
+    const inputCharBudget =
+      inputTokenBudget === Number.POSITIVE_INFINITY
+        ? Number.POSITIVE_INFINITY
+        : Math.floor((inputTokenBudget * CHARS_PER_TOKEN) / calRatio);
+
+    const summarizeOnce = async (
+      chunk: string,
+      prior: string | null,
+    ): Promise<string | null> => {
+      const prompt = buildPrompt(chunk, prior);
+      let out = '';
+      for await (const c of provider.chat({
+        messages: [
+          { id: '__compact', threadId: '', role: 'user', content: prompt, createdAt: 0 },
+        ],
+        modelId,
+        temperature: 0.2,
+        maxTokens: summaryOutTokens,
+        reasoningEffort: 'off',
+        signal: controller.signal,
+      })) {
+        out += c.delta;
+      }
+      return cleanSummary(out);
+    };
+
+    // Fast path: the whole transcript fits in one call.
+    if (transcript.length <= inputCharBudget) {
+      const text = await summarizeOnce(transcript, opts.priorSummary ?? null);
+      if (!text) {
+        console.warn('[compact] empty/unusable summary from model');
+        return null;
+      }
+      return { text };
     }
-    const text = cleanSummary(out);
-    if (!text) {
-      console.warn('[compact] empty/unusable summary from model');
-      return null;
+
+    // Map-reduce path: the transcript is bigger than the model can take
+    // in one shot (e.g. a long code reply on a small-window model). Split
+    // into window-sized chunks and fold them into a running summary —
+    // each step sees the prior summary + the next chunk.
+    const chunks = splitToCharBudget(transcript, inputCharBudget);
+    console.debug(
+      `[compact] transcript too large for one call — folding ${chunks.length} chunks ` +
+        `(~${inputTokenBudget} tok each, window ${window}).`,
+    );
+    let running: string | null = opts.priorSummary ?? null;
+    for (const chunk of chunks) {
+      const text = await summarizeOnce(chunk, running);
+      if (!text) {
+        // A failed fold step — return what we have so far rather than
+        // nothing, so the caller still gets a (partial) summary instead
+        // of falling back to a full trim.
+        if (running && running !== (opts.priorSummary ?? null)) {
+          return { text: running };
+        }
+        console.warn('[compact] fold step produced no summary');
+        return null;
+      }
+      running = text;
     }
-    return { text };
+    return running ? { text: running } : null;
   } catch (err) {
     if (controller.signal.aborted) {
       console.warn(`[compact] aborted/timed out after ${COMPACT_TIMEOUT_MS}ms`);
@@ -150,6 +223,37 @@ export async function compact(
     clearTimeout(timer);
     opts.signal?.removeEventListener('abort', onExternalAbort);
   }
+}
+
+/**
+ * Split text into pieces each at most `budget` chars, preferring line
+ * boundaries. A single line longer than the budget is hard-split.
+ */
+function splitToCharBudget(text: string, budget: number): string[] {
+  if (!Number.isFinite(budget) || budget <= 0) return [text];
+  const chunks: string[] = [];
+  let current = '';
+  for (const line of text.split('\n')) {
+    if (line.length > budget) {
+      // Flush what we have, then hard-split the oversized line.
+      if (current) {
+        chunks.push(current);
+        current = '';
+      }
+      for (let i = 0; i < line.length; i += budget) {
+        chunks.push(line.slice(i, i + budget));
+      }
+      continue;
+    }
+    if (current.length + line.length + 1 > budget) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = current ? `${current}\n${line}` : line;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
 }
 
 /** Strip reasoning + <summary> wrapper + leading/trailing junk. */

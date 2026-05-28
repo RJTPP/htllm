@@ -421,6 +421,8 @@ export function useChat(
             const result = await compact(eligible, provider, modelId, {
               priorSummary: summaryText || null,
               signal: controller.signal,
+              contextWindow: params.contextWindow,
+              calRatio,
             });
             if (!result) return false;
             curReplacedIds = [...curReplacedIds, ...eligible.map((m) => m.id)];
@@ -790,6 +792,8 @@ export function useChat(
     try {
       const result = await compact(toCompact, provider, modelId, {
         priorSummary: current?.text ?? null,
+        contextWindow: params.contextWindow,
+        calRatio: getCalibrationRatio(provider.id, modelId),
       });
       if (!result) return false;
 
@@ -806,7 +810,7 @@ export function useChat(
         text: result.text,
         replacedMessageIds: replacedIds,
         replacedTokens: (current?.replacedTokens ?? 0) + droppedTokens,
-        summaryTokens: estimateStringTokens(result.text),
+        summaryTokens: estimateStringTokens(result.text, getCalibrationRatio(provider.id, modelId)),
         source: 'manual',
       });
       setActiveSummary(saved);
@@ -814,7 +818,7 @@ export function useChat(
     } finally {
       setCompacting(false);
     }
-  }, [threadId, modelId, provider, compacting]);
+  }, [threadId, modelId, provider, compacting, params.contextWindow]);
 
   /**
    * D10b — clear the active summary for the thread. Useful when the
