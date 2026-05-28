@@ -68,30 +68,6 @@ export async function getActiveSummary(threadId: string): Promise<ConversationSu
   return null;
 }
 
-/** All summaries for a thread, newest first — for the diagnostic UI. */
-export async function listSummariesForThread(threadId: string): Promise<ConversationSummary[]> {
-  const db = await getDb();
-  const rows = await db.getAllFromIndex('summaries', 'byThread', threadId);
-  return rows.sort((a, b) => b.createdAt - a.createdAt);
-}
-
-/**
- * Clear the active summary for a thread (e.g. after the user edits
- * an earlier message and the summary's coverage is no longer correct).
- * Leaves the historical row in place but flips active=false.
- */
-export async function clearActiveSummary(threadId: string): Promise<void> {
-  const db = await getDb();
-  const tx = db.transaction('summaries', 'readwrite');
-  const rows = await tx.store.index('byThread').getAll(threadId);
-  for (const row of rows) {
-    if (row.active) {
-      await tx.store.put({ ...row, active: false });
-    }
-  }
-  await tx.done;
-}
-
 /** Hard-delete every summary for a thread — used when the thread itself
  *  is deleted upstream. */
 export async function deleteSummariesForThread(threadId: string): Promise<void> {

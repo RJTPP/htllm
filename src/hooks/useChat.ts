@@ -28,11 +28,7 @@ import {
   recordCalibrationSample,
 } from '../lib/token-calibration';
 import { compact, formatSummaryBlock } from '../lib/compact';
-import {
-  clearActiveSummary,
-  getActiveSummary,
-  saveSummary,
-} from '../data/summaries';
+import { getActiveSummary, saveSummary } from '../data/summaries';
 import {
   type CompressionMode,
   COMPACT_KEEP_EXCHANGES,
@@ -80,23 +76,13 @@ export interface RagConfig {
  */
 export interface ConversationBudget {
   contextWindow: number;
+  /** Estimated tokens of the system message (persona + RAG + summary). */
   systemTokens: number;
+  /** Estimated tokens of the verbatim conversation tail being sent. */
   conversationTokens: number;
-  droppedTokens: number;
-  droppedCount: number;
-  responseReserve: number;
-  /** D10b — when an active summary block is in the system prompt, its
-   *  token cost is reported separately so the meter can break out
-   *  "system + summary + conversation" if it wants. Falls back to 0
-   *  when no summary is active. */
-  summaryTokens: number;
-  /** Number of messages currently covered by the active summary (i.e.
-   *  excluded from the conversation tail but represented as a block). */
-  summarizedCount: number;
-  /** Id of the oldest message actually sent verbatim on the last fit.
-   *  Messages above this in the list (that aren't covered by a summary)
-   *  were trimmed by the sliding window — i.e. not sent to the model.
-   *  Drives the inline trim divider. Null when nothing was kept. */
+  /** Id of the oldest message actually sent verbatim. Messages above it
+   *  that aren't covered by a summary were trimmed (drop mode only) —
+   *  drives the inline trim divider. Null when nothing was kept. */
   firstSentMessageId: string | null;
 }
 
@@ -169,34 +155,21 @@ export function useChat(
       : messages;
     const trimmed = sliceByUserTurns(candidates, params.historyMsgs);
     const calRatio = getCalibrationRatio(provider.id, modelId);
-    const responseReserve = reserveForResponse(
-      params.contextWindow,
-      params.maxTokens,
-    );
     const summaryBlock = activeSummary
       ? formatSummaryBlock(activeSummary.text)
       : '';
     const sysParts = [summaryBlock, systemPrompt.trim()].filter(Boolean);
     const sysText = sysParts.join('\n\n');
     const sysTokens = sysText ? estimateStringTokens(sysText, calRatio) + 4 : 0;
-    const summaryTokens = summaryBlock
-      ? estimateStringTokens(summaryBlock, calRatio)
-      : 0;
-    const conversationBudget = Math.max(
-      0,
-      params.contextWindow - responseReserve - sysTokens,
-    );
-    const fit = fitToBudget(trimmed, conversationBudget, calRatio);
+    // Pre-send estimate for the meter — the full tail (no trim); the
+    // meter going past the trigger is the signal that a send will
+    // compact. firstSentMessageId is only meaningful post-send (drop
+    // mode's trim divider), so leave it null here.
     setBudget({
       contextWindow: params.contextWindow,
       systemTokens: sysTokens,
-      conversationTokens: fit.keptTokens,
-      droppedTokens: fit.droppedTokens,
-      droppedCount: fit.dropped.length,
-      responseReserve,
-      summaryTokens,
-      summarizedCount: activeSummary?.replacedMessageIds.length ?? 0,
-      firstSentMessageId: fit.kept[0]?.id ?? null,
+      conversationTokens: estimateMessagesTokens(trimmed, calRatio),
+      firstSentMessageId: null,
     });
   }, [
     threadId,
@@ -331,7 +304,6 @@ export function useChat(
         // sits above the persona prompt so model-side instructions still
         // have the last word.
         let summaryText = currentSummary?.text ?? '';
-        let summaryReplacedCount = currentSummary?.replacedMessageIds.length ?? 0;
         const buildSysContent = () => {
           const summaryBlock = summaryText
             ? formatSummaryBlock(summaryText)
@@ -435,7 +407,6 @@ export function useChat(
             setActiveSummary(saved);
             curGeneration = saved.generation;
             summaryText = result.text;
-            summaryReplacedCount = saved.replacedMessageIds.length;
             compactedUpTo = newUpTo;
 
             // Rebuild the system message with the new summary.
@@ -532,21 +503,10 @@ export function useChat(
         // Surface the latest budget snapshot to consumers (token meter
         // in the chat header reads from here). Estimates only — never
         // exact, but accurate enough for the 50/75/90% color tiers.
-        const finalSummaryBlock = summaryText
-          ? formatSummaryBlock(summaryText)
-          : '';
-        const finalSummaryTokens = finalSummaryBlock
-          ? estimateStringTokens(finalSummaryBlock, calRatio)
-          : 0;
         setBudget({
           contextWindow: params.contextWindow,
           systemTokens: sysTokens,
           conversationTokens: fit.keptTokens,
-          droppedTokens: fit.droppedTokens,
-          droppedCount: fit.dropped.length,
-          responseReserve,
-          summaryTokens: finalSummaryTokens,
-          summarizedCount: summaryReplacedCount,
           firstSentMessageId: fit.kept[0]?.id ?? null,
         });
 
@@ -831,18 +791,6 @@ export function useChat(
     }
   }, [threadId, modelId, provider, compacting, params.contextWindow]);
 
-  /**
-   * D10b — clear the active summary for the thread. Useful when the
-   * user has edited an older message (its content no longer matches
-   * what was summarized) or just wants to start fresh without losing
-   * the messages themselves.
-   */
-  const clearSummary = useCallback(async (): Promise<void> => {
-    if (!threadId) return;
-    await clearActiveSummary(threadId);
-    setActiveSummary(null);
-  }, [threadId]);
-
   return {
     messages,
     generating,
@@ -854,6 +802,5 @@ export function useChat(
     editAndResend,
     stop,
     compactNow,
-    clearSummary,
   };
 }
