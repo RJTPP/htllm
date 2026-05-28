@@ -7,6 +7,7 @@ import { SystemPromptBar } from './SystemPromptBar';
 import { MessageView } from './MessageView';
 import { EmptyState } from './EmptyState';
 import { Composer } from './Composer';
+import type { SlashCommand } from './SlashMenu';
 import { SummaryDivider } from './SummaryDivider';
 import { CompactingIndicator } from './CompactingIndicator';
 import { TrimDivider } from './TrimDivider';
@@ -40,6 +41,7 @@ export function ChatPage({
   compacting,
   onCompactNow,
   onClearSummary,
+  slashCommands,
 }: {
   thread: Thread | null;
   messages: Message[];
@@ -58,6 +60,8 @@ export function ChatPage({
   onCompactNow: () => Promise<boolean>;
   /** Clear the active summary (kept in IDB inactive). */
   onClearSummary: () => Promise<void>;
+  /** Slash commands for the composer's `/` menu (actions). */
+  slashCommands: SlashCommand[];
   models: ModelInfo[];
   loadedModelId: string | null;
   modelReady: boolean;
@@ -207,6 +211,7 @@ export function ChatPage({
         contextTotal={params.contextWindow}
         compacting={compacting}
         onCompactNow={onCompactNow}
+        slashCommands={slashCommands}
         reasoningCapability={reasoningCapability}
         reasoningEffort={params.reasoningEffort}
         onReasoningChange={onReasoningChange}

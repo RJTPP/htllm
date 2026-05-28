@@ -41,6 +41,7 @@ import { useLibraries } from '../hooks/useLibraries';
 import { WebGPUBlock } from './system/WebGPUBlock';
 import { Sidebar } from './sidebar/Sidebar';
 import { ChatPage } from './chat/ChatPage';
+import type { SlashCommand } from './chat/SlashMenu';
 import { KnowledgePage } from './knowledge/KnowledgePage';
 import { StorageManager } from './storage/StorageManager';
 import { ModelPicker } from './providers/ModelPicker';
@@ -482,6 +483,57 @@ export default function App() {
     generating,
   ]);
 
+  // Q1 — curated slash commands for the composer's `/` menu. A focused,
+  // chat-relevant subset of the Cmd/K palette (no navigation or message
+  // search — those belong in the global palette). Each runs an action
+  // and clears the composer input.
+  const slashCommands: SlashCommand[] = useMemo(() => {
+    const cmds: SlashCommand[] = [
+      {
+        id: 'new',
+        label: 'new',
+        description: 'Start a new chat',
+        run: () => void handleCreateThread(),
+      },
+      {
+        id: 'model',
+        label: 'model',
+        description: 'Change the model',
+        run: () => setModal('picker'),
+      },
+      {
+        id: 'params',
+        label: 'params',
+        description: 'Thread parameters',
+        run: () => setModal('params'),
+      },
+      {
+        id: 'settings',
+        label: 'settings',
+        description: 'Open settings',
+        run: () => setModal('settings'),
+      },
+    ];
+    // Compaction commands only make sense with a thread + chat model.
+    if (activeThreadId) {
+      cmds.push({
+        id: 'compact',
+        label: 'compact',
+        description: 'Summarize older turns now',
+        run: () => void compactNow(),
+      });
+      if (activeSummary) {
+        cmds.push({
+          id: 'clear-summary',
+          label: 'clear-summary',
+          description: 'Discard the active context summary',
+          run: () => void clearSummary(),
+        });
+      }
+    }
+    return cmds;
+  }, [handleCreateThread, activeThreadId, activeSummary, compactNow, clearSummary]);
+
   // Full-text message search for the command palette — resolves matches into
   // commands that jump to the containing thread.
   const searchMessagesAsync = useCallback(
@@ -742,6 +794,7 @@ export default function App() {
                   compacting={compacting}
                   onCompactNow={compactNow}
                   onClearSummary={clearSummary}
+                  slashCommands={slashCommands}
                 />
               </>
             )}

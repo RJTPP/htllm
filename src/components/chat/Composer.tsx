@@ -4,7 +4,7 @@ import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
 import { Image, ArrowRight, Brain, Loader2 } from 'lucide-react';
-import { PromptHints } from './PromptHints';
+import { SlashMenu, type SlashCommand } from './SlashMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { KnowledgeChip } from './KnowledgeChip';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
@@ -69,6 +69,7 @@ export function Composer({
   contextTotal,
   compacting = false,
   onCompactNow,
+  slashCommands = [],
   reasoningCapability,
   reasoningEffort,
   onReasoningChange,
@@ -93,6 +94,9 @@ export function Composer({
   /** D10b — manual "Compact now". Hides the button entirely when not
    *  wired (useChat exposes it; some surfaces may not). */
   onCompactNow?: () => Promise<boolean>;
+  /** Slash commands surfaced in the `/` menu alongside prompt
+   *  templates. Running one performs an action and clears the input. */
+  slashCommands?: SlashCommand[];
   reasoningCapability?: ReasoningCapability;
   reasoningEffort: ReasoningEffort;
   onReasoningChange: (effort: ReasoningEffort) => void;
@@ -130,13 +134,26 @@ export function Composer({
       ? input.slice(1)
       : null;
 
-  // Templates matching the current /-query, and the keyboard-selected one.
-  const hintMatches = useMemo(() => {
+  // Commands + templates matching the current /-query. Commands come
+  // first in the flat keyboard order, then templates.
+  const commandMatches = useMemo(() => {
+    if (hintQuery === null) return [];
+    const q = hintQuery.toLowerCase();
+    return slashCommands.filter(
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q),
+    );
+  }, [hintQuery, slashCommands]);
+
+  const templateMatches = useMemo(() => {
     if (hintQuery === null) return [];
     const q = hintQuery.toLowerCase();
     return templates.filter((t) => t.title.toLowerCase().includes(q));
   }, [hintQuery, templates]);
-  const hintsOpen = hintMatches.length > 0;
+
+  const hintCount = commandMatches.length + templateMatches.length;
+  const hintsOpen = hintCount > 0;
 
   const [hintIndex, setHintIndex] = useState(0);
   // Reset the selection whenever the query changes.
@@ -146,6 +163,23 @@ export function Composer({
 
   const pickTemplate = (t: PromptTemplate) => {
     setInput(t.content);
+  };
+
+  const runCommand = (c: SlashCommand) => {
+    // Clear the slash query first so the menu closes, then run.
+    setInput('');
+    c.run();
+  };
+
+  // Resolve the flat keyboard index to either a command or a template.
+  const pickAtIndex = (flatIndex: number) => {
+    if (flatIndex < commandMatches.length) {
+      const c = commandMatches[flatIndex];
+      if (c) runCommand(c);
+    } else {
+      const t = templateMatches[flatIndex - commandMatches.length];
+      if (t) pickTemplate(t);
+    }
   };
 
   const send = () => {
@@ -207,10 +241,12 @@ export function Composer({
         )}
         <div className="relative">
           {hintsOpen && (
-            <PromptHints
-              matches={hintMatches}
+            <SlashMenu
+              commands={commandMatches}
+              templates={templateMatches}
               selectedIndex={hintIndex}
-              onPick={pickTemplate}
+              onPickCommand={runCommand}
+              onPickTemplate={pickTemplate}
               onHover={setHintIndex}
             />
           )}
@@ -225,7 +261,7 @@ export function Composer({
                 if (hintsOpen) {
                   if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    setHintIndex((i) => Math.min(i + 1, hintMatches.length - 1));
+                    setHintIndex((i) => Math.min(i + 1, hintCount - 1));
                     return;
                   }
                   if (e.key === 'ArrowUp') {
@@ -235,8 +271,12 @@ export function Composer({
                   }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    const t = hintMatches[hintIndex];
-                    if (t) pickTemplate(t);
+                    pickAtIndex(hintIndex);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setInput('');
                     return;
                   }
                 }
@@ -249,7 +289,7 @@ export function Composer({
               rows={1}
               placeholder={
                 modelReady
-                  ? 'Type a message — / for templates, Enter to send'
+                  ? 'Type a message — / for commands & templates, Enter to send'
                   : "Type a message — you'll pick a model on send"
               }
               className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute"
