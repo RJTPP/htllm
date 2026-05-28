@@ -82,8 +82,9 @@ function buildPrompt(
     'Drop: small talk, retracted ideas, intermediate reasoning the user\n' +
     'did not act on. Do NOT invent details. If uncertain, omit.\n' +
     '\n' +
-    `Output a single <summary>...</summary> block, under ${maxSummaryTokens} ` +
-    'tokens, plain text inside (no markdown wrappers around the tag).\n' +
+    `Output ONLY the summary as plain text, under ${maxSummaryTokens} ` +
+    'tokens. No preamble, no markdown headers, no wrapper tags — just the ' +
+    'summary itself.\n' +
     '\n' +
     '<transcript>\n' +
     transcript +
