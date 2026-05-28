@@ -1,7 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'; // useRef used in CopyButton
 import { Marked, type Tokens } from 'marked';
 import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+
+/** Code blocks longer than this collapse to a capped height with a
+ *  "show more" toggle, so a single long paste doesn't dominate the
+ *  transcript. ~the same number of lines the capped height shows. */
+const CODE_COLLAPSE_LINES = 16;
 
 // ── Marked instance with custom code-block renderer ─────────────────
 // We render code blocks ourselves (with a copy button), so we emit a
@@ -44,6 +49,7 @@ function getMarked(): Marked {
 
 function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: string }) {
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
@@ -62,11 +68,18 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
   // If it's a plain-text fallback it's just escaped text.
   const isShikiHtml = html.startsWith('<pre');
 
+  const lineCount = raw.split('\n').length;
+  const collapsible = lineCount > CODE_COLLAPSE_LINES;
+  const collapsed = collapsible && !expanded;
+
   return (
     <div className="my-2 border border-line overflow-hidden bg-[#0d0d0d]">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-line bg-surface">
         <span className="font-mono text-[10px] text-mute uppercase tracking-wider">
           {lang || 'code'}
+          {collapsible && (
+            <span className="text-mute/60 normal-case"> · {lineCount} lines</span>
+          )}
         </span>
         <button
           onClick={copy}
@@ -83,17 +96,41 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
           )}
         </button>
       </div>
-      {isShikiHtml ? (
-        <div
-          className="shiki-container px-3 py-2.5 overflow-x-auto [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:font-mono [&_code]:text-[12.5px] [&_code]:leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      ) : (
-        <pre className="px-3 py-2.5 overflow-x-auto">
-          <code className="font-mono text-[12.5px] text-text/90 leading-relaxed">
-            {raw}
-          </code>
-        </pre>
+      {/* Content area — capped + faded while collapsed. */}
+      <div className="relative">
+        <div className={collapsed ? 'max-h-[20rem] overflow-hidden' : ''}>
+          {isShikiHtml ? (
+            <div
+              className="shiki-container px-3 py-2.5 overflow-x-auto [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:font-mono [&_code]:text-[12.5px] [&_code]:leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          ) : (
+            <pre className="px-3 py-2.5 overflow-x-auto">
+              <code className="font-mono text-[12.5px] text-text/90 leading-relaxed">
+                {raw}
+              </code>
+            </pre>
+          )}
+        </div>
+        {collapsed && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0d0d0d] to-transparent" />
+        )}
+      </div>
+      {collapsible && (
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full flex items-center justify-center gap-1 border-t border-line py-1.5 font-mono text-[10px] text-mute hover:text-accent hover:bg-surface/60 transition-colors"
+        >
+          {expanded ? (
+            <>
+              <ChevronUp size={11} /> show less
+            </>
+          ) : (
+            <>
+              <ChevronDown size={11} /> show {lineCount - CODE_COLLAPSE_LINES} more lines
+            </>
+          )}
+        </button>
       )}
     </div>
   );
