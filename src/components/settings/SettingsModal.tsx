@@ -537,10 +537,11 @@ export function SettingsModal({
               <code className="text-accent/70">&lt;summary&gt;</code> block — slower
               indexing, less context lost. <span className="text-accent/70">Drop oldest</span>{' '}
               silently trims older messages (cheaper, lossy).{' '}
-              <span className="text-accent/70">Off</span> errors rather than dropping
-              anything — for users who want zero hidden LLM activity. Auto-summarize
-              needs a context window of at least 4k tokens; falls back to dropping
-              below that.
+              <span className="text-accent/70">Off</span> sends the full history
+              untouched — no summarizing, no trimming; the provider becomes the real
+              limit and reports if it doesn&apos;t fit (zero hidden LLM activity).
+              Auto-summarize needs a context window of at least 4k tokens; falls back
+              to dropping below that.
             </div>
           </div>
           <div className="border-t border-line pt-4">

@@ -353,119 +353,141 @@ export function useChat(
           0,
           params.contextWindow - responseReserve - sysTokens,
         );
-        let fit = fitToBudget(cleaned, conversationBudget);
 
-        // D10b — compression handling. Modes:
-        //   'off'  → if it actually overflows, throw clearly. No silent
-        //            drops, no LLM.
-        //   'drop' → D10a behavior; fit.kept is what we send, dropped is gone.
-        //   'auto' → proactively summarize when used input crosses the
-        //            75% trigger (not waiting for a hard overflow), keeping
-        //            the last COMPACT_KEEP_EXCHANGES exchange(s) verbatim.
-        if (compressionMode === 'off' && fit.dropped.length > 0) {
-          throw new Error(
-            `Context exceeded by ${fit.dropped.length} message(s) ` +
-              `(~${fit.droppedTokens} tokens). Compression is off — ` +
-              'increase the context window, lower history, or switch ' +
-              'Compression to auto/drop in Settings.',
-          );
-        }
+        // Mutable compaction bookkeeping — `cleaned` already excludes
+        // messages covered by the existing summary, so compactedUpTo
+        // starts at 0 and advances as each pass summarizes more of the
+        // verbatim prefix. The verbatim tail is always
+        // cleaned.slice(compactedUpTo).
+        let compactedUpTo = 0;
+        let curReplacedIds = currentSummary?.replacedMessageIds ?? [];
+        let curReplacedTokens = currentSummary?.replacedTokens ?? 0;
+        let curGeneration = currentSummary?.generation ?? 0;
 
-        // Auto-compaction trigger: estimated conversation tokens (the full
-        // tail, before any budget trimming) crossing 75% of the available
-        // conversation budget. Proactive headroom rather than a 100%
-        // overflow. (#3)
-        const fullConversationTokens = cleaned.reduce(
-          (s, m) => s + estimateMessageTokens(m),
-          0,
-        );
-        const triggerAt = COMPACT_TRIGGER_FRACTION * conversationBudget;
+        let fit = fitToBudget(cleaned.slice(compactedUpTo), conversationBudget);
 
-        if (
-          compressionMode === 'auto' &&
-          fullConversationTokens > triggerAt &&
-          params.contextWindow >= MIN_AUTO_COMPACT_CONTEXT_TOKENS
-        ) {
-          // (#2) Keep the last exchange verbatim — only messages BEFORE
-          // the recency boundary, and not already covered by the active
-          // summary, are eligible for compaction.
-          const boundary = recencyBoundaryIndex(cleaned, COMPACT_KEEP_EXCHANGES);
-          const eligible = cleaned.slice(0, boundary);
+        // Compact cleaned[compactedUpTo, newUpTo) into the active summary,
+        // persist, rebuild the system message, and re-fit the remaining
+        // tail. Returns true if a summary was written. Shared by the
+        // normal pass and the fat-tail fallback so they can't drift.
+        const compactUpTo = async (newUpTo: number): Promise<boolean> => {
+          const eligible = cleaned.slice(compactedUpTo, newUpTo);
+          if (eligible.length === 0) return false;
           const eligibleTokens = eligible.reduce(
             (s, m) => s + estimateMessageTokens(m),
             0,
           );
-          const nextGeneration = (currentSummary?.generation ?? 0) + 1;
+          if (eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) return false;
 
-          if (eligible.length === 0 || eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) {
-            // Nothing new worth compacting (e.g. the summary + last
-            // exchange alone exceed the threshold). Skip — re-compacting
-            // here would only burn an LLM call and a generation.
-          } else if (nextGeneration > MAX_COMPACTIONS_PER_THREAD) {
+          const nextGeneration = curGeneration + 1;
+          if (nextGeneration > MAX_COMPACTIONS_PER_THREAD) {
             console.warn(
               `[compact] cap of ${MAX_COMPACTIONS_PER_THREAD} compactions ` +
                 'reached for this thread — falling back to drop. Consider ' +
                 'starting a new chat for the best quality.',
             );
-          } else {
-            if (nextGeneration === WARN_COMPACTIONS_PER_THREAD) {
-              console.warn(
-                `[compact] approaching the cap of ${MAX_COMPACTIONS_PER_THREAD} ` +
-                  'compactions for this thread — quality degrades with each round.',
-              );
-            }
-            setCompacting(true);
-            try {
-              const result = await compact(eligible, provider, modelId, {
-                priorSummary: summaryText || null,
-                signal: controller.signal,
-              });
-              if (result) {
-                const replacedIds = [
-                  ...(currentSummary?.replacedMessageIds ?? []),
-                  ...eligible.map((m) => m.id),
-                ];
-                const replacedTokens =
-                  (currentSummary?.replacedTokens ?? 0) + eligibleTokens;
-                const saved = await saveSummary({
-                  threadId: threadId!,
-                  text: result.text,
-                  replacedMessageIds: replacedIds,
-                  replacedTokens,
-                  summaryTokens: estimateStringTokens(result.text),
-                  source: 'auto',
-                });
-                setActiveSummary(saved);
+            return false;
+          }
+          if (nextGeneration === WARN_COMPACTIONS_PER_THREAD) {
+            console.warn(
+              `[compact] approaching the cap of ${MAX_COMPACTIONS_PER_THREAD} ` +
+                'compactions for this thread — quality degrades with each round.',
+            );
+          }
 
-                // The compacted messages are now represented by the
-                // summary block — drop them from the conversation tail
-                // and rebuild the system message with the new summary.
-                summaryText = result.text;
-                summaryReplacedCount = saved.replacedMessageIds.length;
-                sysContent = buildSysContent();
-                sysMsg = sysContent
-                  ? {
-                      id: '__system',
-                      threadId,
-                      role: 'system',
-                      content: sysContent,
-                      createdAt: 0,
-                    }
-                  : null;
-                sysTokens = sysMsg ? estimateMessageTokens(sysMsg) : 0;
-                conversationBudget = Math.max(
-                  0,
-                  params.contextWindow - responseReserve - sysTokens,
-                );
-                // Re-fit over only the verbatim tail (cleaned minus the
-                // now-summarized eligible prefix).
-                fit = fitToBudget(cleaned.slice(boundary), conversationBudget);
+          setCompacting(true);
+          try {
+            const result = await compact(eligible, provider, modelId, {
+              priorSummary: summaryText || null,
+              signal: controller.signal,
+            });
+            if (!result) return false;
+            curReplacedIds = [...curReplacedIds, ...eligible.map((m) => m.id)];
+            curReplacedTokens += eligibleTokens;
+            const saved = await saveSummary({
+              threadId: threadId!,
+              text: result.text,
+              replacedMessageIds: curReplacedIds,
+              replacedTokens: curReplacedTokens,
+              summaryTokens: estimateStringTokens(result.text),
+              source: 'auto',
+            });
+            setActiveSummary(saved);
+            curGeneration = saved.generation;
+            summaryText = result.text;
+            summaryReplacedCount = saved.replacedMessageIds.length;
+            compactedUpTo = newUpTo;
+
+            // Rebuild the system message with the new summary, then re-fit
+            // the remaining verbatim tail (usually grows — the summary
+            // block is smaller than what it replaced).
+            sysContent = buildSysContent();
+            sysMsg = sysContent
+              ? { id: '__system', threadId, role: 'system', content: sysContent, createdAt: 0 }
+              : null;
+            sysTokens = sysMsg ? estimateMessageTokens(sysMsg) : 0;
+            conversationBudget = Math.max(
+              0,
+              params.contextWindow - responseReserve - sysTokens,
+            );
+            fit = fitToBudget(cleaned.slice(compactedUpTo), conversationBudget);
+            return true;
+          } finally {
+            setCompacting(false);
+          }
+        };
+
+        // D10b — compression handling. Modes:
+        //   'off'  → soft limit: no compaction, no trimming. Send the full
+        //            (historyMsgs-sliced) tail as-is and let the provider
+        //            be the real context limit — our token estimate is
+        //            approximate, so we never pre-emptively block.
+        //   'drop' → trim oldest to fit the budget; dropped is gone.
+        //   'auto' → proactively summarize when used input crosses the 75%
+        //            trigger, keeping the last exchange verbatim; fall back
+        //            to keeping only the current query if that tail still
+        //            overflows.
+        if (compressionMode === 'off') {
+          // Soft 100%: bypass the sliding window entirely.
+          fit = {
+            kept: cleaned,
+            dropped: [],
+            keptTokens: cleaned.reduce((s, m) => s + estimateMessageTokens(m), 0),
+            droppedTokens: 0,
+            singleMessageOverflow: false,
+          };
+        } else if (compressionMode === 'auto') {
+          const fullConversationTokens = cleaned.reduce(
+            (s, m) => s + estimateMessageTokens(m),
+            0,
+          );
+          const triggerAt = COMPACT_TRIGGER_FRACTION * conversationBudget;
+          if (
+            fullConversationTokens > triggerAt &&
+            params.contextWindow >= MIN_AUTO_COMPACT_CONTEXT_TOKENS
+          ) {
+            // Pass 1 — keep the last exchange verbatim.
+            const boundary = recencyBoundaryIndex(cleaned, COMPACT_KEEP_EXCHANGES);
+            if (boundary > compactedUpTo) await compactUpTo(boundary);
+
+            // Pass 2 (fat-tail fallback) — the protected tail itself still
+            // overflows (a huge recent message). Yield the recency floor
+            // down to just the current user query and compact the rest.
+            // We never summarize the active query itself.
+            if (fit.dropped.length > 0) {
+              let lastUserIdx = -1;
+              for (let i = cleaned.length - 1; i >= 0; i--) {
+                if (cleaned[i]!.role === 'user') {
+                  lastUserIdx = i;
+                  break;
+                }
               }
-            } finally {
-              setCompacting(false);
+              if (lastUserIdx > compactedUpTo) await compactUpTo(lastUserIdx);
             }
           }
         }
+        // 'drop' needs no extra work — the initial fit already trimmed to
+        // budget, and that's exactly its semantics.
 
         if (fit.singleMessageOverflow) {
           console.warn(
