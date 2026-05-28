@@ -33,6 +33,7 @@ import {
 import { setCodeTheme } from '../lib/highlight';
 import { generateTitle } from '../lib/title';
 import { createContextualizer, type Contextualizer } from '../lib/contextualizer';
+import { loadCalibration } from '../lib/token-calibration';
 import { detectReasoning, defaultEffort } from '../lib/reasoning';
 import { NavRail, type NavPage } from './nav/NavRail';
 import { SystemStats } from './system/SystemStats';
@@ -104,6 +105,7 @@ export default function App() {
   useEffect(() => {
     webllmProvider.listModels().then(setModels);
     getHttpProviders().forEach((p) => p.loadConfig());
+    void loadCalibration();
     seedBuiltInTemplates()
       .then(() => listTemplates())
       .then(setTemplates);
