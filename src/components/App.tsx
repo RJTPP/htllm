@@ -23,9 +23,12 @@ import {
   DEFAULT_CODE_THEME,
   DEFAULT_TITLE_MODE,
   DEFAULT_ACCENT_COLOR,
+  DEFAULT_COMPRESSION_MODE,
+  COMPRESSION_MODE_KEY,
   ACCENT_PRESETS,
   type TitleMode,
   type AccentColor,
+  type CompressionMode,
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
 import { generateTitle } from '../lib/title';
@@ -87,6 +90,8 @@ export default function App() {
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [defaultLibraryId, setDefaultLibraryIdState] = useState<string | null>(null);
   const [rememberLastLibrary, setRememberLastLibraryState] = useState(false);
+  const [compressionMode, setCompressionModeState] =
+    useState<CompressionMode>(DEFAULT_COMPRESSION_MODE);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
   const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
   const [accentColor, setAccentColorState] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
@@ -127,6 +132,11 @@ export default function App() {
     getSetting<boolean>('rememberLastLibrary').then((v) => {
       if (typeof v === 'boolean') setRememberLastLibraryState(v);
     });
+    getSetting<CompressionMode>(COMPRESSION_MODE_KEY).then((v) => {
+      if (v === 'auto' || v === 'drop' || v === 'off') {
+        setCompressionModeState(v);
+      }
+    });
   }, []);
 
   const setDefaultSystemPrompt = useCallback(async (value: string) => {
@@ -143,6 +153,11 @@ export default function App() {
   const setTitleMode = useCallback(async (value: TitleMode) => {
     setTitleModeState(value);
     await setSetting('titleMode', value);
+  }, []);
+
+  const setCompressionMode = useCallback(async (value: CompressionMode) => {
+    setCompressionModeState(value);
+    await setSetting(COMPRESSION_MODE_KEY, value);
   }, []);
 
   const handleSetAccentColor = useCallback(async (value: AccentColor) => {
@@ -232,7 +247,19 @@ export default function App() {
     return { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
   }, [rawParams, activeThread?.modelParams, activeReasoningCapability]);
 
-  const { messages, generating, budget, send, regenerate, editAndResend, stop } = useChat(
+  const {
+    messages,
+    generating,
+    budget,
+    activeSummary,
+    compacting,
+    send,
+    regenerate,
+    editAndResend,
+    stop,
+    compactNow,
+    clearSummary,
+  } = useChat(
     activeProvider,
     activeModelId,
     activeThreadId,
@@ -241,6 +268,7 @@ export default function App() {
     updateThreadTimestamp,
     handleAutoTitle,
     ragConfig,
+    compressionMode,
   );
 
   const modelReady = isApiThread
@@ -710,6 +738,10 @@ export default function App() {
                   ragLibraryId={ragLibraryId}
                   onChangeRagLibrary={handleChangeRagLibrary}
                   onNewLibrary={handleNewLibraryRequest}
+                  activeSummary={activeSummary}
+                  compacting={compacting}
+                  onCompactNow={compactNow}
+                  onClearSummary={clearSummary}
                 />
               </>
             )}
@@ -769,6 +801,8 @@ export default function App() {
         setDefaultLibraryId={handleSetDefaultLibraryId}
         rememberLastLibrary={rememberLastLibrary}
         setRememberLastLibrary={handleSetRememberLastLibrary}
+        compressionMode={compressionMode}
+        setCompressionMode={setCompressionMode}
         tab={settingsTab}
         onTabChange={setSettingsTab}
       />

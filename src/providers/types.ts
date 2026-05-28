@@ -285,6 +285,46 @@ export interface EmbeddingRecord {
   vector: number[];
 }
 
+/**
+ * D10b — conversation compaction summary.
+ *
+ * When the sliding window would drop older messages (auto mode), the
+ * dropped portion is summarized by a chat-model call and persisted
+ * here. The summary is reinjected as a `<summary>` block in subsequent
+ * requests so the model still has the gist of older turns without
+ * paying their full token cost.
+ *
+ * One *active* summary per thread at a time — re-compaction REPLACES
+ * the prior summary rather than stacking (stacked summaries decay
+ * quality multiplicatively per Codex / Anthropic guidance). Older
+ * summaries stay in the store for the UI's "show previous summaries"
+ * view but are not used in prompt construction.
+ */
+export interface ConversationSummary {
+  id: string;
+  threadId: string;
+  /** The summary text the model produced (no XML wrappers). */
+  text: string;
+  /** Message ids replaced by this summary, in original order. They
+   *  stay in the messages store — only the prompt excludes them. */
+  replacedMessageIds: string[];
+  /** Estimated token totals at compaction time (for the UI divider). */
+  replacedTokens: number;
+  summaryTokens: number;
+  /** Did the user trigger this with the manual "Compact now" button,
+   *  or did the auto-compact threshold fire? */
+  source: 'auto' | 'manual';
+  /** Re-compaction counter on the thread. The first summary is 1,
+   *  subsequent replacements increment. We warn at 3 and hard-stop at
+   *  5 — quality decays multiplicatively. */
+  generation: number;
+  createdAt: number;
+  /** False when superseded by a newer summary. The runtime only ever
+   *  uses the latest active summary per thread; older rows are kept
+   *  for diagnostics / future UI. */
+  active: boolean;
+}
+
 export interface PromptTemplate {
   id: string;
   title: string;

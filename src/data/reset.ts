@@ -12,6 +12,7 @@ const STORES = [
   'chunks',
   'parents',
   'embeddings',
+  'summaries',
 ] as const;
 
 /**
