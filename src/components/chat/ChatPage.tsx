@@ -192,6 +192,7 @@ export function ChatPage({
                         generating={generating}
                         onRegenerate={handleRegenerate}
                         onEditAndResend={onEditAndResend}
+                        locked={coveredIds?.has(m.id) ?? false}
                       />
                     )}
                   </div>
