@@ -568,15 +568,20 @@ export function useChat(
           });
         };
 
-        // Cap output to whatever room remains so prompt + output stays
-        // within the window — the user's maxTokens is the ceiling, not a
-        // fixed reservation. When the prompt is small this is the full
-        // maxTokens; near a full context it shrinks gracefully.
+        // Cap output to the remaining window ONLY for WebLLM, where our
+        // contextWindow param IS the model's real window. For API
+        // providers the param is just a budgeting hint — the backend
+        // enforces its own (usually larger) limit — so capping output by
+        // `param − prompt` would needlessly starve it (the bug where a
+        // big prompt left only the 64-token floor). Send the user's
+        // maxTokens unchanged there and let the backend arbitrate.
         const usedInputTokens = sysTokens + fit.keptTokens;
-        const effectiveMaxTokens = Math.max(
-          64,
-          Math.min(params.maxTokens, params.contextWindow - usedInputTokens),
-        );
+        const effectiveMaxTokens = provider.needsModelLoad
+          ? Math.max(
+              256,
+              Math.min(params.maxTokens, params.contextWindow - usedInputTokens),
+            )
+          : params.maxTokens;
 
         for await (const chunk of provider.chat({
           messages: sendMessages,
