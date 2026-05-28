@@ -201,8 +201,8 @@ export function SettingsModal({
   setRememberLastLibrary,
   compressionMode,
   setCompressionMode,
-  rememberLastModel,
-  setRememberLastModel,
+  rememberPerSessionModel,
+  setRememberPerSessionModel,
   tab,
   onTabChange,
 }: {
@@ -229,9 +229,9 @@ export function SettingsModal({
   /** D10b — compression mode (auto-summarize / drop / off). */
   compressionMode: CompressionMode;
   setCompressionMode: (value: CompressionMode) => void;
-  /** When on, restore + auto-load the previous session's model. */
-  rememberLastModel: boolean;
-  setRememberLastModel: (value: boolean) => void;
+  /** On: each chat keeps its own model. Off: one global model for all. */
+  rememberPerSessionModel: boolean;
+  setRememberPerSessionModel: (value: boolean) => void;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
 }) {
@@ -517,18 +517,19 @@ export function SettingsModal({
             <label className="flex items-start gap-2.5 cursor-pointer group">
               <input
                 type="checkbox"
-                checked={rememberLastModel}
-                onChange={(e) => setRememberLastModel(e.target.checked)}
+                checked={rememberPerSessionModel}
+                onChange={(e) => setRememberPerSessionModel(e.target.checked)}
                 className="accent-accent mt-0.5"
               />
               <div className="min-w-0">
                 <div className="font-mono text-[12px] text-text group-hover:text-accent transition-colors">
-                  Remember last model
+                  Remember per-session model
                 </div>
                 <div className="font-mono text-[10px] text-mute/80 leading-relaxed mt-0.5">
-                  Reload the model from your previous session and auto-load it when
-                  you send. Off by default — local models can be multi-gigabyte, so
-                  htllm won&apos;t download one without you picking it.
+                  On: each chat keeps the model you last used in it. Off (default):
+                  one global model — picking a model anywhere applies to every chat.
+                  (A cached local model still auto-loads on send; htllm never
+                  downloads one without you picking it.)
                 </div>
               </div>
             </label>

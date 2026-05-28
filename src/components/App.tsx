@@ -85,16 +85,20 @@ export default function App() {
     timeElapsed: 0,
   });
   const [loadedModelId, setLoadedModelId] = useState<string | null>(null);
+  // The "global model" — provider + id of the last model selected
+  // anywhere. When per-session memory is off, every chat resolves to
+  // this; selecting a model updates it.
   const [lastModelId, setLastModelId] = useState<string | null>(null);
+  const [lastProviderId, setLastProviderId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [page, setPage] = useState<NavPage>('chat');
   const [modal, setModal] = useState<ModalId>(null);
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [defaultLibraryId, setDefaultLibraryIdState] = useState<string | null>(null);
   const [rememberLastLibrary, setRememberLastLibraryState] = useState(false);
-  // Off by default: don't silently re-load last session's model (which
-  // can trigger a multi-GB download). Opt in to restore + auto-load it.
-  const [rememberLastModel, setRememberLastModelState] = useState(false);
+  // Off by default: all chats share one global model (selecting a model
+  // anywhere applies everywhere). On: each chat remembers its own model.
+  const [rememberPerSessionModel, setRememberPerSessionModelState] = useState(false);
   const [compressionMode, setCompressionModeState] =
     useState<CompressionMode>(DEFAULT_COMPRESSION_MODE);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
@@ -114,6 +118,9 @@ export default function App() {
     });
     getSetting<string>('lastModelId').then((v) => {
       if (v != null) setLastModelId(v);
+    });
+    getSetting<string>('lastProviderId').then((v) => {
+      if (v != null) setLastProviderId(v);
     });
     getSetting<string>('codeTheme').then((v) => {
       if (v != null) {
@@ -138,8 +145,8 @@ export default function App() {
     getSetting<boolean>('rememberLastLibrary').then((v) => {
       if (typeof v === 'boolean') setRememberLastLibraryState(v);
     });
-    getSetting<boolean>('rememberLastModel').then((v) => {
-      if (typeof v === 'boolean') setRememberLastModelState(v);
+    getSetting<boolean>('rememberPerSessionModel').then((v) => {
+      if (typeof v === 'boolean') setRememberPerSessionModelState(v);
     });
     getSetting<CompressionMode>(COMPRESSION_MODE_KEY).then((v) => {
       if (v === 'auto' || v === 'drop' || v === 'off') {
@@ -194,14 +201,24 @@ export default function App() {
   // create / delete / rebind there reflects here without a refresh.
   const { libraries } = useLibraries();
 
-  // A thread is bound to a provider via thread.providerId. WebLLM needs a model
-  // loaded into its engine; an HTTP provider is ready as soon as it has a
-  // modelId — so the lifecycle branch is a provider capability, not an id check.
+  // Model resolution. Per-session ON → use the chat's own bound model;
+  // OFF → the global model (lastProviderId/lastModelId) overrides every
+  // chat. WebLLM needs the model loaded into its engine; an HTTP provider
+  // is ready as soon as it has a modelId — so the lifecycle branch is a
+  // provider capability, not an id check.
+  const wantedProviderId = rememberPerSessionModel
+    ? activeThread?.providerId ?? lastProviderId ?? ''
+    : lastProviderId ?? activeThread?.providerId ?? '';
+  const wantedModelId = rememberPerSessionModel
+    ? activeThread?.modelId ?? lastModelId ?? ''
+    : lastModelId ?? activeThread?.modelId ?? '';
   const activeProvider: ChatProvider =
-    getProvider(activeThread?.providerId ?? '') ?? webllmProvider;
+    getProvider(wantedProviderId) ?? webllmProvider;
   const activeProviderId = activeProvider.id;
   const isApiThread = !activeProvider.needsModelLoad;
-  const activeModelId = isApiThread ? (activeThread?.modelId ?? '') : (loadedModelId ?? '');
+  // WebLLM's active model is whatever's actually loaded (one at a time);
+  // API threads use the resolved wanted model directly.
+  const activeModelId = isApiThread ? wantedModelId : (loadedModelId ?? '');
 
   // D8 Part B — factory for Contextual Retrieval. Knowledge page passes
   // this into useKnowledge; when a library has opted in, the embed pipeline
@@ -325,8 +342,12 @@ export default function App() {
           prev.map((m) => (m.id === modelId ? { ...m, cached: true } : m)),
         );
         setModal(null);
+        // Update the global model (provider + id) so per-session-off
+        // chats follow this load.
         setLastModelId(modelId);
+        setLastProviderId(webllmProvider.id);
         await setSetting('lastModelId', modelId);
+        await setSetting('lastProviderId', webllmProvider.id);
         // Loading a WebLLM model binds the active thread to WebLLM — handles the
         // case where the thread was previously pointed at an API provider.
         if (activeThreadId) {
@@ -562,17 +583,17 @@ export default function App() {
       regenerate();
       return;
     }
-    if (rememberLastModel && !isApiThread && lastModelId && engineStatus === 'idle') {
-      const cached = models.find((m) => m.id === lastModelId)?.cached;
+    // Auto-load only an ALREADY-CACHED model (no surprise multi-GB
+    // download); otherwise open the picker.
+    if (!isApiThread && wantedModelId && engineStatus === 'idle') {
+      const cached = models.find((m) => m.id === wantedModelId)?.cached;
       if (cached) {
-        // Auto-load the cached model, then regenerate via the pending effect
-        // won't work here (pending is for send). Just open the picker.
-        handleLoad(lastModelId);
+        handleLoad(wantedModelId);
         return;
       }
     }
     setModal('picker');
-  }, [modelReady, isApiThread, lastModelId, engineStatus, models, regenerate, handleLoad, rememberLastModel]);
+  }, [modelReady, isApiThread, wantedModelId, engineStatus, models, regenerate, handleLoad]);
 
   const handleSend = useCallback(
     (text: string, images?: import('../lib/image').ChatImage[]) => {
@@ -580,24 +601,32 @@ export default function App() {
         send(text, images);
         return;
       }
-      // Deferred auto-load only applies to WebLLM; API threads have no load step.
-      if (rememberLastModel && !isApiThread && lastModelId && engineStatus === 'idle') {
-        const cached = models.find((m) => m.id === lastModelId)?.cached;
+      // Deferred auto-load of an already-cached WebLLM model (no surprise
+      // download); API threads have no load step.
+      if (!isApiThread && wantedModelId && engineStatus === 'idle') {
+        const cached = models.find((m) => m.id === wantedModelId)?.cached;
         if (cached) {
           pendingRef.current = { text, images };
-          handleLoad(lastModelId);
+          handleLoad(wantedModelId);
           return;
         }
       }
       setModal('picker');
     },
-    [modelReady, isApiThread, lastModelId, engineStatus, models, send, handleLoad, rememberLastModel],
+    [modelReady, isApiThread, wantedModelId, engineStatus, models, send, handleLoad],
   );
 
   // Selecting a model from an HTTP provider binds the active thread to that
   // provider — no download step, so the thread is immediately ready to chat.
   const handleSelectApiModel = useCallback(
     (providerId: string, modelId: string) => {
+      // Update the global model (so per-session-off chats follow) AND the
+      // current chat (its own binding when per-session is on, kept in
+      // sync otherwise).
+      setLastProviderId(providerId);
+      setLastModelId(modelId);
+      void setSetting('lastProviderId', providerId);
+      void setSetting('lastModelId', modelId);
       if (activeThreadId) {
         updateThread(activeThreadId, { providerId, modelId });
       }
@@ -667,9 +696,9 @@ export default function App() {
     await setSetting('rememberLastLibrary', value);
   }, []);
 
-  const handleSetRememberLastModel = useCallback(async (value: boolean) => {
-    setRememberLastModelState(value);
-    await setSetting('rememberLastModel', value);
+  const handleSetRememberPerSessionModel = useCallback(async (value: boolean) => {
+    setRememberPerSessionModelState(value);
+    await setSetting('rememberPerSessionModel', value);
   }, []);
 
   const handleThreadParamsApply = useCallback(
@@ -732,8 +761,8 @@ export default function App() {
             <ModelSlot
               model={
                 isApiThread
-                  ? activeThread?.modelId || null
-                  : loadedModelId ?? (rememberLastModel ? lastModelId : null)
+                  ? activeModelId || null
+                  : loadedModelId ?? wantedModelId ?? null
               }
               models={models}
               state={
@@ -858,8 +887,8 @@ export default function App() {
         setRememberLastLibrary={handleSetRememberLastLibrary}
         compressionMode={compressionMode}
         setCompressionMode={setCompressionMode}
-        rememberLastModel={rememberLastModel}
-        setRememberLastModel={handleSetRememberLastModel}
+        rememberPerSessionModel={rememberPerSessionModel}
+        setRememberPerSessionModel={handleSetRememberPerSessionModel}
         tab={settingsTab}
         onTabChange={setSettingsTab}
       />
