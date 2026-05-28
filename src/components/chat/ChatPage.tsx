@@ -8,6 +8,8 @@ import { MessageView } from './MessageView';
 import { EmptyState } from './EmptyState';
 import { Composer } from './Composer';
 import { SummaryDivider } from './SummaryDivider';
+import { CompactingIndicator } from './CompactingIndicator';
+import { TrimDivider } from './TrimDivider';
 
 export function ChatPage({
   thread,
@@ -143,26 +145,54 @@ export function ChatPage({
               const firstFreshIdx = coveredIds
                 ? messages.findIndex((m) => !coveredIds.has(m.id))
                 : -1;
-              return messages.map((m, i) => (
-                <div key={m.id}>
-                  {activeSummary && i === firstFreshIdx && (
-                    <SummaryDivider
-                      summary={activeSummary}
-                      onClear={onClearSummary}
-                    />
-                  )}
-                  <MessageView
-                    message={m}
-                    modelId={loadedModelId}
-                    models={models}
-                    streaming={generating && i === messages.length - 1 && m.role === 'assistant'}
-                    isLast={i === messages.length - 1}
-                    generating={generating}
-                    onRegenerate={handleRegenerate}
-                    onEditAndResend={onEditAndResend}
-                  />
-                </div>
-              ));
+
+              // Trim horizon: the oldest message actually sent verbatim on
+              // the last fit. Messages between the summary boundary and
+              // this index are in the UI but weren't sent (sliding window).
+              // We only render the divider when there's a genuine gap —
+              // i.e. some non-covered message sits above the first-sent one.
+              const trimIdx = budget?.firstSentMessageId
+                ? messages.findIndex((m) => m.id === budget.firstSentMessageId)
+                : -1;
+              const summaryEnd = firstFreshIdx === -1 ? 0 : firstFreshIdx;
+              const trimmedCount =
+                trimIdx > summaryEnd ? trimIdx - summaryEnd : 0;
+
+              return messages.map((m, i) => {
+                const isLast = i === messages.length - 1;
+                // While compacting, the trailing assistant placeholder is
+                // empty (the stream hasn't started). Suppress it and show
+                // the "compacting context…" divider in its place. (#4)
+                const suppressForCompacting =
+                  compacting && isLast && m.role === 'assistant';
+                return (
+                  <div key={m.id}>
+                    {activeSummary && i === firstFreshIdx && (
+                      <SummaryDivider
+                        summary={activeSummary}
+                        onClear={onClearSummary}
+                      />
+                    )}
+                    {trimmedCount > 0 && i === trimIdx && (
+                      <TrimDivider count={trimmedCount} />
+                    )}
+                    {suppressForCompacting ? (
+                      <CompactingIndicator />
+                    ) : (
+                      <MessageView
+                        message={m}
+                        modelId={loadedModelId}
+                        models={models}
+                        streaming={generating && isLast && m.role === 'assistant'}
+                        isLast={isLast}
+                        generating={generating}
+                        onRegenerate={handleRegenerate}
+                        onEditAndResend={onEditAndResend}
+                      />
+                    )}
+                  </div>
+                );
+              });
             })()}
           </div>
         )}
@@ -175,8 +205,6 @@ export function ChatPage({
         templates={templates}
         contextUsed={contextUsed}
         contextTotal={params.contextWindow}
-        droppedCount={budget?.droppedCount ?? 0}
-        summarizedCount={budget?.summarizedCount ?? 0}
         compacting={compacting}
         onCompactNow={onCompactNow}
         reasoningCapability={reasoningCapability}

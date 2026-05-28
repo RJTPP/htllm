@@ -57,6 +57,40 @@ export function sliceByUserTurns(messages: Message[], n: number): Message[] {
   return messages;
 }
 
+/**
+ * Index of the first message to KEEP verbatim when compacting, given
+ * how many recent exchanges to protect. Everything before this index is
+ * eligible for summarization; everything at/after stays as-is.
+ *
+ * An "exchange" is anchored on a user message. With `keepExchanges = 1`
+ * at send time the message list looks like:
+ *
+ *   [ ...older..., prevUser, prevAssistant, newUser ]
+ *                  ^─ returned index
+ *
+ * i.e. we keep the last completed exchange (prevUser + prevAssistant)
+ * plus the pending new user message. We find this by walking back and
+ * stopping at the (keepExchanges + 1)-th user message from the end —
+ * the +1 accounts for the trailing pending user turn.
+ *
+ * Returns 0 when there aren't enough user messages to protect that many
+ * exchanges (i.e. keep everything; nothing to compact).
+ */
+export function recencyBoundaryIndex(
+  messages: Message[],
+  keepExchanges: number,
+): number {
+  if (keepExchanges <= 0) return messages.length;
+  let userSeen = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role === 'user') {
+      userSeen++;
+      if (userSeen === keepExchanges + 1) return i;
+    }
+  }
+  return 0;
+}
+
 export interface FitResult {
   /** Messages that fit under the budget, in original order. */
   kept: Message[];

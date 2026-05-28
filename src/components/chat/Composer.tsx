@@ -3,7 +3,7 @@ import type { PromptTemplate, ReasoningEffort, ReasoningCapability } from '../..
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
-import { Image, ArrowRight, Brain, FileText, Loader2 } from 'lucide-react';
+import { Image, ArrowRight, Brain, Loader2 } from 'lucide-react';
 import { PromptHints } from './PromptHints';
 import { Tooltip } from '../ui/Tooltip';
 import { KnowledgeChip } from './KnowledgeChip';
@@ -67,8 +67,6 @@ export function Composer({
   templates,
   contextUsed,
   contextTotal,
-  droppedCount = 0,
-  summarizedCount = 0,
   compacting = false,
   onCompactNow,
   reasoningCapability,
@@ -89,13 +87,6 @@ export function Composer({
   templates: PromptTemplate[];
   contextUsed: number;
   contextTotal: number;
-  /** D10a — number of older messages dropped by the token-budget
-   *  sliding window. When > 0, a small "trimmed" chip appears next
-   *  to the context meter so the user knows older context is gone. */
-  droppedCount?: number;
-  /** D10b — number of messages covered by the active summary. When > 0,
-   *  a small "summarized N" chip appears next to the meter. */
-  summarizedCount?: number;
   /** D10b — true while a compaction LLM call is in flight. The
    *  "Compact now" button shows a spinner and disables. */
   compacting?: boolean;
@@ -312,23 +303,6 @@ export function Composer({
               <ContextRing used={contextUsed} total={contextTotal} />
             ) : (
               <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
-            )}
-            {droppedCount > 0 && (
-              <span
-                title={`${droppedCount} older message${droppedCount === 1 ? '' : 's'} dropped to fit the context window`}
-                className="font-mono text-[9px] text-warn/80 border border-warn/40 px-1 leading-[14px] uppercase tracking-wider"
-              >
-                −{droppedCount} trimmed
-              </span>
-            )}
-            {summarizedCount > 0 && (
-              <span
-                title={`${summarizedCount} older turn${summarizedCount === 1 ? '' : 's'} represented by a summary block instead of full text`}
-                className="inline-flex items-center gap-0.5 font-mono text-[9px] text-accent border border-accent/40 bg-accent/5 px-1 leading-[14px] uppercase tracking-wider"
-              >
-                <FileText size={9} />
-                ≡{summarizedCount}
-              </span>
             )}
             {onCompactNow && (
               <button

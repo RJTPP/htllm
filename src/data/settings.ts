@@ -100,6 +100,19 @@ export const MIN_AUTO_COMPACT_CONTEXT_TOKENS = 4096;
 export const MAX_COMPACTIONS_PER_THREAD = 5;
 export const WARN_COMPACTIONS_PER_THREAD = 3;
 
+/** Auto-compaction fires when estimated input tokens cross this fraction
+ *  of the available conversation budget — proactive headroom rather than
+ *  waiting for a hard 100% overflow. */
+export const COMPACT_TRIGGER_FRACTION = 0.75;
+
+/** Recent exchanges kept verbatim and never summarized. 1 = keep the
+ *  last completed user/assistant pair (plus the pending user turn). */
+export const COMPACT_KEEP_EXCHANGES = 1;
+
+/** Don't bother compacting unless at least this many tokens are eligible
+ *  — crossing the threshold by a sliver isn't worth an LLM call. */
+export const COMPACT_MIN_ELIGIBLE_TOKENS = 1000;
+
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDb();
   const entry = await db.get('settings', key);

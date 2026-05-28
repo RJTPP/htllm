@@ -14,6 +14,7 @@ import { getLibrary } from '../data/libraries';
 import { getEmbeddingProvider } from '../providers/registry';
 import {
   fitToBudget,
+  recencyBoundaryIndex,
   reserveForResponse,
   sliceByUserTurns,
 } from '../lib/conversation-budget';
@@ -26,6 +27,9 @@ import {
 } from '../data/summaries';
 import {
   type CompressionMode,
+  COMPACT_KEEP_EXCHANGES,
+  COMPACT_MIN_ELIGIBLE_TOKENS,
+  COMPACT_TRIGGER_FRACTION,
   DEFAULT_COMPRESSION_MODE,
   MAX_COMPACTIONS_PER_THREAD,
   MIN_AUTO_COMPACT_CONTEXT_TOKENS,
@@ -81,6 +85,11 @@ export interface ConversationBudget {
   /** Number of messages currently covered by the active summary (i.e.
    *  excluded from the conversation tail but represented as a block). */
   summarizedCount: number;
+  /** Id of the oldest message actually sent verbatim on the last fit.
+   *  Messages above this in the list (that aren't covered by a summary)
+   *  were trimmed by the sliding window — i.e. not sent to the model.
+   *  Drives the inline trim divider. Null when nothing was kept. */
+  firstSentMessageId: string | null;
 }
 
 export function useChat(
@@ -178,6 +187,7 @@ export function useChat(
       responseReserve,
       summaryTokens,
       summarizedCount: activeSummary?.replacedMessageIds.length ?? 0,
+      firstSentMessageId: fit.kept[0]?.id ?? null,
     });
   }, [
     threadId,
@@ -310,6 +320,7 @@ export function useChat(
         // sits above the persona prompt so model-side instructions still
         // have the last word.
         let summaryText = currentSummary?.text ?? '';
+        let summaryReplacedCount = currentSummary?.replacedMessageIds.length ?? 0;
         const buildSysContent = () => {
           const summaryBlock = summaryText
             ? formatSummaryBlock(summaryText)
@@ -345,11 +356,12 @@ export function useChat(
         let fit = fitToBudget(cleaned, conversationBudget);
 
         // D10b — compression handling. Modes:
-        //   'off'  → if overflow, throw clearly. No silent drops, no LLM.
+        //   'off'  → if it actually overflows, throw clearly. No silent
+        //            drops, no LLM.
         //   'drop' → D10a behavior; fit.kept is what we send, dropped is gone.
-        //   'auto' → summarize the dropped portion (plus any prior summary
-        //            it should replace), persist, rebuild sysContent with
-        //            the new summary, re-fit.
+        //   'auto' → proactively summarize when used input crosses the
+        //            75% trigger (not waiting for a hard overflow), keeping
+        //            the last COMPACT_KEEP_EXCHANGES exchange(s) verbatim.
         if (compressionMode === 'off' && fit.dropped.length > 0) {
           throw new Error(
             `Context exceeded by ${fit.dropped.length} message(s) ` +
@@ -358,24 +370,44 @@ export function useChat(
               'Compression to auto/drop in Settings.',
           );
         }
+
+        // Auto-compaction trigger: estimated conversation tokens (the full
+        // tail, before any budget trimming) crossing 75% of the available
+        // conversation budget. Proactive headroom rather than a 100%
+        // overflow. (#3)
+        const fullConversationTokens = cleaned.reduce(
+          (s, m) => s + estimateMessageTokens(m),
+          0,
+        );
+        const triggerAt = COMPACT_TRIGGER_FRACTION * conversationBudget;
+
         if (
           compressionMode === 'auto' &&
-          fit.dropped.length > 0 &&
+          fullConversationTokens > triggerAt &&
           params.contextWindow >= MIN_AUTO_COMPACT_CONTEXT_TOKENS
         ) {
+          // (#2) Keep the last exchange verbatim — only messages BEFORE
+          // the recency boundary, and not already covered by the active
+          // summary, are eligible for compaction.
+          const boundary = recencyBoundaryIndex(cleaned, COMPACT_KEEP_EXCHANGES);
+          const eligible = cleaned.slice(0, boundary);
+          const eligibleTokens = eligible.reduce(
+            (s, m) => s + estimateMessageTokens(m),
+            0,
+          );
           const nextGeneration = (currentSummary?.generation ?? 0) + 1;
-          if (nextGeneration > MAX_COMPACTIONS_PER_THREAD) {
+
+          if (eligible.length === 0 || eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) {
+            // Nothing new worth compacting (e.g. the summary + last
+            // exchange alone exceed the threshold). Skip — re-compacting
+            // here would only burn an LLM call and a generation.
+          } else if (nextGeneration > MAX_COMPACTIONS_PER_THREAD) {
             console.warn(
               `[compact] cap of ${MAX_COMPACTIONS_PER_THREAD} compactions ` +
                 'reached for this thread — falling back to drop. Consider ' +
                 'starting a new chat for the best quality.',
             );
-          } else if (
-            // Only worth compacting if the summary will actually save
-            // tokens vs the cost of the summary block (~800 tokens cap
-            // on summary length, plus a small safety margin).
-            fit.droppedTokens > 1000
-          ) {
+          } else {
             if (nextGeneration === WARN_COMPACTIONS_PER_THREAD) {
               console.warn(
                 `[compact] approaching the cap of ${MAX_COMPACTIONS_PER_THREAD} ` +
@@ -384,17 +416,17 @@ export function useChat(
             }
             setCompacting(true);
             try {
-              const result = await compact(fit.dropped, provider, modelId, {
+              const result = await compact(eligible, provider, modelId, {
                 priorSummary: summaryText || null,
                 signal: controller.signal,
               });
               if (result) {
                 const replacedIds = [
                   ...(currentSummary?.replacedMessageIds ?? []),
-                  ...fit.dropped.map((m) => m.id),
+                  ...eligible.map((m) => m.id),
                 ];
                 const replacedTokens =
-                  (currentSummary?.replacedTokens ?? 0) + fit.droppedTokens;
+                  (currentSummary?.replacedTokens ?? 0) + eligibleTokens;
                 const saved = await saveSummary({
                   threadId: threadId!,
                   text: result.text,
@@ -405,10 +437,11 @@ export function useChat(
                 });
                 setActiveSummary(saved);
 
-                // Re-build sysContent + re-fit with the new summary.
-                // fit.kept usually grows since the summary block is
-                // typically smaller than the messages it replaced.
+                // The compacted messages are now represented by the
+                // summary block — drop them from the conversation tail
+                // and rebuild the system message with the new summary.
                 summaryText = result.text;
+                summaryReplacedCount = saved.replacedMessageIds.length;
                 sysContent = buildSysContent();
                 sysMsg = sysContent
                   ? {
@@ -424,7 +457,9 @@ export function useChat(
                   0,
                   params.contextWindow - responseReserve - sysTokens,
                 );
-                fit = fitToBudget(cleaned, conversationBudget);
+                // Re-fit over only the verbatim tail (cleaned minus the
+                // now-summarized eligible prefix).
+                fit = fitToBudget(cleaned.slice(boundary), conversationBudget);
               }
             } finally {
               setCompacting(false);
@@ -465,10 +500,8 @@ export function useChat(
           droppedCount: fit.dropped.length,
           responseReserve,
           summaryTokens: finalSummaryTokens,
-          summarizedCount: (currentSummary?.replacedMessageIds.length ?? 0) +
-            (summaryText !== (currentSummary?.text ?? '')
-              ? fit.dropped.length
-              : 0),
+          summarizedCount: summaryReplacedCount,
+          firstSentMessageId: fit.kept[0]?.id ?? null,
         });
 
         // Throttle UI updates to ~60 fps via requestAnimationFrame.
@@ -660,16 +693,9 @@ export function useChat(
     const current = await getActiveSummary(threadId);
     const coveredIds = new Set(current?.replacedMessageIds ?? []);
 
-    // Keep the latest user turn (and any assistant messages that
-    // follow it) verbatim — never summarize the active exchange.
-    let recencyStart = all.length;
-    for (let i = all.length - 1; i >= 0; i--) {
-      if (all[i]!.role === 'user') {
-        recencyStart = i;
-        break;
-      }
-    }
-
+    // Keep the last exchange verbatim (same recency floor as auto). Only
+    // messages before the boundary and not already covered are eligible.
+    const recencyStart = recencyBoundaryIndex(all, COMPACT_KEEP_EXCHANGES);
     const toCompact: Message[] = [];
     for (let i = 0; i < recencyStart; i++) {
       const m = all[i]!;
