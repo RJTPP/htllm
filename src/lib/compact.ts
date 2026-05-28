@@ -6,10 +6,10 @@
  * sliding window would otherwise drop messages AND the user opted in
  * via Compression=auto.
  *
- * Prompt structure synthesized from Claude Code, Codex, and Anthropic
- * API defaults — five required elements (goal, decisions, facts
- * verbatim, code, current state). Tool-call JSON is kept verbatim now
- * as cheap insurance for Phase 4.
+ * Prompt is Codex's open-source "context checkpoint compaction" handoff,
+ * used unconditionally. When a prior summary exists it is included as
+ * data so the prompt's Historical Context rule carries earlier history
+ * forward cumulatively — re-compaction never discards it.
  *
  * Modeled on lib/contextualizer.ts: abort-aware, per-call timeout,
  * reasoning stripped from the output, hard cap on the result text.
@@ -51,42 +51,35 @@ function renderTranscript(messages: Message[]): string {
   return lines.join('\n\n');
 }
 
-function buildPrompt(
-  transcript: string,
-  priorSummary: string | null,
-  maxSummaryTokens: number,
-): string {
+function buildPrompt(transcript: string, priorSummary: string | null): string {
+  // The prior summary, when present, is included as data so the
+  // "if this conversation already contains a compacted summary"
+  // instruction below has something to act on. The instruction text
+  // itself is unconditional.
   const priorBlock = priorSummary
-    ? '\nThere is an existing summary from earlier in this thread — treat ' +
-      'it as ground truth and ONLY add information from the new turns ' +
-      'below.\n\n<existing-summary>\n' +
+    ? '\n\n<previous-compaction-summary>\n' +
       priorSummary +
-      '\n</existing-summary>\n'
+      '\n</previous-compaction-summary>'
     : '';
 
   return (
-    'You are summarizing part of a chat conversation so it can continue ' +
-    'in a smaller context window. The full transcript below will be ' +
-    'replaced in subsequent requests by your summary — keep what matters.' +
+    'You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff ' +
+    'summary for another LLM that will resume the task.\n\n' +
+    'Include:\n' +
+    '- Current progress and key decisions made\n' +
+    '- Important context, constraints, or user preferences\n' +
+    '- What remains to be done (clear next steps)\n' +
+    '- Any critical data, examples, or references needed to continue\n\n' +
+    'Be concise, structured, and focused on helping the next LLM seamlessly ' +
+    'continue the work.\n\n' +
+    'If this conversation already contains a compacted summary from a ' +
+    'previous compaction, extract its key historical thread (what was done, ' +
+    'key decisions and WHY, outcomes, direction) and include it as a ' +
+    'cumulative Historical Context section at the top of your new summary. ' +
+    'Each compaction adds 3-5 sentences. Never discard entries from previous ' +
+    'compactions.' +
     priorBlock +
-    '\n\nPreserve in the summary, in this order:\n' +
-    "1. The user's original goal and any explicit constraints/preferences.\n" +
-    '2. Key decisions made and their rationale.\n' +
-    '3. Facts established (file paths, identifiers, error messages, API\n' +
-    '   shapes) — keep VERBATIM, do not paraphrase.\n' +
-    '4. Code blocks the user authored or asked about — keep verbatim if\n' +
-    '   short; otherwise keep signatures + one-line description.\n' +
-    '5. Current state: what is done, what is in progress, what is next.\n' +
-    '6. Any tool calls and their results — keep the JSON verbatim.\n' +
-    '\n' +
-    'Drop: small talk, retracted ideas, intermediate reasoning the user\n' +
-    'did not act on. Do NOT invent details. If uncertain, omit.\n' +
-    '\n' +
-    `Output ONLY the summary as plain text, under ${maxSummaryTokens} ` +
-    'tokens. No preamble, no markdown headers, no wrapper tags — just the ' +
-    'summary itself.\n' +
-    '\n' +
-    '<transcript>\n' +
+    '\n\n<transcript>\n' +
     transcript +
     '\n</transcript>'
   );
@@ -150,17 +143,30 @@ export async function compact(
       ? Math.min(8192, Math.max(2048, Math.round(window * 0.4)))
       : 2048;
 
+    // Budget for the STORED summary — separate from the generation reserve
+    // (outputReserveTokens, ~40% of window) which the model needs free to
+    // reason AND emit. The summary lives in the system prompt on every
+    // later request and counts toward the auto-compaction trigger, so it
+    // shouldn't run near the generation reserve or it keeps the system
+    // prompt perched above the trigger ("compaction treadmill"). Floor at
+    // 2048 tok so even a tiny window keeps a usable summary, scaling to
+    // 30% of the window for larger models.
+    const summaryTokenCap = window
+      ? Math.max(2048, Math.round(window * 0.3))
+      : 2048;
+
     // Per-call input budget (chars). The prompt is instructions (~300) +
-    // prior summary (≤ the stored cap, also ~outputReserve) + chunk, and
-    // we leave outputReserve free for generation:
-    //   chunk ≤ window − outputReserve(generation) − outputReserve(prior)
+    // prior summary (≤ summaryTokenCap) + chunk, and we leave the larger
+    // outputReserve free for generation:
+    //   chunk ≤ window − outputReserve(generation) − summaryCap(prior)
     //           − 300, with a 0.9 safety factor.
     const instructionTokens = 300;
     let inputTokenBudget = window
       ? Math.max(
           256,
           Math.floor(
-            (window - 2 * outputReserveTokens - instructionTokens) * 0.9,
+            (window - outputReserveTokens - summaryTokenCap - instructionTokens) *
+              0.9,
           ),
         )
       : Number.POSITIVE_INFINITY;
@@ -180,7 +186,7 @@ export async function compact(
       chunk: string,
       prior: string | null,
     ): Promise<string | null> => {
-      const prompt = buildPrompt(chunk, prior, outputReserveTokens);
+      const prompt = buildPrompt(chunk, prior);
       let out = '';
       for await (const c of provider.chat({
         // No maxTokens — let the model finish on its own (the window is
@@ -196,9 +202,10 @@ export async function compact(
       })) {
         out += c.delta;
       }
-      // Trim the stored summary to the reserve so it can't bloat the
-      // ongoing budget or overflow when fed back as a prior next round.
-      return cleanSummary(out, outputReserveTokens * CHARS_PER_TOKEN);
+      // Trim the stored summary to the tight summary cap so it can't bloat
+      // the ongoing budget, re-trip the trigger, or overflow when fed back
+      // as a prior next round.
+      return cleanSummary(out, summaryTokenCap * CHARS_PER_TOKEN);
     };
 
     // Fast path: the whole transcript fits in one call.

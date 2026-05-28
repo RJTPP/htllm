@@ -32,6 +32,7 @@ import {
   type CompressionMode,
   COMPACT_KEEP_EXCHANGES,
   COMPACT_MIN_ELIGIBLE_TOKENS,
+  COMPACT_TARGET_FRACTION,
   COMPACT_TRIGGER_FRACTION,
   DEFAULT_COMPRESSION_MODE,
   MAX_COMPACTIONS_PER_THREAD,
@@ -443,10 +444,17 @@ export function useChat(
             const boundary = recencyBoundaryIndex(cleaned, COMPACT_KEEP_EXCHANGES);
             if (boundary > compactedUpTo) await compactUpTo(boundary);
 
-            // Pass 2 (fat-tail fallback) — the protected tail still
-            // exceeds the budget (a huge recent message). Yield down to
-            // just the current user query and force-compact the rest.
-            if (tailTokens() > conversationBudget) {
+            // Pass 2 (hysteresis + fat-tail fallback) — if keeping the
+            // last exchange still leaves us above the low-water target,
+            // yield down to just the current user query and force-compact
+            // the rest. Driving down to TARGET (50%) rather than stopping
+            // just under the TRIGGER (75%) is what breaks the treadmill:
+            // it buys several turns before usage climbs back past 75%.
+            // Also covers the fat-tail case (a huge recent message that
+            // alone exceeds the budget), since the target is the tighter
+            // bound.
+            const targetAt = COMPACT_TARGET_FRACTION * params.contextWindow;
+            if (sysTokens + tailTokens() > targetAt) {
               let lastUserIdx = -1;
               for (let i = cleaned.length - 1; i >= 0; i--) {
                 if (cleaned[i]!.role === 'user') {
