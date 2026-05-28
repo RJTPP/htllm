@@ -104,13 +104,6 @@ export const WARN_COMPACTIONS_PER_THREAD = 3;
  *  waiting for a hard 100% overflow. */
 export const COMPACT_TRIGGER_FRACTION = 0.75;
 
-/** Hysteresis low-water mark. Compaction triggers at TRIGGER_FRACTION but
- *  keeps folding until estimated input drops to (or below) this fraction
- *  of the window. Without a gap between the two, a single compaction lands
- *  just under the trigger and the next message re-trips it — the
- *  "compaction treadmill". 0.75 → 0.50 buys several quiet turns between
- *  rounds. */
-export const COMPACT_TARGET_FRACTION = 0.5;
 
 /** Recent exchanges kept verbatim and never summarized. 1 = keep the
  *  last completed user/assistant pair (plus the pending user turn). */

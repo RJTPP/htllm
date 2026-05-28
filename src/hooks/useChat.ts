@@ -32,7 +32,6 @@ import {
   type CompressionMode,
   COMPACT_KEEP_EXCHANGES,
   COMPACT_MIN_ELIGIBLE_TOKENS,
-  COMPACT_TARGET_FRACTION,
   COMPACT_TRIGGER_FRACTION,
   DEFAULT_COMPRESSION_MODE,
   MAX_COMPACTIONS_PER_THREAD,
@@ -344,21 +343,17 @@ export function useChat(
         // Compact cleaned[compactedUpTo, newUpTo) into the active summary,
         // persist, and rebuild the system message. Returns true if a
         // summary was written. Does NOT trim — the caller decides what to
-        // send. Shared by the proactive pass and the fat-tail fallback.
-        const compactUpTo = async (
-          newUpTo: number,
-          force = false,
-        ): Promise<boolean> => {
+        // send. Used by the single proactive pass.
+        const compactUpTo = async (newUpTo: number): Promise<boolean> => {
           const eligible = cleaned.slice(compactedUpTo, newUpTo);
           if (eligible.length === 0) return false;
           const eligibleTokens = eligible.reduce(
             (s, m) => s + estimateMessageTokens(m, calRatio),
             0,
           );
-          // The min-eligible guard avoids burning an LLM call on a sliver
-          // during the proactive 75% pass. `force` (the overflow fallback)
-          // bypasses it — compacting even a little beats overflowing.
-          if (!force && eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) return false;
+          // Don't burn an LLM call summarizing a sliver — crossing the
+          // 75% trigger by a hair isn't worth it.
+          if (eligibleTokens < COMPACT_MIN_ELIGIBLE_TOKENS) return false;
 
           const nextGeneration = curGeneration + 1;
           if (nextGeneration > MAX_COMPACTIONS_PER_THREAD) {
@@ -440,30 +435,14 @@ export function useChat(
             sysTokens + tailTokens() > triggerAt &&
             params.contextWindow >= MIN_AUTO_COMPACT_CONTEXT_TOKENS
           ) {
-            // Pass 1 — keep the last exchange verbatim (proactive).
+            // Single proactive pass — keep the last exchange verbatim and
+            // fold everything before it into the summary. We deliberately
+            // do NOT chase a lower target here: if one pass doesn't free
+            // enough (e.g. a huge recent message), the user compacts
+            // further with `/compact`. One automatic pass per send avoids
+            // burning multiple summarize calls in a row.
             const boundary = recencyBoundaryIndex(cleaned, COMPACT_KEEP_EXCHANGES);
             if (boundary > compactedUpTo) await compactUpTo(boundary);
-
-            // Pass 2 (hysteresis + fat-tail fallback) — if keeping the
-            // last exchange still leaves us above the low-water target,
-            // yield down to just the current user query and force-compact
-            // the rest. Driving down to TARGET (50%) rather than stopping
-            // just under the TRIGGER (75%) is what breaks the treadmill:
-            // it buys several turns before usage climbs back past 75%.
-            // Also covers the fat-tail case (a huge recent message that
-            // alone exceeds the budget), since the target is the tighter
-            // bound.
-            const targetAt = COMPACT_TARGET_FRACTION * params.contextWindow;
-            if (sysTokens + tailTokens() > targetAt) {
-              let lastUserIdx = -1;
-              for (let i = cleaned.length - 1; i >= 0; i--) {
-                if (cleaned[i]!.role === 'user') {
-                  lastUserIdx = i;
-                  break;
-                }
-              }
-              if (lastUserIdx > compactedUpTo) await compactUpTo(lastUserIdx, true);
-            }
           }
         }
 
