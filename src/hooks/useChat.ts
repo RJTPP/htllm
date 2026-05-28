@@ -18,7 +18,15 @@ import {
   reserveForResponse,
   sliceByUserTurns,
 } from '../lib/conversation-budget';
-import { estimateMessageTokens, estimateStringTokens } from '../lib/tokens';
+import {
+  estimateMessageTokens,
+  estimateMessagesTokens,
+  estimateStringTokens,
+} from '../lib/tokens';
+import {
+  getCalibrationRatio,
+  recordCalibrationSample,
+} from '../lib/token-calibration';
 import { compact, formatSummaryBlock } from '../lib/compact';
 import {
   clearActiveSummary,
@@ -160,6 +168,7 @@ export function useChat(
       ? messages.filter((m) => !coveredIds.has(m.id))
       : messages;
     const trimmed = sliceByUserTurns(candidates, params.historyMsgs);
+    const calRatio = getCalibrationRatio(provider.id, modelId);
     const responseReserve = reserveForResponse(
       params.contextWindow,
       params.maxTokens,
@@ -169,15 +178,15 @@ export function useChat(
       : '';
     const sysParts = [summaryBlock, systemPrompt.trim()].filter(Boolean);
     const sysText = sysParts.join('\n\n');
-    const sysTokens = sysText ? estimateStringTokens(sysText) + 4 : 0;
+    const sysTokens = sysText ? estimateStringTokens(sysText, calRatio) + 4 : 0;
     const summaryTokens = summaryBlock
-      ? estimateStringTokens(summaryBlock)
+      ? estimateStringTokens(summaryBlock, calRatio)
       : 0;
     const conversationBudget = Math.max(
       0,
       params.contextWindow - responseReserve - sysTokens,
     );
-    const fit = fitToBudget(trimmed, conversationBudget);
+    const fit = fitToBudget(trimmed, conversationBudget, calRatio);
     setBudget({
       contextWindow: params.contextWindow,
       systemTokens: sysTokens,
@@ -197,6 +206,8 @@ export function useChat(
     params.maxTokens,
     systemPrompt,
     activeSummary,
+    provider.id,
+    modelId,
   ]);
 
   // Load messages when thread changes; cancelled flag prevents race condition
@@ -348,7 +359,10 @@ export function useChat(
           params.contextWindow,
           params.maxTokens,
         );
-        let sysTokens = sysMsg ? estimateMessageTokens(sysMsg) : 0;
+        // Per-model calibration multiplier — applied to every estimate so
+        // the budget/trigger math tracks the model's real tokenization.
+        const calRatio = getCalibrationRatio(provider.id, modelId);
+        let sysTokens = sysMsg ? estimateMessageTokens(sysMsg, calRatio) : 0;
         let conversationBudget = Math.max(
           0,
           params.contextWindow - responseReserve - sysTokens,
@@ -364,7 +378,7 @@ export function useChat(
         let curReplacedTokens = currentSummary?.replacedTokens ?? 0;
         let curGeneration = currentSummary?.generation ?? 0;
 
-        let fit = fitToBudget(cleaned.slice(compactedUpTo), conversationBudget);
+        let fit = fitToBudget(cleaned.slice(compactedUpTo), conversationBudget, calRatio);
 
         // Compact cleaned[compactedUpTo, newUpTo) into the active summary,
         // persist, rebuild the system message, and re-fit the remaining
@@ -377,7 +391,7 @@ export function useChat(
           const eligible = cleaned.slice(compactedUpTo, newUpTo);
           if (eligible.length === 0) return false;
           const eligibleTokens = eligible.reduce(
-            (s, m) => s + estimateMessageTokens(m),
+            (s, m) => s + estimateMessageTokens(m, calRatio),
             0,
           );
           // The min-eligible guard avoids burning an LLM call on a sliver
@@ -416,7 +430,7 @@ export function useChat(
               text: result.text,
               replacedMessageIds: curReplacedIds,
               replacedTokens: curReplacedTokens,
-              summaryTokens: estimateStringTokens(result.text),
+              summaryTokens: estimateStringTokens(result.text, calRatio),
               source: 'auto',
             });
             setActiveSummary(saved);
@@ -432,12 +446,12 @@ export function useChat(
             sysMsg = sysContent
               ? { id: '__system', threadId, role: 'system', content: sysContent, createdAt: 0 }
               : null;
-            sysTokens = sysMsg ? estimateMessageTokens(sysMsg) : 0;
+            sysTokens = sysMsg ? estimateMessageTokens(sysMsg, calRatio) : 0;
             conversationBudget = Math.max(
               0,
               params.contextWindow - responseReserve - sysTokens,
             );
-            fit = fitToBudget(cleaned.slice(compactedUpTo), conversationBudget);
+            fit = fitToBudget(cleaned.slice(compactedUpTo), conversationBudget, calRatio);
             return true;
           } finally {
             setCompacting(false);
@@ -459,15 +473,12 @@ export function useChat(
           fit = {
             kept: cleaned,
             dropped: [],
-            keptTokens: cleaned.reduce((s, m) => s + estimateMessageTokens(m), 0),
+            keptTokens: estimateMessagesTokens(cleaned, calRatio),
             droppedTokens: 0,
             singleMessageOverflow: false,
           };
         } else if (compressionMode === 'auto') {
-          const fullConversationTokens = cleaned.reduce(
-            (s, m) => s + estimateMessageTokens(m),
-            0,
-          );
+          const fullConversationTokens = estimateMessagesTokens(cleaned, calRatio);
           // Measure against the usable input budget (window minus the
           // output reservation) so the trigger matches what the context
           // ring shows: compact at 75% of inputBudget, trim at 100%.
@@ -526,8 +537,12 @@ export function useChat(
           ? formatSummaryBlock(summaryText)
           : '';
         const finalSummaryTokens = finalSummaryBlock
-          ? estimateStringTokens(finalSummaryBlock)
+          ? estimateStringTokens(finalSummaryBlock, calRatio)
           : 0;
+        // Raw (uncalibrated) estimate of exactly what we're sending —
+        // compared against the provider's reported promptTokens after
+        // the stream to refine this model's calibration ratio.
+        const rawPromptEstimate = estimateMessagesTokens(sendMessages, 1);
         setBudget({
           contextWindow: params.contextWindow,
           systemTokens: sysTokens,
@@ -585,6 +600,18 @@ export function useChat(
           reasoning: fullReasoning || undefined,
           usage: finalUsage,
         });
+
+        // Refine this model's token calibration from the real prompt
+        // token count the provider reported. Fire-and-forget; a missing
+        // promptTokens (some providers omit it) just skips the sample.
+        if (finalUsage?.promptTokens) {
+          void recordCalibrationSample(
+            provider.id,
+            modelId,
+            rawPromptEstimate,
+            finalUsage.promptTokens,
+          );
+        }
       } catch (err) {
         if (controller.signal.aborted) {
           await updateMessage(assistantMsg.id, {

@@ -23,10 +23,12 @@ const CHARS_PER_TOKEN = 4;
  *  messages is still in the noise. */
 const PER_MESSAGE_OVERHEAD_TOKENS = 4;
 
-/** Estimate the token count of a plain string. */
-export function estimateStringTokens(s: string): number {
+/** Estimate the token count of a plain string. `ratio` is the optional
+ *  per-model calibration multiplier (see lib/token-calibration.ts); 1
+ *  leaves the raw chars/4 estimate untouched. */
+export function estimateStringTokens(s: string, ratio = 1): number {
   if (!s) return 0;
-  return Math.ceil(s.length / CHARS_PER_TOKEN);
+  return Math.ceil((s.length / CHARS_PER_TOKEN) * ratio);
 }
 
 /** Estimate the token count of a single Message, including the per-msg
@@ -40,20 +42,23 @@ export function estimateStringTokens(s: string): number {
  *  models — Qwen3, DeepSeek-R1 — bake reasoning into `content`; API
  *  providers use the separate `reasoning` field, which we already skip
  *  since only `content` is counted.) */
-export function estimateMessageTokens(msg: Message): number {
+export function estimateMessageTokens(msg: Message, ratio = 1): number {
   let body = 0;
   if (typeof msg.content === 'string') {
     const text =
       msg.role === 'assistant' ? stripThinking(msg.content) : msg.content;
-    body = estimateStringTokens(text);
+    body = estimateStringTokens(text, ratio);
   } else {
     for (const part of msg.content as ContentPart[]) {
       if (part.type === 'text') {
         const text =
           msg.role === 'assistant' ? stripThinking(part.text) : part.text;
-        body += estimateStringTokens(text);
+        body += estimateStringTokens(text, ratio);
       } else if (part.type === 'image_url') {
-        body += 85;
+        // Images are a fixed estimate that calibration scales too — vision
+        // token accounting varies wildly by provider, so let the learned
+        // ratio absorb it rather than guessing per-provider here.
+        body += Math.ceil(85 * ratio);
       }
     }
   }
@@ -61,8 +66,8 @@ export function estimateMessageTokens(msg: Message): number {
 }
 
 /** Sum the estimated tokens of an array of messages. */
-export function estimateMessagesTokens(msgs: Message[]): number {
+export function estimateMessagesTokens(msgs: Message[], ratio = 1): number {
   let total = 0;
-  for (const m of msgs) total += estimateMessageTokens(m);
+  for (const m of msgs) total += estimateMessageTokens(m, ratio);
   return total;
 }

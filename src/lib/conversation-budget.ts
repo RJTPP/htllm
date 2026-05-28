@@ -127,7 +127,11 @@ export interface FitResult {
  * it would mean ignoring the user's active prompt, which is worse
  * than overflowing.
  */
-export function fitToBudget(messages: Message[], budget: number): FitResult {
+export function fitToBudget(
+  messages: Message[],
+  budget: number,
+  ratio = 1,
+): FitResult {
   if (messages.length === 0) {
     return {
       kept: [],
@@ -142,14 +146,14 @@ export function fitToBudget(messages: Message[], budget: number): FitResult {
     // Pathological budget — still return the latest message so the
     // caller can surface a clear error.
     const last = messages[messages.length - 1]!;
-    const tokens = estimateMessageTokens(last);
+    const tokens = estimateMessageTokens(last, ratio);
     return {
       kept: [last],
       dropped: messages.slice(0, -1),
       keptTokens: tokens,
       droppedTokens: messages
         .slice(0, -1)
-        .reduce((s, m) => s + estimateMessageTokens(m), 0),
+        .reduce((s, m) => s + estimateMessageTokens(m, ratio), 0),
       singleMessageOverflow: tokens > 0,
     };
   }
@@ -158,7 +162,7 @@ export function fitToBudget(messages: Message[], budget: number): FitResult {
   let cutIndex = messages.length; // exclusive — everything at >= cutIndex is kept
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    const cost = estimateMessageTokens(messages[i]!);
+    const cost = estimateMessageTokens(messages[i]!, ratio);
     if (i === messages.length - 1) {
       // Latest message is unconditional — keep it even if it overflows.
       accumulated += cost;
@@ -173,7 +177,7 @@ export function fitToBudget(messages: Message[], budget: number): FitResult {
   const kept = messages.slice(cutIndex);
   const dropped = messages.slice(0, cutIndex);
   const droppedTokens = dropped.reduce(
-    (s, m) => s + estimateMessageTokens(m),
+    (s, m) => s + estimateMessageTokens(m, ratio),
     0,
   );
 
