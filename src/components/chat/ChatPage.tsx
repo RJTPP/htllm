@@ -39,8 +39,6 @@ export function ChatPage({
   onNewLibrary,
   activeSummary,
   compacting,
-  onCompactNow,
-  onClearSummary,
   slashCommands,
 }: {
   thread: Thread | null;
@@ -50,17 +48,14 @@ export function ChatPage({
    *  loaded; otherwise updated whenever messages/params/system change. */
   budget: ConversationBudget | null;
   /** D10b — active compaction summary for this thread (null if none).
-   *  Renders as an inline divider above the message list and gates the
-   *  "Compact now" button label. */
+   *  Renders as the inline "compacted context" divider above the
+   *  message list. */
   activeSummary: ConversationSummary | null;
-  /** True while a compaction LLM call is in flight. */
+  /** True while a compaction LLM call is in flight — shows the
+   *  "compacting context…" indicator in place of the empty reply. */
   compacting: boolean;
-  /** Manual "Compact now" — summarizes everything except the latest
-   *  user turn. Resolves to true if a new summary was persisted. */
-  onCompactNow: () => Promise<boolean>;
-  /** Clear the active summary (kept in IDB inactive). */
-  onClearSummary: () => Promise<void>;
-  /** Slash commands for the composer's `/` menu (actions). */
+  /** Slash commands for the composer's `/` menu (actions, incl.
+   *  `/compact` which is the manual-compaction entry point now). */
   slashCommands: SlashCommand[];
   models: ModelInfo[];
   loadedModelId: string | null;
@@ -172,10 +167,7 @@ export function ChatPage({
                 return (
                   <div key={m.id}>
                     {activeSummary && i === firstFreshIdx && (
-                      <SummaryDivider
-                        summary={activeSummary}
-                        onClear={onClearSummary}
-                      />
+                      <SummaryDivider summary={activeSummary} />
                     )}
                     {trimmedCount > 0 && i === trimIdx && (
                       <TrimDivider count={trimmedCount} />
@@ -210,7 +202,6 @@ export function ChatPage({
         contextUsed={contextUsed}
         contextTotal={params.contextWindow}
         compacting={compacting}
-        onCompactNow={onCompactNow}
         slashCommands={slashCommands}
         reasoningCapability={reasoningCapability}
         reasoningEffort={params.reasoningEffort}

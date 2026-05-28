@@ -259,7 +259,6 @@ export default function App() {
     editAndResend,
     stop,
     compactNow,
-    clearSummary,
   } = useChat(
     activeProvider,
     activeModelId,
@@ -514,7 +513,7 @@ export default function App() {
         run: () => setModal('settings'),
       },
     ];
-    // Compaction commands only make sense with a thread + chat model.
+    // Manual compaction only makes sense with an active thread.
     if (activeThreadId) {
       cmds.push({
         id: 'compact',
@@ -522,17 +521,9 @@ export default function App() {
         description: 'Summarize older turns now',
         run: () => void compactNow(),
       });
-      if (activeSummary) {
-        cmds.push({
-          id: 'clear-summary',
-          label: 'clear-summary',
-          description: 'Discard the active context summary',
-          run: () => void clearSummary(),
-        });
-      }
     }
     return cmds;
-  }, [handleCreateThread, activeThreadId, activeSummary, compactNow, clearSummary]);
+  }, [handleCreateThread, activeThreadId, compactNow]);
 
   // Full-text message search for the command palette — resolves matches into
   // commands that jump to the containing thread.
@@ -792,8 +783,6 @@ export default function App() {
                   onNewLibrary={handleNewLibraryRequest}
                   activeSummary={activeSummary}
                   compacting={compacting}
-                  onCompactNow={compactNow}
-                  onClearSummary={clearSummary}
                   slashCommands={slashCommands}
                 />
               </>

@@ -3,6 +3,7 @@ import type { PromptTemplate, ReasoningEffort, ReasoningCapability } from '../..
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
+import { COMPACT_TRIGGER_FRACTION } from '../../data/settings';
 import { Image, ArrowRight, Brain, Loader2 } from 'lucide-react';
 import { SlashMenu, type SlashCommand } from './SlashMenu';
 import { Tooltip } from '../ui/Tooltip';
@@ -25,7 +26,15 @@ const ContextRing = memo(function ContextRing({
   const center = size / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - pct);
-  const color = pct > 0.9 ? '#ef4444' : pct > 0.7 ? '#eab308' : 'rgb(var(--accent))';
+  // Red once usage crosses the compaction trigger — that's the point
+  // where auto-compaction kicks in (or, in drop/off modes, where
+  // context starts getting lost). Amber as an approaching-warning tier.
+  const color =
+    pct >= COMPACT_TRIGGER_FRACTION
+      ? '#ef4444'
+      : pct > COMPACT_TRIGGER_FRACTION - 0.15
+        ? '#eab308'
+        : 'rgb(var(--accent))';
   const label = `${(used / 1000).toFixed(1)}k / ${(total / 1000).toFixed(1)}k (${Math.round(pct * 100)}%)`;
 
   return (
@@ -68,7 +77,6 @@ export function Composer({
   contextUsed,
   contextTotal,
   compacting = false,
-  onCompactNow,
   slashCommands = [],
   reasoningCapability,
   reasoningEffort,
@@ -88,12 +96,9 @@ export function Composer({
   templates: PromptTemplate[];
   contextUsed: number;
   contextTotal: number;
-  /** D10b — true while a compaction LLM call is in flight. The
-   *  "Compact now" button shows a spinner and disables. */
+  /** D10b — true while a compaction LLM call is in flight; shows a
+   *  passive "compacting…" status next to the meter. */
   compacting?: boolean;
-  /** D10b — manual "Compact now". Hides the button entirely when not
-   *  wired (useChat exposes it; some surfaces may not). */
-  onCompactNow?: () => Promise<boolean>;
   /** Slash commands surfaced in the `/` menu alongside prompt
    *  templates. Running one performs an action and clears the input. */
   slashCommands?: SlashCommand[];
@@ -344,28 +349,10 @@ export function Composer({
             ) : (
               <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
             )}
-            {onCompactNow && (
-              <button
-                type="button"
-                onClick={() => {
-                  void onCompactNow();
-                }}
-                disabled={compacting || !modelReady}
-                title={
-                  modelReady
-                    ? 'Summarize older turns now — keeps the latest exchange verbatim'
-                    : 'Load a chat model first'
-                }
-                className="font-mono text-[9px] uppercase tracking-wider text-mute hover:text-accent disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-0.5"
-              >
-                {compacting ? (
-                  <>
-                    <Loader2 size={9} className="animate-spin" /> compacting…
-                  </>
-                ) : (
-                  <>compact</>
-                )}
-              </button>
+            {compacting && (
+              <span className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-accent/70">
+                <Loader2 size={9} className="animate-spin" /> compacting…
+              </span>
             )}
           </div>
           <div className="flex items-center gap-3">
