@@ -178,7 +178,6 @@ export interface ModelParams {
   presencePenalty: number;
   frequencyPenalty: number;
   contextWindow: number;
-  historyMsgs: number;
   reasoningEffort: ReasoningEffort;
 }
 

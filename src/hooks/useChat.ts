@@ -16,7 +16,6 @@ import {
   fitToBudget,
   recencyBoundaryIndex,
   reserveForResponse,
-  sliceByUserTurns,
 } from '../lib/conversation-budget';
 import {
   estimateMessageTokens,
@@ -153,7 +152,6 @@ export function useChat(
     const candidates = coveredIds.size
       ? messages.filter((m) => !coveredIds.has(m.id))
       : messages;
-    const trimmed = sliceByUserTurns(candidates, params.historyMsgs);
     const calRatio = getCalibrationRatio(provider.id, modelId);
     const summaryBlock = activeSummary
       ? formatSummaryBlock(activeSummary.text)
@@ -168,13 +166,12 @@ export function useChat(
     setBudget({
       contextWindow: params.contextWindow,
       systemTokens: sysTokens,
-      conversationTokens: estimateMessagesTokens(trimmed, calRatio),
+      conversationTokens: estimateMessagesTokens(candidates, calRatio),
       firstSentMessageId: null,
     });
   }, [
     threadId,
     messages,
-    params.historyMsgs,
     params.contextWindow,
     params.maxTokens,
     systemPrompt,
@@ -228,16 +225,9 @@ export function useChat(
           ? await getActiveSummary(threadId)
           : null;
         const coveredIds = new Set(currentSummary?.replacedMessageIds ?? []);
-        const candidates = coveredIds.size
+        const trimmed = coveredIds.size
           ? history.filter((m) => !coveredIds.has(m.id))
           : history;
-
-        // Layer 1 (user-turn slicing): cap how many of the user's most
-        // recent messages are included. Each user message brings its
-        // associated assistant reply along — counting only user turns
-        // matches how users think about "history" ("the last N things
-        // I asked"). historyMsgs=0 means no cap.
-        const trimmed = sliceByUserTurns(candidates, params.historyMsgs);
 
         // Strip reasoning from assistant messages in history so the model
         // doesn't see its own chain-of-thought. Handles both:
@@ -392,6 +382,7 @@ export function useChat(
               signal: controller.signal,
               contextWindow: params.contextWindow,
               calRatio,
+              trustWindow: provider.needsModelLoad,
             });
             if (!result) return false;
             curReplacedIds = [...curReplacedIds, ...eligible.map((m) => m.id)];
@@ -765,6 +756,7 @@ export function useChat(
         priorSummary: current?.text ?? null,
         contextWindow: params.contextWindow,
         calRatio: getCalibrationRatio(provider.id, modelId),
+        trustWindow: provider.needsModelLoad,
       });
       if (!result) return false;
 

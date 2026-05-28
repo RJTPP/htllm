@@ -540,7 +540,7 @@ export function SettingsModal({
             <div className="flex gap-1.5">
               {(
                 [
-                  ['auto', 'Auto-summarize'],
+                  ['auto', 'Auto-compact'],
                   ['drop', 'Drop oldest'],
                   ['off', 'Off'],
                 ] as [CompressionMode, string][]
@@ -559,17 +559,16 @@ export function SettingsModal({
               ))}
             </div>
             <div className="font-mono text-[10px] text-mute mt-2 leading-relaxed">
-              What happens when the conversation exceeds the context window.{' '}
-              <span className="text-accent/70">Auto-summarize</span> runs a chat-model
-              call on the dropped messages and injects the result as a{' '}
-              <code className="text-accent/70">&lt;summary&gt;</code> block — slower
-              indexing, less context lost. <span className="text-accent/70">Drop oldest</span>{' '}
-              silently trims older messages (cheaper, lossy).{' '}
-              <span className="text-accent/70">Off</span> sends the full history
-              untouched — no summarizing, no trimming; the provider becomes the real
-              limit and reports if it doesn&apos;t fit (zero hidden LLM activity).
-              Auto-summarize needs a context window of at least 4k tokens; falls back
-              to dropping below that.
+              What happens as the conversation approaches the context window.{' '}
+              <span className="text-accent/70">Auto-compact</span> summarizes older
+              turns into a <code className="text-accent/70">&lt;summary&gt;</code> block
+              (a chat-model call) and keeps recent turns verbatim — less context lost.{' '}
+              <span className="text-accent/70">Drop oldest</span> silently trims older
+              messages (cheaper, lossy). <span className="text-accent/70">Off</span>{' '}
+              sends the full history untouched; the provider becomes the real limit and
+              reports if it doesn&apos;t fit (zero hidden LLM activity). Auto-compact
+              needs a context window of at least 4k tokens; falls back to dropping
+              below that.
             </div>
           </div>
           <div className="border-t border-line pt-4">

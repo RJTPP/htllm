@@ -8,7 +8,6 @@ export const DEFAULT_MODEL_PARAMS: ModelParams = {
   presencePenalty: 0,
   frequencyPenalty: 0,
   contextWindow: 8192,
-  historyMsgs: 12,
   reasoningEffort: 'low',
 };
 

@@ -120,6 +120,11 @@ export async function compact(
     /** Per-model token calibration multiplier (lib/token-calibration).
      *  Sizes chunks against the model's real tokenization. Default 1. */
     calRatio?: number;
+    /** True only when contextWindow IS the model's real window (WebLLM).
+     *  For API providers the window is a budgeting guess that may
+     *  overshoot the backend's real limit, so we cap chunks at a
+     *  conservative ceiling to avoid "prompt > context length" errors. */
+    trustWindow?: boolean;
   } = {},
 ): Promise<CompactResult | null> {
   if (!modelId || messages.length === 0) return null;
@@ -148,7 +153,7 @@ export async function compact(
     // to absorb token-estimate error and keep the call off the window
     // edge.
     const instructionTokens = 300;
-    const inputTokenBudget = window
+    let inputTokenBudget = window
       ? Math.max(
           256,
           Math.floor(
@@ -156,10 +161,17 @@ export async function compact(
           ),
         )
       : Number.POSITIVE_INFINITY;
-    const inputCharBudget =
-      inputTokenBudget === Number.POSITIVE_INFINITY
-        ? Number.POSITIVE_INFINITY
-        : Math.floor((inputTokenBudget * CHARS_PER_TOKEN) / calRatio);
+    // For API providers we can't trust `window` to be the backend's real
+    // limit — cap chunks conservatively so a too-small real window
+    // doesn't reject the compaction prompt. Costs extra fold calls on
+    // genuinely large models, but never overflows. (~2500 + summaryOut +
+    // instructions stays under a 4k real window.)
+    if (!opts.trustWindow) {
+      inputTokenBudget = Math.min(inputTokenBudget, 2500);
+    }
+    const inputCharBudget = Number.isFinite(inputTokenBudget)
+      ? Math.floor((inputTokenBudget * CHARS_PER_TOKEN) / calRatio)
+      : Number.POSITIVE_INFINITY;
 
     const summarizeOnce = async (
       chunk: string,
