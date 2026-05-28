@@ -23,9 +23,12 @@ import {
   DEFAULT_CODE_THEME,
   DEFAULT_TITLE_MODE,
   DEFAULT_ACCENT_COLOR,
+  DEFAULT_COMPRESSION_MODE,
+  COMPRESSION_MODE_KEY,
   ACCENT_PRESETS,
   type TitleMode,
   type AccentColor,
+  type CompressionMode,
 } from '../data/settings';
 import { setCodeTheme } from '../lib/highlight';
 import { generateTitle } from '../lib/title';
@@ -38,6 +41,7 @@ import { useLibraries } from '../hooks/useLibraries';
 import { WebGPUBlock } from './system/WebGPUBlock';
 import { Sidebar } from './sidebar/Sidebar';
 import { ChatPage } from './chat/ChatPage';
+import type { SlashCommand } from './chat/SlashMenu';
 import { KnowledgePage } from './knowledge/KnowledgePage';
 import { StorageManager } from './storage/StorageManager';
 import { ModelPicker } from './providers/ModelPicker';
@@ -87,6 +91,8 @@ export default function App() {
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [defaultLibraryId, setDefaultLibraryIdState] = useState<string | null>(null);
   const [rememberLastLibrary, setRememberLastLibraryState] = useState(false);
+  const [compressionMode, setCompressionModeState] =
+    useState<CompressionMode>(DEFAULT_COMPRESSION_MODE);
   const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
   const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
   const [accentColor, setAccentColorState] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
@@ -127,6 +133,11 @@ export default function App() {
     getSetting<boolean>('rememberLastLibrary').then((v) => {
       if (typeof v === 'boolean') setRememberLastLibraryState(v);
     });
+    getSetting<CompressionMode>(COMPRESSION_MODE_KEY).then((v) => {
+      if (v === 'auto' || v === 'drop' || v === 'off') {
+        setCompressionModeState(v);
+      }
+    });
   }, []);
 
   const setDefaultSystemPrompt = useCallback(async (value: string) => {
@@ -143,6 +154,11 @@ export default function App() {
   const setTitleMode = useCallback(async (value: TitleMode) => {
     setTitleModeState(value);
     await setSetting('titleMode', value);
+  }, []);
+
+  const setCompressionMode = useCallback(async (value: CompressionMode) => {
+    setCompressionModeState(value);
+    await setSetting(COMPRESSION_MODE_KEY, value);
   }, []);
 
   const handleSetAccentColor = useCallback(async (value: AccentColor) => {
@@ -232,7 +248,18 @@ export default function App() {
     return { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
   }, [rawParams, activeThread?.modelParams, activeReasoningCapability]);
 
-  const { messages, generating, budget, send, regenerate, editAndResend, stop } = useChat(
+  const {
+    messages,
+    generating,
+    budget,
+    activeSummary,
+    compacting,
+    send,
+    regenerate,
+    editAndResend,
+    stop,
+    compactNow,
+  } = useChat(
     activeProvider,
     activeModelId,
     activeThreadId,
@@ -241,6 +268,7 @@ export default function App() {
     updateThreadTimestamp,
     handleAutoTitle,
     ragConfig,
+    compressionMode,
   );
 
   const modelReady = isApiThread
@@ -453,6 +481,49 @@ export default function App() {
     selectThread,
     generating,
   ]);
+
+  // Q1 — curated slash commands for the composer's `/` menu. A focused,
+  // chat-relevant subset of the Cmd/K palette (no navigation or message
+  // search — those belong in the global palette). Each runs an action
+  // and clears the composer input.
+  const slashCommands: SlashCommand[] = useMemo(() => {
+    const cmds: SlashCommand[] = [
+      {
+        id: 'new',
+        label: 'new',
+        description: 'Start a new chat',
+        run: () => void handleCreateThread(),
+      },
+      {
+        id: 'model',
+        label: 'model',
+        description: 'Change the model',
+        run: () => setModal('picker'),
+      },
+      {
+        id: 'params',
+        label: 'params',
+        description: 'Thread parameters',
+        run: () => setModal('params'),
+      },
+      {
+        id: 'settings',
+        label: 'settings',
+        description: 'Open settings',
+        run: () => setModal('settings'),
+      },
+    ];
+    // Manual compaction only makes sense with an active thread.
+    if (activeThreadId) {
+      cmds.push({
+        id: 'compact',
+        label: 'compact',
+        description: 'Summarize older turns now',
+        run: () => void compactNow(),
+      });
+    }
+    return cmds;
+  }, [handleCreateThread, activeThreadId, compactNow]);
 
   // Full-text message search for the command palette — resolves matches into
   // commands that jump to the containing thread.
@@ -710,6 +781,9 @@ export default function App() {
                   ragLibraryId={ragLibraryId}
                   onChangeRagLibrary={handleChangeRagLibrary}
                   onNewLibrary={handleNewLibraryRequest}
+                  activeSummary={activeSummary}
+                  compacting={compacting}
+                  slashCommands={slashCommands}
                 />
               </>
             )}
@@ -769,6 +843,8 @@ export default function App() {
         setDefaultLibraryId={handleSetDefaultLibraryId}
         rememberLastLibrary={rememberLastLibrary}
         setRememberLastLibrary={handleSetRememberLastLibrary}
+        compressionMode={compressionMode}
+        setCompressionMode={setCompressionMode}
         tab={settingsTab}
         onTabChange={setSettingsTab}
       />

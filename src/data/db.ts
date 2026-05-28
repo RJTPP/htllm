@@ -49,6 +49,15 @@ export interface HtllmDB {
     value: import('../providers/types').ParentChunk;
     indexes: { byDocument: string };
   };
+  summaries: {
+    // D10b — auto-compaction snapshots. One active summary per thread
+    // at a time (older rows kept inactive for diagnostics). Caller
+    // queries by thread and filters by `active` — there are at most a
+    // handful of summaries per thread, so the in-memory filter is fine.
+    key: string;
+    value: import('../providers/types').ConversationSummary;
+    indexes: { byThread: string };
+  };
   embeddings: {
     // Composite key: [chunkId, embeddingModelId]. Vectors from different
     // models occupy distinct vector spaces and aren't comparable, so we
@@ -60,7 +69,7 @@ export interface HtllmDB {
 }
 
 const DB_NAME = 'htllm';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 /** Stable id for the auto-created "Default" library so migrations and
  *  fresh installs both reference the same record. */
@@ -186,6 +195,16 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
           const chunkStore = tx.objectStore('chunks');
           if (!chunkStore.indexNames.contains('byParent')) {
             chunkStore.createIndex('byParent', 'parentId');
+          }
+        }
+        if (oldVersion < 8) {
+          // D10b — auto-compaction snapshots store. One active summary
+          // per thread at a time (older rows kept inactive for the
+          // future "show previous summaries" view). No backfill —
+          // summaries are produced on demand from this point forward.
+          if (!db.objectStoreNames.contains('summaries')) {
+            const summaryStore = db.createObjectStore('summaries', { keyPath: 'id' });
+            summaryStore.createIndex('byThread', 'threadId');
           }
         }
       },

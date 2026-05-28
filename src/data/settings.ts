@@ -76,6 +76,43 @@ export const REMEMBER_LAST_LIBRARY_KEY = 'rememberLastLibrary';
  */
 export const DEFAULT_RAG_ENABLED = false;
 
+/**
+ * D10b — what to do when the sliding window would drop older messages.
+ *  - 'auto':  summarize the dropped portion via the active chat model
+ *             and inject as a <summary> block. Default.
+ *  - 'drop':  silently drop (the D10a baseline behavior). Cheaper,
+ *             zero LLM activity, but loses the dropped content.
+ *  - 'off':   neither summarize nor drop — let the provider error
+ *             when the prompt overflows. For users who want zero
+ *             surprises and no hidden LLM activity.
+ */
+export type CompressionMode = 'auto' | 'drop' | 'off';
+export const COMPRESSION_MODE_KEY = 'compressionMode';
+export const DEFAULT_COMPRESSION_MODE: CompressionMode = 'auto';
+
+/** Minimum context window for auto-compaction to actually run. Below
+ *  this, summary overhead dominates what it would save — silently
+ *  falls back to 'drop' for the request, surfaced in the meter tooltip. */
+export const MIN_AUTO_COMPACT_CONTEXT_TOKENS = 4096;
+
+/** Hard cap on re-compactions per thread (warn at 3). Beyond this,
+ *  quality decay makes the summary unreliable — recommend new chat. */
+export const MAX_COMPACTIONS_PER_THREAD = 5;
+export const WARN_COMPACTIONS_PER_THREAD = 3;
+
+/** Auto-compaction fires when estimated input tokens cross this fraction
+ *  of the available conversation budget — proactive headroom rather than
+ *  waiting for a hard 100% overflow. */
+export const COMPACT_TRIGGER_FRACTION = 0.75;
+
+/** Recent exchanges kept verbatim and never summarized. 1 = keep the
+ *  last completed user/assistant pair (plus the pending user turn). */
+export const COMPACT_KEEP_EXCHANGES = 1;
+
+/** Don't bother compacting unless at least this many tokens are eligible
+ *  — crossing the threshold by a sliver isn't worth an LLM call. */
+export const COMPACT_MIN_ELIGIBLE_TOKENS = 1000;
+
 export async function getSetting<T>(key: string): Promise<T | undefined> {
   const db = await getDb();
   const entry = await db.get('settings', key);

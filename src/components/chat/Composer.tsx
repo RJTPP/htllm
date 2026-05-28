@@ -3,8 +3,9 @@ import type { PromptTemplate, ReasoningEffort, ReasoningCapability } from '../..
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
-import { Image, ArrowRight, Brain } from 'lucide-react';
-import { PromptHints } from './PromptHints';
+import { COMPACT_TRIGGER_FRACTION } from '../../data/settings';
+import { Image, ArrowRight, Brain, Loader2 } from 'lucide-react';
+import { SlashMenu, type SlashCommand } from './SlashMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { KnowledgeChip } from './KnowledgeChip';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
@@ -25,7 +26,15 @@ const ContextRing = memo(function ContextRing({
   const center = size / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - pct);
-  const color = pct > 0.9 ? '#ef4444' : pct > 0.7 ? '#eab308' : 'rgb(var(--accent))';
+  // Red once usage crosses the compaction trigger — that's the point
+  // where auto-compaction kicks in (or, in drop/off modes, where
+  // context starts getting lost). Amber as an approaching-warning tier.
+  const color =
+    pct >= COMPACT_TRIGGER_FRACTION
+      ? '#ef4444'
+      : pct > COMPACT_TRIGGER_FRACTION - 0.15
+        ? '#eab308'
+        : 'rgb(var(--accent))';
   const label = `${(used / 1000).toFixed(1)}k / ${(total / 1000).toFixed(1)}k (${Math.round(pct * 100)}%)`;
 
   return (
@@ -67,7 +76,8 @@ export function Composer({
   templates,
   contextUsed,
   contextTotal,
-  droppedCount = 0,
+  compacting = false,
+  slashCommands = [],
   reasoningCapability,
   reasoningEffort,
   onReasoningChange,
@@ -86,10 +96,12 @@ export function Composer({
   templates: PromptTemplate[];
   contextUsed: number;
   contextTotal: number;
-  /** D10a — number of older messages dropped by the token-budget
-   *  sliding window. When > 0, a small "trimmed" chip appears next
-   *  to the context meter so the user knows older context is gone. */
-  droppedCount?: number;
+  /** D10b — true while a compaction LLM call is in flight; shows a
+   *  passive "compacting…" status next to the meter. */
+  compacting?: boolean;
+  /** Slash commands surfaced in the `/` menu alongside prompt
+   *  templates. Running one performs an action and clears the input. */
+  slashCommands?: SlashCommand[];
   reasoningCapability?: ReasoningCapability;
   reasoningEffort: ReasoningEffort;
   onReasoningChange: (effort: ReasoningEffort) => void;
@@ -127,13 +139,26 @@ export function Composer({
       ? input.slice(1)
       : null;
 
-  // Templates matching the current /-query, and the keyboard-selected one.
-  const hintMatches = useMemo(() => {
+  // Commands + templates matching the current /-query. Commands come
+  // first in the flat keyboard order, then templates.
+  const commandMatches = useMemo(() => {
+    if (hintQuery === null) return [];
+    const q = hintQuery.toLowerCase();
+    return slashCommands.filter(
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q),
+    );
+  }, [hintQuery, slashCommands]);
+
+  const templateMatches = useMemo(() => {
     if (hintQuery === null) return [];
     const q = hintQuery.toLowerCase();
     return templates.filter((t) => t.title.toLowerCase().includes(q));
   }, [hintQuery, templates]);
-  const hintsOpen = hintMatches.length > 0;
+
+  const hintCount = commandMatches.length + templateMatches.length;
+  const hintsOpen = hintCount > 0;
 
   const [hintIndex, setHintIndex] = useState(0);
   // Reset the selection whenever the query changes.
@@ -143,6 +168,23 @@ export function Composer({
 
   const pickTemplate = (t: PromptTemplate) => {
     setInput(t.content);
+  };
+
+  const runCommand = (c: SlashCommand) => {
+    // Clear the slash query first so the menu closes, then run.
+    setInput('');
+    c.run();
+  };
+
+  // Resolve the flat keyboard index to either a command or a template.
+  const pickAtIndex = (flatIndex: number) => {
+    if (flatIndex < commandMatches.length) {
+      const c = commandMatches[flatIndex];
+      if (c) runCommand(c);
+    } else {
+      const t = templateMatches[flatIndex - commandMatches.length];
+      if (t) pickTemplate(t);
+    }
   };
 
   const send = () => {
@@ -204,10 +246,12 @@ export function Composer({
         )}
         <div className="relative">
           {hintsOpen && (
-            <PromptHints
-              matches={hintMatches}
+            <SlashMenu
+              commands={commandMatches}
+              templates={templateMatches}
               selectedIndex={hintIndex}
-              onPick={pickTemplate}
+              onPickCommand={runCommand}
+              onPickTemplate={pickTemplate}
               onHover={setHintIndex}
             />
           )}
@@ -222,7 +266,7 @@ export function Composer({
                 if (hintsOpen) {
                   if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    setHintIndex((i) => Math.min(i + 1, hintMatches.length - 1));
+                    setHintIndex((i) => Math.min(i + 1, hintCount - 1));
                     return;
                   }
                   if (e.key === 'ArrowUp') {
@@ -232,8 +276,12 @@ export function Composer({
                   }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    const t = hintMatches[hintIndex];
-                    if (t) pickTemplate(t);
+                    pickAtIndex(hintIndex);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setInput('');
                     return;
                   }
                 }
@@ -246,7 +294,7 @@ export function Composer({
               rows={1}
               placeholder={
                 modelReady
-                  ? 'Type a message — / for templates, Enter to send'
+                  ? 'Type a message — / for commands & templates, Enter to send'
                   : "Type a message — you'll pick a model on send"
               }
               className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute"
@@ -301,12 +349,9 @@ export function Composer({
             ) : (
               <span>{model ? `model · ${shortenModelId(model)}` : 'no model loaded'}</span>
             )}
-            {droppedCount > 0 && (
-              <span
-                title={`${droppedCount} older message${droppedCount === 1 ? '' : 's'} dropped to fit the context window`}
-                className="font-mono text-[9px] text-warn/80 border border-warn/40 px-1 leading-[14px] uppercase tracking-wider"
-              >
-                −{droppedCount} trimmed
+            {compacting && (
+              <span className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-accent/70">
+                <Loader2 size={9} className="animate-spin" /> compacting…
               </span>
             )}
           </div>

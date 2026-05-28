@@ -23,6 +23,7 @@ export async function getStoreStats(): Promise<StoreStats[]> {
     'chunks',
     'parents',
     'embeddings',
+    'summaries',
   ] as const;
   const results: StoreStats[] = [];
   for (const name of stores) {
@@ -107,7 +108,8 @@ export async function clearStore(
     | 'documents'
     | 'chunks'
     | 'parents'
-    | 'embeddings',
+    | 'embeddings'
+    | 'summaries',
 ): Promise<void> {
   const db = await getDb();
   const tx = db.transaction(storeName, 'readwrite');

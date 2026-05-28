@@ -1,7 +1,7 @@
 import { useState, memo, type Dispatch, type SetStateAction } from 'react';
 import type { PromptTemplate, ModelParams } from '../../providers/types';
 import { createTemplate, deleteTemplate, updateTemplate } from '../../data/prompt-templates';
-import { type TitleMode, type AccentColor, ACCENT_PRESETS } from '../../data/settings';
+import { type TitleMode, type AccentColor, type CompressionMode, ACCENT_PRESETS } from '../../data/settings';
 import { resetEverything } from '../../data/reset';
 import { Modal } from '../ui/Modal';
 import { Badge } from '../ui/Badge';
@@ -199,6 +199,8 @@ export function SettingsModal({
   setDefaultLibraryId,
   rememberLastLibrary,
   setRememberLastLibrary,
+  compressionMode,
+  setCompressionMode,
   tab,
   onTabChange,
 }: {
@@ -222,6 +224,9 @@ export function SettingsModal({
   /** When on, the per-chat library picker also updates defaultLibraryId. */
   rememberLastLibrary: boolean;
   setRememberLastLibrary: (value: boolean) => void;
+  /** D10b — compression mode (auto-summarize / drop / off). */
+  compressionMode: CompressionMode;
+  setCompressionMode: (value: CompressionMode) => void;
   tab: SettingsTab;
   onTabChange: (tab: SettingsTab) => void;
 }) {
@@ -498,6 +503,45 @@ export function SettingsModal({
             <div className="font-mono text-[10px] text-mute mt-2">
               How new threads are named. “Generate with model” asks the model for a
               concise title, falling back to the trimmed message if it times out.
+            </div>
+          </div>
+          <div className="border-t border-line pt-4">
+            <div className="font-mono text-[10px] text-mute uppercase tracking-widest mb-2">
+              compression
+            </div>
+            <div className="flex gap-1.5">
+              {(
+                [
+                  ['auto', 'Auto-summarize'],
+                  ['drop', 'Drop oldest'],
+                  ['off', 'Off'],
+                ] as [CompressionMode, string][]
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setCompressionMode(mode)}
+                  className={`flex-1 font-mono text-[11px] px-3 py-1.5 border transition-colors ${
+                    compressionMode === mode
+                      ? 'border-accent/60 text-accent bg-accent/10'
+                      : 'border-line text-mute hover:text-text'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="font-mono text-[10px] text-mute mt-2 leading-relaxed">
+              What happens when the conversation exceeds the context window.{' '}
+              <span className="text-accent/70">Auto-summarize</span> runs a chat-model
+              call on the dropped messages and injects the result as a{' '}
+              <code className="text-accent/70">&lt;summary&gt;</code> block — slower
+              indexing, less context lost. <span className="text-accent/70">Drop oldest</span>{' '}
+              silently trims older messages (cheaper, lossy).{' '}
+              <span className="text-accent/70">Off</span> sends the full history
+              untouched — no summarizing, no trimming; the provider becomes the real
+              limit and reports if it doesn&apos;t fit (zero hidden LLM activity).
+              Auto-summarize needs a context window of at least 4k tokens; falls back
+              to dropping below that.
             </div>
           </div>
           <div className="border-t border-line pt-4">

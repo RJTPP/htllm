@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react';
-import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
+import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability, ConversationSummary } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import type { ConversationBudget } from '../../hooks/useChat';
@@ -7,6 +7,10 @@ import { SystemPromptBar } from './SystemPromptBar';
 import { MessageView } from './MessageView';
 import { EmptyState } from './EmptyState';
 import { Composer } from './Composer';
+import type { SlashCommand } from './SlashMenu';
+import { SummaryDivider } from './SummaryDivider';
+import { CompactingIndicator } from './CompactingIndicator';
+import { TrimDivider } from './TrimDivider';
 
 export function ChatPage({
   thread,
@@ -33,6 +37,9 @@ export function ChatPage({
   ragLibraryId,
   onChangeRagLibrary,
   onNewLibrary,
+  activeSummary,
+  compacting,
+  slashCommands,
 }: {
   thread: Thread | null;
   messages: Message[];
@@ -40,6 +47,16 @@ export function ChatPage({
    *  and surfaces sliding-window drop counts. Null while no thread is
    *  loaded; otherwise updated whenever messages/params/system change. */
   budget: ConversationBudget | null;
+  /** D10b — active compaction summary for this thread (null if none).
+   *  Renders as the inline "compacted context" divider above the
+   *  message list. */
+  activeSummary: ConversationSummary | null;
+  /** True while a compaction LLM call is in flight — shows the
+   *  "compacting context…" indicator in place of the empty reply. */
+  compacting: boolean;
+  /** Slash commands for the composer's `/` menu (actions, incl.
+   *  `/compact` which is the manual-compaction entry point now). */
+  slashCommands: SlashCommand[];
   models: ModelInfo[];
   loadedModelId: string | null;
   modelReady: boolean;
@@ -115,19 +132,64 @@ export function ChatPage({
           <EmptyState onOpenPicker={onOpenPicker} modelReady={modelReady} model={loadedModelId} />
         ) : (
           <div className="max-w-3xl mx-auto px-6 pb-6 space-y-5">
-            {messages.map((m, i) => (
-              <MessageView
-                key={m.id}
-                message={m}
-                modelId={loadedModelId}
-                models={models}
-                streaming={generating && i === messages.length - 1 && m.role === 'assistant'}
-                isLast={i === messages.length - 1}
-                generating={generating}
-                onRegenerate={handleRegenerate}
-                onEditAndResend={onEditAndResend}
-              />
-            ))}
+            {(() => {
+              // D10b — render the SummaryDivider above the first message
+              // NOT covered by the active summary. Covered messages stay
+              // visible in the UI (we never delete them from IDB) but the
+              // divider visually marks "from here down is what the model
+              // sees verbatim; above is captured by the summary."
+              const coveredIds = activeSummary
+                ? new Set(activeSummary.replacedMessageIds)
+                : null;
+              const firstFreshIdx = coveredIds
+                ? messages.findIndex((m) => !coveredIds.has(m.id))
+                : -1;
+
+              // Trim horizon: the oldest message actually sent verbatim on
+              // the last fit. Messages between the summary boundary and
+              // this index are in the UI but weren't sent (sliding window).
+              // We only render the divider when there's a genuine gap —
+              // i.e. some non-covered message sits above the first-sent one.
+              const trimIdx = budget?.firstSentMessageId
+                ? messages.findIndex((m) => m.id === budget.firstSentMessageId)
+                : -1;
+              const summaryEnd = firstFreshIdx === -1 ? 0 : firstFreshIdx;
+              const trimmedCount =
+                trimIdx > summaryEnd ? trimIdx - summaryEnd : 0;
+
+              return messages.map((m, i) => {
+                const isLast = i === messages.length - 1;
+                // While compacting, the trailing assistant placeholder is
+                // empty (the stream hasn't started). Suppress it and show
+                // the "compacting context…" divider in its place. (#4)
+                const suppressForCompacting =
+                  compacting && isLast && m.role === 'assistant';
+                return (
+                  <div key={m.id}>
+                    {activeSummary && i === firstFreshIdx && (
+                      <SummaryDivider summary={activeSummary} />
+                    )}
+                    {trimmedCount > 0 && i === trimIdx && (
+                      <TrimDivider count={trimmedCount} />
+                    )}
+                    {suppressForCompacting ? (
+                      <CompactingIndicator />
+                    ) : (
+                      <MessageView
+                        message={m}
+                        modelId={loadedModelId}
+                        models={models}
+                        streaming={generating && isLast && m.role === 'assistant'}
+                        isLast={isLast}
+                        generating={generating}
+                        onRegenerate={handleRegenerate}
+                        onEditAndResend={onEditAndResend}
+                      />
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
       </div>
@@ -139,7 +201,8 @@ export function ChatPage({
         templates={templates}
         contextUsed={contextUsed}
         contextTotal={params.contextWindow}
-        droppedCount={budget?.droppedCount ?? 0}
+        compacting={compacting}
+        slashCommands={slashCommands}
         reasoningCapability={reasoningCapability}
         reasoningEffort={params.reasoningEffort}
         onReasoningChange={onReasoningChange}
