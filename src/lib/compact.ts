@@ -139,12 +139,14 @@ export async function compact(
     const calRatio = opts.calRatio && opts.calRatio > 0 ? opts.calRatio : 1;
     const window = opts.contextWindow ?? 0;
 
-    // Output budget per summarize call — adaptive to the window so a
-    // small model isn't asked to reserve more than it has, but generous
-    // enough that reasoning models can think before emitting.
+    // Output budget per summarize call. Floor of 2048 so thinking models
+    // (which burn tokens reasoning before emitting, even with
+    // reasoning_effort off) aren't truncated mid-think and left with an
+    // empty summary. Scales up with the window, capped so it can't eat
+    // the whole context.
     const summaryOutTokens = window
-      ? Math.min(768, Math.max(256, Math.round(window * 0.2)))
-      : 1024;
+      ? Math.min(8192, Math.max(2048, Math.round(window * 0.25)))
+      : 2048;
 
     // Per-call input budget (chars). Each fold call's prompt is:
     //   instructions (~300 tok) + prior summary (≤ summaryOut) + chunk
