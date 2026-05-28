@@ -62,16 +62,23 @@ export function sliceByUserTurns(messages: Message[], n: number): Message[] {
  * how many recent exchanges to protect. Everything before this index is
  * eligible for summarization; everything at/after stays as-is.
  *
- * An "exchange" is anchored on a user message. With `keepExchanges = 1`
- * at send time the message list looks like:
+ * An "exchange" is anchored on a user message. Two cases:
  *
- *   [ ...older..., prevUser, prevAssistant, newUser ]
- *                  ^─ returned index
+ *  - Send time — the list ends with a pending user turn that has no
+ *    reply yet:
+ *      [ ...older, prevUser, prevAssistant, newUser ]
+ *    With keepExchanges=1 we keep the last completed exchange
+ *    (prevUser + prevAssistant) PLUS the pending newUser, so we walk to
+ *    the (keepExchanges + 1)-th user message.
  *
- * i.e. we keep the last completed exchange (prevUser + prevAssistant)
- * plus the pending new user message. We find this by walking back and
- * stopping at the (keepExchanges + 1)-th user message from the end —
- * the +1 accounts for the trailing pending user turn.
+ *  - Manual / idle — the list ends with a completed assistant reply:
+ *      [ ...older, lastUser, lastAssistant ]
+ *    With keepExchanges=1 we keep [lastUser, lastAssistant], so we walk
+ *    to the keepExchanges-th user message (no +1).
+ *
+ * Detecting the trailing pending user turn is what distinguishes the
+ * two — without it, manual compaction on a short thread keeps one
+ * exchange too many and finds nothing to compact.
  *
  * Returns 0 when there aren't enough user messages to protect that many
  * exchanges (i.e. keep everything; nothing to compact).
@@ -81,11 +88,14 @@ export function recencyBoundaryIndex(
   keepExchanges: number,
 ): number {
   if (keepExchanges <= 0) return messages.length;
+  const lastIsPendingUser =
+    messages.length > 0 && messages[messages.length - 1]!.role === 'user';
+  const target = keepExchanges + (lastIsPendingUser ? 1 : 0);
   let userSeen = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]!.role === 'user') {
       userSeen++;
-      if (userSeen === keepExchanges + 1) return i;
+      if (userSeen === target) return i;
     }
   }
   return 0;
