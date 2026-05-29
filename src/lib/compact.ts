@@ -138,6 +138,7 @@ export async function compact(
     // truncates thinking models mid-reason into an empty summary.
     const prompt = buildPrompt(transcript, opts.priorSummary ?? null);
     let out = '';
+    let outReasoning = '';
     for await (const c of provider.chat({
       messages: [
         { id: '__compact', threadId: '', role: 'user', content: prompt, createdAt: 0 },
@@ -147,10 +148,18 @@ export async function compact(
       signal: controller.signal,
     })) {
       out += c.delta;
+      if (c.reasoning) outReasoning += c.reasoning;
     }
+    // Prefer the content channel, but fall back to the reasoning channel
+    // when content is empty. Some reasoning models (e.g. gpt-oss) ignore
+    // enable_thinking:false and emit the whole answer as `reasoning` with
+    // no `content` — without this fallback the summary comes back empty,
+    // no summary is saved, and the "compacting…" indicator vanishes with
+    // no divider.
+    const raw = out.trim() ? out : outReasoning;
     // Trim the stored summary to the cap so it can't bloat the ongoing
     // budget or re-trip the trigger.
-    const text = cleanSummary(out, summaryTokenCap * CHARS_PER_TOKEN);
+    const text = cleanSummary(raw, summaryTokenCap * CHARS_PER_TOKEN);
     if (!text) {
       console.warn('[compact] empty/unusable summary from model');
       return null;
