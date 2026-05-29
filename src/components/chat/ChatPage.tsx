@@ -39,6 +39,7 @@ export function ChatPage({
   onNewLibrary,
   historySummary,
   tailSummary,
+  summaries,
   compacting,
   slashCommands,
 }: {
@@ -52,9 +53,14 @@ export function ChatPage({
    *  "context compacted" divider. Null if none. */
   historySummary: ConversationSummary | null;
   /** D10b — active tail summary (a recent oversized exchange summarized
-   *  into its own block). Renders as a separate "last turn summarized"
-   *  divider. Null if none. */
+   *  into its own block). Null if none. Used (with historySummary) for
+   *  coverage/locked. */
   tailSummary: ConversationSummary | null;
+  /** D10b — every retained summary record (active + superseded), oldest
+   *  first. One divider is rendered per record at its boundary so each
+   *  compaction event leaves a persistent marker, even though only the
+   *  active records feed the model. */
+  summaries: ConversationSummary[];
   /** True while a compaction LLM call is in flight — shows the
    *  "compacting context…" indicator in place of the empty reply. */
   compacting: boolean;
@@ -145,32 +151,51 @@ export function ChatPage({
         ) : (
           <div className="max-w-3xl mx-auto px-6 pt-6 pb-6 space-y-5">
             {(() => {
-              // D10b — two summary dividers. Covered messages stay visible
-              // in the UI (we never delete them from IDB) but a divider
-              // marks "above is captured by a summary block; below is sent
-              // verbatim." History divider sits above the first message NOT
-              // in the history summary; the tail divider sits above the
-              // first fully-fresh message (not covered by either summary).
-              const historyCovered = historySummary
-                ? new Set(historySummary.replacedMessageIds)
-                : null;
-              const tailCovered = tailSummary
-                ? new Set(tailSummary.replacedMessageIds)
-                : null;
+              // D10b — one persistent divider per retained compaction
+              // record. Covered messages stay visible in the UI (we never
+              // delete them); each record's divider sits above the first
+              // message NOT covered by THAT record, so successive
+              // compactions leave a trail of markers going down the list.
+              // Only the active history/tail records feed the model — the
+              // markers are purely UX history.
+              //
+              // Per-record caption shows the delta vs the prior record of
+              // the same kind (what THIS compaction folded), not the
+              // cumulative total. Records arrive oldest-first.
+              const prevSameKind: Record<string, ConversationSummary | undefined> = {};
+              const dividers = summaries
+                .map((rec) => {
+                  const idx = messages.findIndex(
+                    (m) => !rec.replacedMessageIds.includes(m.id),
+                  );
+                  const prev = prevSameKind[rec.kind];
+                  prevSameKind[rec.kind] = rec;
+                  const turns =
+                    rec.replacedMessageIds.length -
+                    (prev?.replacedMessageIds.length ?? 0);
+                  const fromTokens = rec.replacedTokens - (prev?.replacedTokens ?? 0);
+                  return { rec, idx, turns, fromTokens };
+                })
+                // idx === -1 means every message is covered by the record
+                // (shouldn't happen for the active one, but guard anyway).
+                .filter((d) => d.idx >= 0 && d.turns > 0);
+              const dividersByIdx = new Map<number, typeof dividers>();
+              for (const d of dividers) {
+                const arr = dividersByIdx.get(d.idx) ?? [];
+                arr.push(d);
+                dividersByIdx.set(d.idx, arr);
+              }
+
+              // Coverage for edit-locking + the trim-divider math: the
+              // union of the ACTIVE records (what the model actually
+              // doesn't see verbatim).
               const allCovered =
-                historyCovered || tailCovered
+                historySummary || tailSummary
                   ? new Set([
                       ...(historySummary?.replacedMessageIds ?? []),
                       ...(tailSummary?.replacedMessageIds ?? []),
                     ])
                   : null;
-              const historyDividerIdx = historyCovered
-                ? messages.findIndex((m) => !historyCovered.has(m.id))
-                : -1;
-              const tailDividerIdx = tailSummary
-                ? messages.findIndex((m) => !allCovered!.has(m.id))
-                : -1;
-              // For the trim divider math below: first fully-fresh message.
               const firstFreshIdx = allCovered
                 ? messages.findIndex((m) => !allCovered.has(m.id))
                 : -1;
@@ -187,21 +212,33 @@ export function ChatPage({
               const trimmedCount =
                 trimIdx > summaryEnd ? trimIdx - summaryEnd : 0;
 
-              return messages.map((m, i) => {
+              const rows = messages.map((m, i) => {
                 const isLast = i === messages.length - 1;
-                // While compacting, the trailing assistant placeholder is
-                // empty (the stream hasn't started). Suppress it and show
-                // the "compacting context…" divider in its place. (#4)
+                // While AUTO-compacting, the trailing assistant placeholder
+                // is empty (the stream hasn't started) — replace it with the
+                // "compacting context…" indicator. Only suppress an EMPTY
+                // placeholder: during MANUAL compact the last message is a
+                // real reply (generating=false), and hiding it made the
+                // divider appear to "jump" past it. (#4)
+                const isEmptyPlaceholder =
+                  m.role === 'assistant' &&
+                  generating &&
+                  (typeof m.content === 'string'
+                    ? m.content.length === 0
+                    : m.content.length === 0);
                 const suppressForCompacting =
-                  compacting && isLast && m.role === 'assistant';
+                  compacting && isLast && isEmptyPlaceholder;
                 return (
                   <div key={m.id}>
-                    {historySummary && i === historyDividerIdx && (
-                      <SummaryDivider summary={historySummary} />
-                    )}
-                    {tailSummary && i === tailDividerIdx && (
-                      <SummaryDivider summary={tailSummary} label="last turn summarized" />
-                    )}
+                    {(dividersByIdx.get(i) ?? []).map((d) => (
+                      <SummaryDivider
+                        key={d.rec.id}
+                        summary={d.rec}
+                        label={d.rec.kind === 'tail' ? 'last turn summarized' : 'context compacted'}
+                        turns={d.turns}
+                        fromTokens={d.fromTokens}
+                      />
+                    ))}
                     {trimmedCount > 0 && i === trimIdx && (
                       <TrimDivider count={trimmedCount} />
                     )}
@@ -223,6 +260,16 @@ export function ChatPage({
                   </div>
                 );
               });
+              // Manual compact runs with generating=false, so there's no
+              // empty placeholder to host the indicator. Append it at the
+              // bottom while a manual compaction is in flight — without
+              // hiding any real message.
+              return (
+                <>
+                  {rows}
+                  {compacting && !generating && <CompactingIndicator />}
+                </>
+              );
             })()}
           </div>
         )}

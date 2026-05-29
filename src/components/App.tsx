@@ -289,6 +289,7 @@ export default function App() {
     budget,
     historySummary,
     tailSummary,
+    summaries,
     compacting,
     send,
     regenerate,
@@ -836,6 +837,7 @@ export default function App() {
                   onNewLibrary={handleNewLibraryRequest}
                   historySummary={historySummary}
                   tailSummary={tailSummary}
+                  summaries={summaries}
                   compacting={compacting}
                   slashCommands={slashCommands}
                 />

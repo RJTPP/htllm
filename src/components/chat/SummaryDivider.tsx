@@ -15,14 +15,22 @@ import type { ConversationSummary } from '../../providers/types';
 export function SummaryDivider({
   summary,
   label = 'context compacted',
+  turns,
+  fromTokens,
 }: {
   summary: ConversationSummary;
   /** Divider caption — distinguishes the history block from the separate
    *  tail block (a recent oversized turn summarized on its own). */
   label?: string;
+  /** Turns folded by THIS compaction event (delta vs the prior record of
+   *  the same kind). Defaults to the record's cumulative count. */
+  turns?: number;
+  /** Tokens folded by THIS event. Defaults to the record's cumulative. */
+  fromTokens?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const replacedCount = summary.replacedMessageIds.length;
+  const replacedCount = turns ?? summary.replacedMessageIds.length;
+  const replacedTokens = fromTokens ?? summary.replacedTokens;
 
   return (
     <div className="mt-3 mb-6">
@@ -35,7 +43,7 @@ export function SummaryDivider({
         <div className="flex-1 h-px bg-line group-hover:bg-line/80" />
         <span className="font-mono text-[10px] text-mute group-hover:text-text/70 uppercase tracking-widest transition-colors">
           {label} · {replacedCount} turn
-          {replacedCount === 1 ? '' : 's'} · {summary.replacedTokens}→
+          {replacedCount === 1 ? '' : 's'} · {replacedTokens}→
           {summary.summaryTokens} tok
         </span>
         <div className="flex-1 h-px bg-line group-hover:bg-line/80" />
