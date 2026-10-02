@@ -27,7 +27,7 @@ import {
   recordCalibrationSample,
 } from '../lib/token-calibration';
 import { compact, formatSummaryBlock, formatTailBlock } from '../lib/compact';
-import { getActiveSummaries, saveSummary } from '../data/summaries';
+import { getActiveSummaries, getThreadSummaries, saveSummary } from '../data/summaries';
 import {
   type CompressionMode,
   COMPACT_KEEP_EXCHANGES,
@@ -111,6 +111,13 @@ export function useChat(
   const [tailSummary, setTailSummary] = useState<
     import('../providers/types').ConversationSummary | null
   >(null);
+  // All retained summary records (active + superseded) for the loaded
+  // thread, for the per-event dividers. The prompt only uses the active
+  // history/tail above; these drive UI markers so each compaction leaves
+  // a persistent line.
+  const [summaries, setSummaries] = useState<
+    import('../providers/types').ConversationSummary[]
+  >([]);
   const [compacting, setCompacting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   // Ref keeps the latest messages accessible from callbacks without adding
@@ -128,6 +135,7 @@ export function useChat(
     if (!threadId) {
       setHistorySummary(null);
       setTailSummary(null);
+      setSummaries([]);
       return;
     }
     let cancelled = false;
@@ -136,6 +144,9 @@ export function useChat(
         setHistorySummary(history);
         setTailSummary(tail);
       }
+    });
+    getThreadSummaries(threadId).then((rows) => {
+      if (!cancelled) setSummaries(rows);
     });
     return () => {
       cancelled = true;
@@ -433,6 +444,7 @@ export function useChat(
                 source: 'auto',
               });
               setTailSummary(saved);
+              setSummaries((prev) => [...prev, saved]);
               tailGeneration = saved.generation;
               tailText = result.text;
             } else {
@@ -448,6 +460,7 @@ export function useChat(
                 source: 'auto',
               });
               setHistorySummary(saved);
+              setSummaries((prev) => [...prev, saved]);
               histGeneration = saved.generation;
               historyText = result.text;
             }
@@ -832,6 +845,7 @@ export function useChat(
         source: 'manual',
       });
       setHistorySummary(saved);
+      setSummaries((prev) => [...prev, saved]);
       return true;
     } finally {
       setCompacting(false);
@@ -844,6 +858,7 @@ export function useChat(
     budget,
     historySummary,
     tailSummary,
+    summaries,
     compacting,
     send,
     regenerate,

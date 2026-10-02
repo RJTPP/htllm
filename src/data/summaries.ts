@@ -85,6 +85,21 @@ export async function getActiveSummaries(
   return { history, tail };
 }
 
+/** All retained summary records for a thread (active AND inactive),
+ *  oldest first. The prompt only ever uses the active records, but the
+ *  UI renders a divider per record so each compaction event leaves a
+ *  persistent marker. Legacy rows missing `kind` are normalized to
+ *  'history'. */
+export async function getThreadSummaries(
+  threadId: string,
+): Promise<ConversationSummary[]> {
+  const db = await getDb();
+  const rows = await db.getAllFromIndex('summaries', 'byThread', threadId);
+  return rows
+    .map((r) => ({ ...r, kind: rowKind(r) }))
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
 /** Hard-delete every summary for a thread — used when the thread itself
  *  is deleted upstream. */
 export async function deleteSummariesForThread(threadId: string): Promise<void> {
