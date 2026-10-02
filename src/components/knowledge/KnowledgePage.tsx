@@ -152,6 +152,7 @@ export function KnowledgePage({
 
         {/* Embedding progress + error banner — visible across both tabs. */}
         <EmbeddingProgress progress={knowledge.progress} />
+        {knowledge.ingestProgress && <div role="status" className="text-xs flex gap-3"><span>{knowledge.ingestProgress}</span><button onClick={knowledge.cancelUpload}>Cancel upload</button></div>}
         {knowledge.error && (
           <div className="font-mono text-[10px] text-err border border-err/40 bg-err/5 px-3 py-2">
             {knowledge.error}
@@ -229,6 +230,8 @@ export function KnowledgePage({
         libraries={knowledge.libraries}
         defaultLibraryId={knowledge.activeLibraryId}
         onUpload={knowledge.uploadFiles}
+        onCancel={knowledge.cancelUpload}
+        progress={knowledge.ingestProgress}
       />
 
       <EmbeddingModelModal

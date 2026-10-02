@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Document, EmbeddingProvider, Library } from '../providers/types';
 import { listDocumentsByLibrary, deleteDocument } from '../data/documents';
 import { countEmbeddingsForModel, getEmbedding } from '../data/embeddings';
@@ -63,6 +63,9 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
   const [busyLibraryId, setBusyLibraryId] = useState<string | null>(null);
   const [progress, setProgress] = useState<EmbedProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const uploadController = useRef<AbortController | null>(null);
+  const [ingestProgress, setIngestProgress] = useState<string | null>(null);
+  useEffect(() => () => uploadController.current?.abort(), []);
 
   const activeLibrary = useMemo(
     () => libraries.find((l) => l.lib.id === activeLibraryId)?.lib ?? null,
@@ -182,14 +185,20 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
    *  catches them up. */
   const uploadFiles = useCallback(
     async (files: File[], libraryId?: string): Promise<void> => {
+      if (uploadController.current) return;
+      const controller = new AbortController();
+      uploadController.current = controller;
       const targetId = libraryId ?? activeLibraryId;
       setError(null);
+      try {
+      const failures: string[] = [];
 
       // Resolve the target library's model up-front so we can decide
       // whether to chain embed() per file. We can't read it from
       // `libraries` state — that's stale during this call — so we fetch
       // it fresh.
       const targetLib = await getLibrary(targetId);
+      if (!targetLib) throw new Error('The selected library no longer exists.');
       const lib = targetLib ?? null;
       const libProvider =
         lib && lib.embeddingProviderId ? getEmbeddingProvider(lib.embeddingProviderId) : null;
@@ -205,7 +214,7 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
       // shrink as it fills.
       let cumulativeEmbedded = 0;
       let plannedTotal = 0;
-      if (canAutoEmbed) setBusyLibraryId(targetId);
+      setBusyLibraryId(targetId);
 
       // Resolve the contextualizer once per upload (it's the same
       // library + same chat provider for the whole batch).
@@ -221,9 +230,15 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
       }
 
       for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        if (controller.signal.aborted) break;
         const file = files[fileIndex]!;
+        setIngestProgress(`Reading ${file.name}…`);
         try {
-          const { document, chunks } = await ingestFile(file, targetId);
+          const { document, chunks } = await ingestFile(file, targetId, {
+            signal: controller.signal,
+            onProgress: (page, total) => setIngestProgress(`${file.name}: page ${page}/${total}`),
+          });
+          setIngestProgress(`Indexing ${file.name}…`);
           if (canAutoEmbed && lib && libProvider) {
             plannedTotal += chunks.length;
             await embedDocument(
@@ -244,19 +259,28 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
                     : {}),
                 });
               },
-              contextualizer ? { contextualizer } : {},
+              { contextualizer, signal: controller.signal },
             );
             cumulativeEmbedded += chunks.length;
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          setError(`${file.name}: ${msg}`);
+          failures.push(`${file.name}: ${msg}`);
         }
       }
+      controller.signal.throwIfAborted();
+      if (failures.length) throw new Error(failures.join('\n'));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        throw err;
+      } finally {
       setProgress(null);
+      setIngestProgress(null);
+      uploadController.current = null;
       setBusyLibraryId(null);
       invalidateHybridSearchCache();
       await refreshLibraries();
+      }
     },
     [activeLibraryId, refreshLibraries, getContextualizer],
   );
@@ -426,6 +450,8 @@ export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory }
   );
 
   return {
+    ingestProgress,
+    cancelUpload: () => uploadController.current?.abort(),
     libraries,
     activeLibraryId,
     setActiveLibraryId,

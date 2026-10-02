@@ -204,7 +204,7 @@ export default function App() {
     activeThread?.libraryId === undefined
       ? defaultLibraryId ?? null
       : activeThread.libraryId;
-  const ragConfig: RagConfig = { libraryId: ragLibraryId };
+  const ragConfig: RagConfig = { libraryId: ragLibraryId, agentEnabled: activeThread?.agentEnabled, enabledToolIds: activeThread?.enabledToolIds, toolModelKey: activeThread?.toolModelKey };
 
   // Shared library list — the composer KnowledgeChip uses it for its
   // popover; the same store is updated from the Knowledge page so any
@@ -790,7 +790,7 @@ export default function App() {
           </div>
         </header>
 
-        {system && !system.webgpu ? (
+        {page === 'chat' && !isApiThread && system && !system.webgpu ? (
           <WebGPUBlock />
         ) : (
           <div className="flex-1 flex min-h-0">
@@ -811,6 +811,8 @@ export default function App() {
                   locked={generating}
                 />
                 <ChatPage
+                  toolsCapable={activeProvider.capabilities.toolCalls}
+                  onChangeAgent={(patch) => { if (activeThreadId) void updateThread(activeThreadId, patch); }}
                   thread={activeThread}
                   messages={messages}
                   budget={budget}

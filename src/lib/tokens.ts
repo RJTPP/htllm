@@ -11,6 +11,7 @@
  */
 import type { ContentPart, Message } from '../providers/types';
 import { stripThinking } from './thinking';
+import { activityContext } from './message-context';
 
 /** Average chars per token for English-ish content. Empirical across
  *  OpenAI cl100k / Anthropic / Llama tokenizers — close enough that the
@@ -62,7 +63,7 @@ export function estimateMessageTokens(msg: Message, ratio = 1): number {
       }
     }
   }
-  return body + PER_MESSAGE_OVERHEAD_TOKENS;
+  return body + estimateStringTokens(activityContext(msg), ratio) + PER_MESSAGE_OVERHEAD_TOKENS;
 }
 
 /** Sum the estimated tokens of an array of messages. */

@@ -2,7 +2,7 @@ import type { SystemInfo } from '../providers/types';
 
 export async function detectSystem(): Promise<SystemInfo> {
   const info: SystemInfo = {
-    webgpu: 'gpu' in navigator,
+    webgpu: Boolean((navigator as unknown as { gpu?: GPU }).gpu),
     deviceMemoryGB: (navigator as unknown as { deviceMemory?: number }).deviceMemory ?? null,
     cores: navigator.hardwareConcurrency ?? null,
     gpu: null,
@@ -20,9 +20,9 @@ export async function detectSystem(): Promise<SystemInfo> {
           maxBufferSize: adapter.limits.maxBufferSize,
           maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
         };
-      }
+      } else info.webgpu = false;
     } catch {
-      // WebGPU adapter request failed — leave gpu as null
+      info.webgpu = false;
     }
   }
 

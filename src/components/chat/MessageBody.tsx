@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'; // useRef used in 
 import { Marked, type Tokens } from 'marked';
 import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
 import { Check, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { sanitizeHtml } from '../../lib/sanitize';
 
 /** Code blocks longer than this collapse to a capped height with a
  *  "show more" toggle, so a single long paste doesn't dominate the
@@ -102,7 +103,7 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
           {isShikiHtml ? (
             <div
               className="shiki-container px-3 py-2.5 overflow-x-auto [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:font-mono [&_code]:text-[12.5px] [&_code]:leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: html }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }}
             />
           ) : (
             <pre className="px-3 py-2.5 overflow-x-auto">
@@ -187,7 +188,7 @@ export function MessageBody({ content }: { content: string }) {
           <div
             key={i}
             className="markdown-body"
-            dangerouslySetInnerHTML={{ __html: seg.html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(seg.html) }}
           />
         );
       })}

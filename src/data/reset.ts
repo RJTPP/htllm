@@ -13,6 +13,7 @@ const STORES = [
   'parents',
   'embeddings',
   'summaries',
+  'mcpConnections',
 ] as const;
 
 /**

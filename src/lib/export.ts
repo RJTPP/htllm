@@ -1,4 +1,6 @@
-import { getDb } from '../data/db';
+import { getDb, DEFAULT_LIBRARY_ID } from '../data/db';
+import { clearToolTrust } from '../services/approvals';
+import { invalidateHybridSearchCache } from './hybrid-search';
 
 interface ExportData {
   version: 1;
@@ -18,28 +20,36 @@ interface ExportData {
    *  chunks have undefined `parentId` and retrieval falls back to chunk
    *  text, so the absence is graceful. */
   parents?: unknown[];
+  summaries?: unknown[];
+  mcpConnections?: unknown[];
 }
 
 export async function exportAllData(): Promise<string> {
   const db = await getDb();
+  // One consistent snapshot: a concurrent chat/ingestion transaction cannot
+  // leave the backup with children from a different state than their parents.
+  const tx = db.transaction(['threads', 'messages', 'settings', 'promptTemplates', 'folders', 'libraries', 'documents', 'chunks', 'parents', 'summaries', 'mcpConnections'], 'readonly');
   const data: ExportData = {
     version: 1,
     exportedAt: Date.now(),
-    threads: await db.getAll('threads'),
-    messages: await db.getAll('messages'),
-    settings: await db.getAll('settings'),
-    promptTemplates: await db.getAll('promptTemplates'),
-    folders: await db.getAll('folders'),
-    libraries: await db.getAll('libraries'),
-    documents: await db.getAll('documents'),
-    chunks: await db.getAll('chunks'),
-    parents: await db.getAll('parents'),
+    threads: await tx.objectStore('threads').getAll(),
+    messages: await tx.objectStore('messages').getAll(),
+    settings: await tx.objectStore('settings').getAll(),
+    promptTemplates: await tx.objectStore('promptTemplates').getAll(),
+    folders: await tx.objectStore('folders').getAll(),
+    libraries: await tx.objectStore('libraries').getAll(),
+    documents: await tx.objectStore('documents').getAll(),
+    chunks: await tx.objectStore('chunks').getAll(),
+    parents: await tx.objectStore('parents').getAll(),
+    summaries: await tx.objectStore('summaries').getAll(),
+    mcpConnections: await tx.objectStore('mcpConnections').getAll(),
   };
+  await tx.done;
   return JSON.stringify(data, null, 2);
 }
 
 export async function importAllData(json: string): Promise<void> {
-  const data = JSON.parse(json) as ExportData;
+  const data = validateImport(json);
   if (data.version !== 1) {
     throw new Error(`Unsupported export version: ${data.version}`);
   }
@@ -59,18 +69,110 @@ export async function importAllData(json: string): Promise<void> {
     'chunks',
     'parents',
     'embeddings',
+    'summaries',
+    'mcpConnections',
+    'keys',
   ] as const;
+  const tx = db.transaction([...stores], 'readwrite');
+  try {
   for (const storeName of stores) {
-    const tx = db.transaction(storeName, 'readwrite');
-    await tx.store.clear();
+    const store = tx.objectStore(storeName);
+    await store.clear();
     const items = (data as unknown as Record<string, unknown>)[storeName];
-    if (Array.isArray(items)) {
+    if (storeName !== 'keys' && Array.isArray(items)) {
       for (const item of items) {
-        await tx.store.put(item as never);
+        const row = item as Record<string, unknown>;
+        if (storeName === 'messages' && row.runStatus === 'running') row.runStatus = 'stopped';
+        if (storeName === 'messages' && Array.isArray(row.activity)) {
+          row.activity = row.activity.map((event) => ['approval', 'running'].includes(event.status)
+            ? { ...event, status: event.server && event.status === 'running' ? 'unknown' : 'stopped' } : event);
+        }
+        await store.put(item as never);
       }
     }
-    await tx.done;
   }
+  await tx.done;
+  clearToolTrust();
+  invalidateHybridSearchCache();
+  } catch (error) {
+    try { tx.abort(); } catch { /* already aborted */ }
+    await tx.done.catch(() => {});
+    throw error;
+  }
+}
+
+/** Validate the entire backup before opening any destructive transaction. */
+export function validateImport(json: string): ExportData {
+  const data: unknown = JSON.parse(json);
+  if (!data || typeof data !== 'object' || (data as ExportData).version !== 1) {
+    throw new Error('Unsupported or invalid backup version');
+  }
+  const root = data as Record<string, unknown>;
+  if ('keys' in root) throw new Error('Credentials cannot be imported from a backup.');
+  // Pre-library exports used the same export version but had unscoped
+  // documents. Mirror the IndexedDB v6 migration without guessing a model.
+  if (root.libraries === undefined && Array.isArray(root.documents) && root.documents.length && root.documents.every((doc) => doc && typeof doc === 'object' && doc.libraryId === undefined)) {
+    root.libraries = [{ id: DEFAULT_LIBRARY_ID, name: 'Default', embeddingModelId: '', createdAt: 0 }];
+    root.documents = root.documents.map((doc) => ({ ...doc, libraryId: DEFAULT_LIBRARY_ID }));
+  }
+  const fields: Record<string, string[]> = {
+    threads: ['id', 'title', 'providerId', 'modelId'], messages: ['id', 'threadId', 'role'],
+    settings: ['key'], promptTemplates: ['id'], folders: ['id', 'name'],
+    libraries: ['id', 'name', 'embeddingModelId'], documents: ['id', 'libraryId', 'filename'],
+    chunks: ['id', 'documentId', 'text'], parents: ['id', 'documentId', 'text'],
+    summaries: ['id', 'threadId', 'text'], mcpConnections: ['id', 'name', 'url'],
+  };
+  for (const [store, required] of Object.entries(fields)) {
+    const rows = root[store];
+    if (rows === undefined && !['threads', 'messages', 'settings', 'promptTemplates'].includes(store)) continue;
+    if (!Array.isArray(rows)) throw new Error(`Invalid ${store} array`);
+    const ids = new Set<string>();
+    for (const row of rows) {
+      if (!row || typeof row !== 'object' || required.some((k) => typeof row[k] !== 'string')) {
+        throw new Error(`Invalid ${store} record`);
+      }
+      const key = row[required[0]!];
+      if (ids.has(key)) throw new Error(`Duplicate ${store} identifier`);
+      ids.add(key);
+      for (const field of ['createdAt', 'updatedAt', 'sizeBytes', 'chunkCount', 'index', 'startOffset', 'pageStart', 'pageEnd']) {
+        if (row[field] !== undefined && (typeof row[field] !== 'number' || !Number.isFinite(row[field]) || row[field] < 0)) throw new Error(`Invalid ${store} ${field}`);
+      }
+      if (store === 'threads') {
+        if (row.agentEnabled !== undefined && typeof row.agentEnabled !== 'boolean') throw new Error('Invalid Agent setting');
+        if (row.libraryId != null && typeof row.libraryId !== 'string') throw new Error('Invalid library selection');
+        if (row.enabledToolIds !== undefined && (!Array.isArray(row.enabledToolIds) || !row.enabledToolIds.every((id: unknown) => typeof id === 'string'))) throw new Error('Invalid tool selections');
+      }
+      if (store === 'messages') {
+        if (row.citations !== undefined && (!Array.isArray(row.citations) || !row.citations.every((source: Record<string, unknown>) => source && ['id', 'documentId', 'chunkId', 'filename', 'excerpt'].every((k) => typeof source[k] === 'string')))) throw new Error('Invalid citations');
+        if (row.activity !== undefined && (!Array.isArray(row.activity) || !row.activity.every((event: Record<string, unknown>) =>
+          event && ['id', 'tool', 'arguments'].every((k) => typeof event[k] === 'string') &&
+          ['approval', 'running', 'complete', 'denied', 'error', 'unknown', 'stopped'].includes(String(event.status)) &&
+          (event.result === undefined || typeof event.result === 'string')
+        ))) throw new Error('Invalid tool activity');
+        if (row.runStatus !== undefined && !['running', 'complete', 'stopped', 'error'].includes(row.runStatus)) throw new Error('Invalid run status');
+      }
+      if (store === 'messages' && (!['user', 'assistant', 'system'].includes(row.role) ||
+        !(typeof row.content === 'string' || (Array.isArray(row.content) && row.content.every((p: Record<string, unknown>) =>
+          p && (p.type === 'text' ? typeof p.text === 'string' : p.type === 'image_url' && !!p.image_url && typeof (p.image_url as Record<string, unknown>).url === 'string')))))) {
+        throw new Error('Invalid message content');
+      }
+      if (store === 'summaries' && (!Array.isArray(row.replacedMessageIds) || !row.replacedMessageIds.every((id: unknown) => typeof id === 'string'))) throw new Error('Invalid summary');
+      if (store === 'mcpConnections' && (!Array.isArray(row.tools) || Object.keys(row).some((k) => !['id', 'name', 'url', 'tools'].includes(k)))) throw new Error('Invalid MCP configuration');
+      if (store === 'mcpConnections') {
+        const url = new URL(row.url);
+        if (url.username || url.password || url.search || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) throw new Error('Invalid MCP endpoint');
+        if (!row.tools.every((tool: Record<string, unknown>) => tool && typeof tool.name === 'string' && typeof tool.description === 'string' && tool.parameters && typeof tool.parameters === 'object' && !Array.isArray(tool.parameters) && Object.keys(tool).every((k) => ['name', 'description', 'parameters', 'readOnlyHint'].includes(k)) && (tool.readOnlyHint === undefined || typeof tool.readOnlyHint === 'boolean'))) throw new Error('Invalid MCP tools');
+      }
+      if (store === 'settings' && /secret|password|apikey|bearer|accessToken|refreshToken/i.test(row.key)) throw new Error('Credentials cannot be imported as settings');
+    }
+  }
+  const ids = (store: string) => new Set(((root[store] ?? []) as {id: string}[]).map((r) => r.id));
+  const threads = ids('threads'); const documents = ids('documents'); const libraries = ids('libraries');
+  for (const row of (root.messages as {threadId: string}[])) if (!threads.has(row.threadId)) throw new Error('Orphan message');
+  for (const row of (root.summaries ?? []) as {threadId: string}[]) if (!threads.has(row.threadId)) throw new Error('Orphan summary');
+  for (const row of (root.documents ?? []) as {libraryId: string}[]) if (!libraries.has(row.libraryId)) throw new Error('Orphan document');
+  for (const store of ['chunks', 'parents']) for (const row of (root[store] ?? []) as {documentId: string}[]) if (!documents.has(row.documentId)) throw new Error('Orphan chunk');
+  return data as ExportData;
 }
 
 export function downloadJson(content: string, filename: string): void {

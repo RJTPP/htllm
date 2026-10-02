@@ -7,11 +7,14 @@
 
 import type { EmbeddingProvider, EmbeddingRecord } from '../providers/types';
 import { getChunksForDocument } from '../data/chunks';
-import { saveEmbeddings } from '../data/embeddings';
-import { listDocuments } from '../data/documents';
+import { getAllEmbeddingsForModel } from '../data/embeddings';
+import { getDocument, listDocuments, listDocumentsByLibrary } from '../data/documents';
+import { getLibrary } from '../data/libraries';
+import { getDb } from '../data/db';
 import { getParents } from '../data/parents';
 import { invalidateHybridSearchCache } from './hybrid-search';
 import { type Contextualizer, formatContextualizedChunk } from './contextualizer';
+import { validateEmbedding } from './validate-embedding';
 
 export interface EmbedProgress {
   embedded: number;
@@ -65,6 +68,10 @@ export async function embedDocument(
   opts: EmbedPipelineOpts = {},
 ): Promise<number> {
   const batchSize = opts.batchSize ?? DEFAULT_BATCH_SIZE;
+  if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error('Invalid embedding batch size.');
+  const document = await getDocument(documentId);
+  const library = document ? await getLibrary(document.libraryId) : undefined;
+  if (!document || !library || library.embeddingModelId !== modelId || (library.embeddingProviderId && library.embeddingProviderId !== provider.id)) throw new Error('The document or pinned embedding model changed. Refresh the library before indexing.');
   const chunks = await getChunksForDocument(documentId);
   if (chunks.length === 0) return 0;
 
@@ -84,6 +91,12 @@ export async function embedDocument(
   }
 
   let embedded = 0;
+  const otherDocs = (await listDocumentsByLibrary(library.id)).filter((doc) => doc.id !== documentId);
+  const otherChunks = new Set((await Promise.all(otherDocs.map((doc) => getChunksForDocument(doc.id)))).flat().map((chunk) => chunk.id));
+  const existing = (await getAllEmbeddingsForModel(modelId)).filter((record) => otherChunks.has(record.chunkId));
+  let dimension: number | undefined = existing[0]?.dim;
+  if (existing.some((record) => record.dim !== dimension || record.vector.length !== dimension || !record.vector.every(Number.isFinite))) throw new Error('Library index dimensions are inconsistent. Clear the index and rebuild it.');
+  const pending: EmbeddingRecord[] = [];
   let contextualized = 0;
   for (let i = 0; i < chunks.length; i += batchSize) {
     if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -133,11 +146,23 @@ export async function embedDocument(
         vector: Array.from(vec),
       };
     });
-    await saveEmbeddings(records);
+    dimension = validateEmbedding(result, batch.length, modelId, dimension);
+    pending.push(...records);
     embedded += records.length;
     onProgress?.({ embedded, total: chunks.length, documentId, contextualized });
   }
 
+  opts.signal?.throwIfAborted();
+  const db = await getDb();
+  const tx = db.transaction(['documents', 'libraries', 'embeddings'], 'readwrite');
+  const currentDoc = await tx.objectStore('documents').get(documentId);
+  const currentLibrary = await tx.objectStore('libraries').get(library.id);
+  if (!currentDoc || currentDoc.libraryId !== library.id || currentLibrary?.embeddingModelId !== modelId || currentLibrary.embeddingProviderId !== library.embeddingProviderId || opts.signal?.aborted) {
+    tx.abort(); await tx.done.catch(() => {});
+    throw new Error('Indexing cancelled or library changed; no vectors were saved.');
+  }
+  for (const record of pending) await tx.objectStore('embeddings').put(record);
+  await tx.done;
   // Vectors changed — drop the BM25 cache too, since chunks may be new.
   invalidateHybridSearchCache();
   return embedded;

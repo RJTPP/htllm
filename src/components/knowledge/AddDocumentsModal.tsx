@@ -18,16 +18,21 @@ export function AddDocumentsModal({
   libraries,
   defaultLibraryId,
   onUpload,
+  onCancel,
+  progress,
 }: {
   open: boolean;
   onClose: () => void;
   libraries: LibraryWithStats[];
   defaultLibraryId: string;
   onUpload: (files: File[], libraryId: string) => Promise<void>;
+  onCancel?: () => void;
+  progress?: string | null;
 }) {
   const [libraryId, setLibraryId] = useState<string>(defaultLibraryId);
   const [files, setFiles] = useState<File[]>([]);
-  const [stage, setStage] = useState<'pick' | 'running' | 'done'>('pick');
+  const [stage, setStage] = useState<'pick' | 'running' | 'done' | 'error'>('pick');
+  const [failure, setFailure] = useState('');
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,6 +42,7 @@ export function AddDocumentsModal({
       setLibraryId(defaultLibraryId);
       setFiles([]);
       setStage('pick');
+      setFailure('');
       setDragging(false);
     }
   }, [open, defaultLibraryId]);
@@ -56,9 +62,9 @@ export function AddDocumentsModal({
     try {
       await onUpload(files, libraryId);
       setStage('done');
-    } catch {
-      // Errors surface through the parent's error banner.
-      setStage('done');
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'Import failed.');
+      setStage('error');
     }
   };
 
@@ -144,7 +150,7 @@ export function AddDocumentsModal({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.md,.markdown,text/plain,text/markdown"
+                accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -164,7 +170,7 @@ export function AddDocumentsModal({
                 <FilePlus size={11} /> browse files
               </button>
               <div className="font-mono text-[9px] text-mute mt-2">
-                Supported: .txt, .md · PDF coming soon
+                Supported: .txt, .md, text PDFs · scanned PDFs are not supported
               </div>
             </div>
 
@@ -196,11 +202,13 @@ export function AddDocumentsModal({
         {/* Running stage — minimal, parent shows the global progress bar */}
         {stage === 'running' && (
           <div className="font-mono text-[11px] text-mute py-2 text-center">
-            Ingesting {files.length} file{files.length === 1 ? '' : 's'}…
+            {progress || `Ingesting ${files.length} file${files.length === 1 ? '' : 's'}…`}
+            {onCancel && <button onClick={onCancel} className="block mx-auto mt-3 border border-line px-3 py-1">Cancel import</button>}
           </div>
         )}
 
         {/* Done stage */}
+        {stage === 'error' && <p role="alert" className="text-err text-xs whitespace-pre-wrap">Import did not fully complete. Some files may have been added; check the library before retrying. {failure}</p>}
         {stage === 'done' && (
           <div className="font-mono text-[11px] text-accent py-2 text-center flex items-center justify-center gap-1.5">
             <Check size={13} /> Added {files.length} file{files.length === 1 ? '' : 's'} to {targetLibrary?.lib.name ?? 'library'}
@@ -226,7 +234,7 @@ export function AddDocumentsModal({
               </button>
             </>
           )}
-          {stage === 'done' && (
+          {(stage === 'done' || stage === 'error') && (
             <>
               <button
                 onClick={() => {

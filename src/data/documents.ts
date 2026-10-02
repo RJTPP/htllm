@@ -1,9 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import type { Document } from '../providers/types';
 import { getDb } from './db';
-import { deleteChunksForDocument } from './chunks';
-import { deleteEmbeddingsForDocument } from './embeddings';
-import { deleteParentsForDocument } from './parents';
 
 /**
  * Create a Document record. Chunks and embeddings are persisted separately
@@ -50,15 +47,21 @@ export async function updateDocument(
 
 /**
  * Delete a document and cascade to its chunks and embeddings.
- * Three separate transactions keep the data layer functions simple; the
- * cascade is idempotent so a partial failure can be retried safely.
+ * One transaction prevents indexing from racing a partially deleted document.
  */
 export async function deleteDocument(id: string): Promise<void> {
-  await deleteEmbeddingsForDocument(id);
-  await deleteChunksForDocument(id);
-  await deleteParentsForDocument(id);
   const db = await getDb();
-  await db.delete('documents', id);
+  const tx = db.transaction(['documents', 'chunks', 'parents', 'embeddings'], 'readwrite');
+  const chunks = await tx.objectStore('chunks').index('byDocument').getAll(id);
+  for (const chunk of chunks) {
+    let cursor = await tx.objectStore('embeddings').index('byChunk').openCursor(IDBKeyRange.only(chunk.id));
+    while (cursor) { await cursor.delete(); cursor = await cursor.continue(); }
+    await tx.objectStore('chunks').delete(chunk.id);
+  }
+  const parents = await tx.objectStore('parents').index('byDocument').getAllKeys(id);
+  for (const parentId of parents) await tx.objectStore('parents').delete(parentId);
+  await tx.objectStore('documents').delete(id);
+  await tx.done;
 }
 
 export interface DocumentStats {

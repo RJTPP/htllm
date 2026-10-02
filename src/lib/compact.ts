@@ -17,6 +17,7 @@
 
 import type { ChatProvider, Message } from '../providers/types';
 import { stripThinking } from './thinking';
+import { activityContext } from './message-context';
 
 const COMPACT_TIMEOUT_MS = 60_000;
 /** Rough chars-per-token, matching lib/tokens.ts. Used to size the stored
@@ -44,6 +45,7 @@ function renderTranscript(messages: Message[]): string {
         .filter(Boolean);
       content = parts.join('\n');
     }
+    content += activityContext(m);
     if (!content.trim()) continue;
     lines.push(`### ${m.role}\n${content.trim()}`);
   }

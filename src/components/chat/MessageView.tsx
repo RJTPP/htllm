@@ -6,6 +6,7 @@ import { Info, RefreshCw, Pencil, X, Check, Copy } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MessageBody } from './MessageBody';
 import { ThinkingBlock } from './ThinkingBlock';
+import { MessageEvidence } from './MessageEvidence';
 
 function splitContent(content: string | ContentPart[]): { text: string; images: string[] } {
   if (typeof content === 'string') return { text: content, images: [] };
@@ -165,6 +166,7 @@ export const MessageView = memo(function MessageView({
     <div className="group flex gap-3">
       <Avatar role={message.role} modelId={modelId} models={models} />
       <div className="flex-1 min-w-0">
+        {!isUser && <MessageEvidence message={message} />}
         <div className="flex items-center gap-2 mb-1 overflow-hidden">
           <span className="text-[11px] font-mono text-accent whitespace-nowrap">
             {isUser ? 'You' : (modelId && shortenModelId(modelId)) || 'Assistant'}

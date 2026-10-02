@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useLayoutEffect, useCallback, useState } from 'react';
 import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability, ConversationSummary } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
@@ -11,6 +11,14 @@ import type { SlashCommand } from './SlashMenu';
 import { SummaryDivider } from './SummaryDivider';
 import { CompactingIndicator } from './CompactingIndicator';
 import { TrimDivider } from './TrimDivider';
+import { ArrowDown } from 'lucide-react';
+import { AgentControls } from './AgentControls';
+
+const BOTTOM_SCROLL_THRESHOLD = 48;
+
+function isNearBottom(el: HTMLDivElement) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SCROLL_THRESHOLD;
+}
 
 export function ChatPage({
   thread,
@@ -42,7 +50,11 @@ export function ChatPage({
   summaries,
   compacting,
   slashCommands,
+  onChangeAgent,
+  toolsCapable,
 }: {
+  onChangeAgent: (patch: Partial<Thread>) => void;
+  toolsCapable: boolean;
   thread: Thread | null;
   messages: Message[];
   /** Token-budget snapshot from useChat — drives the composer meter
@@ -91,12 +103,36 @@ export function ChatPage({
   onNewLibrary: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+  useLayoutEffect(() => {
+    shouldStickToBottomRef.current = true;
+    setShowScrollButton(false);
+  }, [thread?.id]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    shouldStickToBottomRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    setShowScrollButton(false);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = isNearBottom(el);
+    shouldStickToBottomRef.current = nearBottom;
+    setShowScrollButton(!nearBottom);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !shouldStickToBottomRef.current) return;
+    el.scrollTop = el.scrollHeight;
+    setShowScrollButton(false);
+  });
 
   // Token meter source: prefer the live budget snapshot (predicts what
   // *would* be sent on the next request). Falls back to the model's
@@ -145,7 +181,7 @@ export function ChatPage({
           onChange={onChangeSystemPrompt}
         />
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto grid-bg">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto grid-bg">
         {messages.length === 0 ? (
           <EmptyState onOpenPicker={onOpenPicker} modelReady={modelReady} model={loadedModelId} />
         ) : (
@@ -274,6 +310,18 @@ export function ChatPage({
           </div>
         )}
       </div>
+      {showScrollButton && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          className="absolute bottom-28 left-1/2 -translate-x-1/2 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-line bg-surface text-mute shadow-lg hover:text-text hover:border-accent/60 transition-colors"
+          title="Jump to latest message"
+          aria-label="Jump to latest message"
+        >
+          <ArrowDown size={16} />
+        </button>
+      )}
+      {thread && <AgentControls thread={thread} libraryId={ragLibraryId} capable={toolsCapable} busy={generating} onChange={onChangeAgent} />}
       <Composer
         modelReady={modelReady}
         model={loadedModelId}

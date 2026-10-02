@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { MessageCircle, Database, HardDrive, Settings, FunctionSquare, Bot, FolderOpen, Waypoints } from 'lucide-react';
+import { MessageCircle, Database, HardDrive, Settings } from 'lucide-react';
 
 export type NavPage = 'chat' | 'knowledge' | 'storage';
 
@@ -9,12 +9,6 @@ const LIVE: [NavPage, LucideIcon, string][] = [
   ['storage', HardDrive, 'Storage'],
 ];
 
-const PLANNED: [string, LucideIcon, string, number][] = [
-  ['fn', FunctionSquare, 'Functions', 4],
-  ['agent', Bot, 'Agents', 4],
-  ['artifact', FolderOpen, 'Artifacts', 5],
-  ['vectormap', Waypoints, 'Vector map', 5],
-];
 
 export function NavRail({
   page,
@@ -44,23 +38,6 @@ export function NavRail({
             <Ico size={18} />
             <span className="font-mono text-[9px]">{label}</span>
           </button>
-        ))}
-        <div className="h-px bg-line my-2 mx-1.5" />
-        <div className="font-mono text-[8px] uppercase tracking-widest text-mute/60 text-center mb-0.5">
-          planned
-        </div>
-        {PLANNED.map(([id, Ico, label, phase]) => (
-          <div
-            key={id}
-            title={`${label} — phase ${phase}`}
-            className="flex flex-col items-center gap-1 py-2 border border-transparent text-mute/40 cursor-not-allowed relative"
-          >
-            <Ico size={16} />
-            <span className="font-mono text-[9px]">{label}</span>
-            <span className="absolute top-1 right-1 font-mono text-[8px] text-mute/50 border border-line/60 px-1 leading-tight">
-              p{phase}
-            </span>
-          </div>
         ))}
       </div>
       <button

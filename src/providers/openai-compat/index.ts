@@ -40,12 +40,12 @@ interface OpenAIImagePart {
   image_url: { url: string };
 }
 interface OpenAIMessage {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string | (OpenAITextPart | OpenAIImagePart)[];
 }
 
 function toOpenAIMessage(
-  role: 'user' | 'assistant' | 'system',
+  role: 'user' | 'assistant' | 'system' | 'tool',
   content: string | ContentPart[],
 ): OpenAIMessage {
   if (typeof content === 'string') return { role, content };
@@ -174,7 +174,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
   readonly needsModelLoad = false;
   readonly capabilities = {
     streaming: true,
-    toolCalls: false,
+    toolCalls: true,
     // Always true for API providers — the OpenAI message format supports
     // image_url parts natively. If a model can't handle images, the API
     // returns an error which we already display. No reason to gatekeep.
@@ -469,7 +469,14 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
       throw new ProviderError(this.id, 'No base URL configured');
     }
 
-    const messages = params.messages.map((m) => toOpenAIMessage(m.role, m.content));
+    const messages = params.messages.map((m) => ({
+      ...toOpenAIMessage(m.role, m.content),
+      ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
+      ...(m.toolCalls ? { tool_calls: m.toolCalls.map((c) => ({
+        id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments },
+      })) } : {}),
+      ...(m.toolCalls && m.reasoning ? { reasoning_content: m.reasoning } : {}),
+    }));
 
     // Build reasoning effort params. Different providers use different fields:
     // - OpenAI o-series: `reasoning_effort` (low/medium/high)
@@ -500,6 +507,13 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
           temperature: params.temperature,
           top_p: params.topP,
           max_tokens: params.maxTokens,
+          ...(params.tools?.length ? {
+            tools: params.tools.map((t) => ({ type: 'function', function: {
+              name: t.name, description: t.description, parameters: t.parameters,
+            } })),
+            tool_choice: params.toolChoice ?? 'auto',
+            parallel_tool_calls: false,
+          } : {}),
           presence_penalty: params.presencePenalty,
           frequency_penalty: params.frequencyPenalty,
           ...reasoningParams,
@@ -527,22 +541,25 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+        if (buffer.length > 2_000_000) throw new ProviderError(this.id, 'Streaming event exceeds the size limit');
 
         const lines = buffer.split('\n');
         buffer = lines.pop() ?? '';
+        if (done && buffer) { lines.push(buffer); buffer = ''; }
 
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed.startsWith('data:')) continue;
           const data = trimmed.slice(5).trim();
+          if (!data) continue;
           if (data === '[DONE]') return;
 
           let json: {
             choices?: {
               delta?: {
                 content?: string;
+                tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[];
                 // DeepSeek API, OpenRouter reasoning models
                 reasoning_content?: string;
                 // OpenAI native reasoning (o1/o3/o4)
@@ -551,16 +568,22 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
               finish_reason?: string;
             }[];
             usage?: { prompt_tokens?: number; completion_tokens?: number };
+            error?: unknown;
           };
           try {
             json = JSON.parse(data);
           } catch {
-            continue;
+            throw new ProviderError(this.id, 'Malformed streaming response; generation stopped.');
           }
+          if (!json || typeof json !== 'object' || json.error) throw new ProviderError(this.id, 'The model endpoint reported a streaming error.');
 
           const choice = json.choices?.[0];
           const delta = choice?.delta;
+          if (delta?.content != null && typeof delta.content !== 'string') throw new ProviderError(this.id, 'Unsupported streamed content');
           const chunk: ChatChunk = { delta: delta?.content ?? '' };
+          if (delta?.tool_calls) chunk.toolCalls = delta.tool_calls.map((c) => ({
+            index: c.index, id: c.id, name: c.function?.name, arguments: c.function?.arguments,
+          }));
 
           // Structured reasoning from API (separate from content).
           const reasoning = delta?.reasoning_content ?? delta?.reasoning;
@@ -574,7 +597,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
           }
 
           const finishReason = choice?.finish_reason;
-          if (finishReason === 'stop' || finishReason === 'length') {
+          if (finishReason === 'stop' || finishReason === 'length' || finishReason === 'tool_calls') {
             chunk.finishReason = finishReason;
           }
           if (json.usage) {
@@ -596,6 +619,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
           }
           yield chunk;
         }
+        if (done) break;
       }
     } finally {
       reader.cancel().catch(() => {});
