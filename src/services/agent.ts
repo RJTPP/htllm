@@ -102,9 +102,9 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
               timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60000);
             });
             invoked = true;
-            const output = await Promise.race([tool.execute(args, controller.signal), interrupted]);
-            signal.throwIfAborted();
             const maxChars = Math.max(0, Math.min(8000, Math.floor((available - size() - 256) * 4 / ratio)));
+            const output = await Promise.race([tool.execute(args, controller.signal, maxChars), interrupted]);
+            signal.throwIfAborted();
             result = output.text.slice(0, maxChars);
             if (result.length < output.text.length) result += '\n[Result truncated]';
             if (maxChars < output.text.length && output.citations?.length) {

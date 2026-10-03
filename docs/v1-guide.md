@@ -37,12 +37,21 @@ Normalized retrieval scores are not relevance probabilities.
 
 ## Agent mode
 
-Open the **Tools: off/on** button beside Knowledge, confirm tool-calling capability
-for the exact HTTP model, and select a library and/or external tools. Enable
+Open the **Tools: off/on** button beside Knowledge. Enable
 **Use tools** in that panel. Tools on is Agent mode; there is no separate Agent
 toggle. Tools off keeps ordinary chat and automatic RAG when a library is selected. This is a
-per-thread setting applied on the next turn. Capability confirmation is a user
-override, not a compatibility certificate. WebLLM agents are unsupported.
+per-thread setting applied on the next turn. No capability checkbox is required;
+use an HTTP model that supports tool calling. WebLLM agents are unsupported.
+Tools can stay on with Knowledge off: document tools return no evidence, while
+selected external tools remain available.
+
+`read_document` reads small files completely and returns a `nextCursor` for
+larger files (up to 4,000 characters per read, reduced to fit the context budget).
+Continue until `complete` is true; tool/context limits can leave a file partially
+read. Page or section evidence accompanies each portion. Newly imported files
+retain exact extracted text in browser storage and backups. Older imports expose
+legacy chunks with `originalAvailable: false`; reimport them for exact whole-file
+reading. For PDFs this covers extracted text, not images or OCR.
 
 Built-in `list_documents`, `search_knowledge`, and `read_document` are restricted
 to the selected library. They run without approval. The loop executes at most

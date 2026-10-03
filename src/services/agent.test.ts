@@ -28,7 +28,7 @@ describe('agent execution boundary', () => {
   it('assembles argument fragments and sends matched call/result messages', async () => {
     const t = tool(); const result = await run([call()], [t]);
     expect(t.execute).toHaveBeenCalledOnce();
-    expect(t.execute).toHaveBeenCalledWith({ query: 'hello' }, expect.any(AbortSignal));
+    expect(t.execute).toHaveBeenCalledWith({ query: 'hello' }, expect.any(AbortSignal), expect.any(Number));
     const history = result.requests[1]!.messages;
     expect(history.find((m) => m.toolCalls)?.toolCalls?.[0]?.id).toBe('call-1');
     expect(history.find((m) => m.role === 'tool')?.toolCallId).toBe('call-1');

@@ -17,6 +17,13 @@ it('rejects malformed data before replacing existing records', async () => {
   expect((await getDb()).get('messages', 'm')).resolves.toBeDefined();
 });
 it('accepts older exports without optional stores', () => { expect(validateImport(JSON.stringify(backup())).version).toBe(1); });
+it('round-trips exact extracted text and page provenance and rejects malformed originals', async () => {
+  const data = { ...backup(), libraries: [{ id: 'lib', name: 'Library', embeddingModelId: '' }], documents: [{ id: 'd', libraryId: 'lib', filename: 'file.pdf', extractedText: 'whole\nfile', pages: [{ page: 1, start: 0, end: 10 }] }] };
+  await importAllData(JSON.stringify(data));
+  expect(JSON.parse(await exportAllData()).documents[0]).toMatchObject(data.documents[0]!);
+  expect(() => validateImport(JSON.stringify({ ...data, documents: [{ ...data.documents[0], extractedText: 42 }] }))).toThrow('extracted');
+  expect(() => validateImport(JSON.stringify({ ...data, documents: [{ ...data.documents[0], pages: [{ page: 1, start: 5, end: 2 }] }] }))).toThrow('provenance');
+});
 it('migrates pre-library exports without discarding document text', async () => {
   await importAllData(JSON.stringify({ ...backup(), documents: [{ id: 'd', filename: 'old.txt' }], chunks: [{ id: 'c', documentId: 'd', text: 'legacy evidence' }] }));
   const db = await getDb(); expect((await db.get('documents', 'd'))?.libraryId).toBe('default');

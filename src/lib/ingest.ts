@@ -106,6 +106,8 @@ export async function ingestFile(
     mimeType: file.type || (isPdfFile(file) ? 'application/pdf' : isMarkdown ? 'text/markdown' : 'text/plain'),
     sizeBytes: file.size,
     chunkCount: hierarchy.children.length,
+    extractedText: text,
+    pages,
   };
 
   const parents: ParentChunk[] = (

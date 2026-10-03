@@ -137,6 +137,10 @@ export function validateImport(json: string): ExportData {
       for (const field of ['createdAt', 'updatedAt', 'sizeBytes', 'chunkCount', 'index', 'startOffset', 'pageStart', 'pageEnd']) {
         if (row[field] !== undefined && (typeof row[field] !== 'number' || !Number.isFinite(row[field]) || row[field] < 0)) throw new Error(`Invalid ${store} ${field}`);
       }
+      if (store === 'documents') {
+        if (row.extractedText !== undefined && typeof row.extractedText !== 'string') throw new Error('Invalid extracted document text');
+        if (row.pages !== undefined && (!Array.isArray(row.pages) || !row.pages.every((p: Record<string, unknown>) => p && ['page', 'start', 'end'].every((key) => Number.isSafeInteger(p[key]) && (p[key] as number) >= 0) && (p.end as number) >= (p.start as number)))) throw new Error('Invalid document page provenance');
+      }
       if (store === 'threads') {
         if (row.agentEnabled !== undefined && typeof row.agentEnabled !== 'boolean') throw new Error('Invalid Agent setting');
         if (row.libraryId != null && typeof row.libraryId !== 'string') throw new Error('Invalid library selection');

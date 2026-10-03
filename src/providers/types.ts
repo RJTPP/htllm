@@ -136,6 +136,7 @@ export interface Message {
 export interface Thread {
   agentEnabled?: boolean;
   enabledToolIds?: string[];
+  /** Legacy persisted capability confirmation; no longer used to gate tools. */
   toolModelKey?: string;
   id: string;
   title: string;
@@ -239,6 +240,9 @@ export interface Library {
 }
 
 export interface Document {
+  /** Exact extracted text for sequential reading; absent on older imports. */
+  extractedText?: string;
+  pages?: { page: number; start: number; end: number }[];
   id: string;
   /** Which library this document belongs to. Every document lives in
    *  exactly one library. */

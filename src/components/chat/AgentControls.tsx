@@ -28,13 +28,11 @@ export function AgentControls({ thread, libraryId, capable, busy, onChange, onMa
     return () => { live = false; window.removeEventListener('mcp-connections-changed', refresh); };
   }, [open, thread.id]);
   useEffect(() => { setOpen(false); }, [thread.id]);
-  const key = `${thread.providerId}:${thread.modelId}`;
-  const qualified = thread.toolModelKey === key;
   const enabled = thread.enabledToolIds ?? [];
   const available = connections.flatMap((connection) => connection.tools.map((_, index) => toolId(connection, index)));
   const selectedCount = enabled.filter((id) => available.includes(id)).length;
-  const count = selectedCount + (libraryId ? 3 : 0);
-  const reason = !capable ? 'Tool use requires an HTTP model.' : !qualified ? 'Confirm model tool support below.' : !count ? 'Select a library or external tools.' : '';
+  const count = selectedCount + 3;
+  const reason = !capable ? 'Tool use requires an HTTP model.' : '';
   const chip = 'inline-flex items-center gap-1 px-1.5 py-0.5 border transition-colors focus-visible:outline focus-visible:outline-accent disabled:opacity-40 disabled:cursor-not-allowed';
   return <>
     <button aria-label={`Tools: ${thread.agentEnabled ? 'on' : 'off'} (${count} available)`} aria-haspopup="dialog" onClick={() => setOpen(true)} className={`${chip} ${thread.agentEnabled ? 'border-accent/60 text-accent bg-accent/10' : 'border-line text-mute hover:text-text'}`}>
@@ -48,17 +46,10 @@ export function AgentControls({ thread, libraryId, capable, busy, onChange, onMa
           {reason && <p className="text-warn" role="status">{reason}</p>}
           <button role="switch" aria-label="Use tools" aria-checked={!!thread.agentEnabled} disabled={busy || (!!reason && !thread.agentEnabled)} onClick={() => onChange({ agentEnabled: !thread.agentEnabled })} className="border border-accent/50 px-3 py-1.5 text-accent hover:bg-accent/10 disabled:opacity-40">Tools {thread.agentEnabled ? 'on' : 'off'}</button>
         </div>
-        <section className="space-y-2">
-          <h3 className="text-[10px] uppercase tracking-widest text-mute">Model capability</h3>
-          <label className="flex items-start gap-2 text-text cursor-pointer"><input type="checkbox" className="accent-accent mt-0.5" disabled={!capable || busy} checked={qualified} onChange={(e) => onChange({ toolModelKey: e.target.checked ? key : undefined, agentEnabled: false })} />
-            <span>This model supports function/tool calling <span className="block text-mute break-all mt-1">{thread.modelId}</span></span>
-          </label>
-          <p className="text-mute leading-relaxed">Manual capability confirmation, not a passed compatibility test. Applies only to this model in this chat.</p>
-        </section>
         <section className="border-t border-line pt-4 space-y-2">
           <h3 className="text-[10px] uppercase tracking-widest text-mute">Document tools</h3>
           <div className="flex gap-2 text-text"><FileText size={14} />{libraryId ? '3 built-in read tools available' : 'No library selected'}</div>
-          <p className="text-mute leading-relaxed">{libraryId ? 'List, search, and read only the selected library. Document reads run automatically.' : 'Choose a library with the Knowledge button to enable document tools.'}</p>
+          <p className="text-mute leading-relaxed">{libraryId ? 'List, search, and read only the selected library. Document reads run automatically.' : 'Tools can stay on. Document tools return no evidence until you select a library with Knowledge.'}</p>
         </section>
         <section className="border-t border-line pt-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-[10px] uppercase tracking-widest text-mute">External tools · {selectedCount} selected</h3>

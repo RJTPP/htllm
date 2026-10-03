@@ -69,6 +69,59 @@ test('composer tools open a separate keyboard-accessible dialog and global setti
   await expect(page.getByRole('alert')).toBeVisible();
 });
 
+test('tools work without capability confirmation or a selected library', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('threads', 'readwrite');
+    const store = tx.objectStore('threads');
+    const thread = await new Promise<Record<string, unknown>>((resolve) => { const req = store.get('fixture-thread'); req.onsuccess = () => resolve(req.result); });
+    delete thread.toolModelKey;
+    store.put({ ...thread, libraryId: null, agentEnabled: false });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Tools: off (3 available)', exact: true }).click();
+  await expect(page.getByText('This model supports function/tool calling')).toHaveCount(0);
+  await expect(page.getByText('No library selected', { exact: true })).toBeVisible();
+  await page.getByRole('switch', { name: 'Use tools', exact: true }).click();
+  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).toBeChecked();
+  await page.getByRole('dialog', { name: 'Tools for this chat' }).getByRole('button', { name: 'esc', exact: true }).click();
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('List the available documents'); await composer.press('Enter');
+  await expect(page.getByText('Tool activity · complete')).toBeVisible();
+  await page.getByText('Tool activity · complete').click();
+  await page.getByText('list_documents · complete', { exact: true }).click();
+  await expect(page.getByText('No library selected. No documents or matching evidence are available.', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Tools: on (3 available)', exact: true })).toBeVisible();
+});
+
+test('document agent follows whole-file cursors without skipping text', async ({ page }) => {
+  await seed(page, true);
+  const original = 'First page\n' + 'x'.repeat(5000) + '\nLast page';
+  await page.evaluate(async (text) => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('documents', 'readwrite');
+    tx.objectStore('documents').put({ id: 'whole-file', libraryId: 'fixture-library', filename: 'whole.txt', mimeType: 'text/plain', sizeBytes: text.length, chunkCount: 0, createdAt: 1, extractedText: text });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  }, original);
+  let supplied = '';
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    const request = route.request().postDataJSON();
+    const results = request.messages.filter((m: { role: string }) => m.role === 'tool').map((m: { content: string }) => JSON.parse(m.content));
+    supplied = results.map((r: { text: string }) => r.text).join('');
+    const last = results.at(-1);
+    const delta = last?.complete ? { content: 'Read the whole file.' } : { tool_calls: [{ index: 0, id: `read-${results.length}`, function: { name: 'read_document', arguments: JSON.stringify({ documentId: 'whole-file', cursor: last?.nextCursor ?? null }) } }] };
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta, finish_reason: last?.complete ? 'stop' : 'tool_calls' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Read the whole file'); await composer.press('Enter');
+  await expect(page.getByText('Read the whole file.', { exact: true })).toBeVisible();
+  expect(supplied).toBe(original);
+  await expect(page.getByText('Sources supplied to this answer (2)', { exact: true })).toBeVisible();
+});
+
 test('incremental streaming follows the bottom but preserves an intentional scroll-up', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {
