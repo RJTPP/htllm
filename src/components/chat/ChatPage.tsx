@@ -52,9 +52,11 @@ export function ChatPage({
   slashCommands,
   onChangeAgent,
   toolsCapable,
+  onManageConnections,
 }: {
   onChangeAgent: (patch: Partial<Thread>) => void;
   toolsCapable: boolean;
+  onManageConnections: () => void;
   thread: Thread | null;
   messages: Message[];
   /** Token-budget snapshot from useChat — drives the composer meter
@@ -321,8 +323,8 @@ export function ChatPage({
           <ArrowDown size={16} />
         </button>
       )}
-      {thread && <AgentControls thread={thread} libraryId={ragLibraryId} capable={toolsCapable} busy={generating} onChange={onChangeAgent} />}
       <Composer
+        toolControls={thread && <AgentControls thread={thread} libraryId={ragLibraryId} capable={toolsCapable} busy={generating} onChange={onChangeAgent} onManageConnections={onManageConnections} />}
         modelReady={modelReady}
         model={loadedModelId}
         visionOk={visionOk}

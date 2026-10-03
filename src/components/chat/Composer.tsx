@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo, type ReactNode } from 'react';
 import type { PromptTemplate, ReasoningEffort, ReasoningCapability } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
@@ -88,6 +88,7 @@ export function Composer({
   ragLibraryId,
   onChangeRagLibrary,
   onNewLibrary,
+  toolControls,
 }: {
   modelReady: boolean;
   model: string | null;
@@ -114,6 +115,7 @@ export function Composer({
   ragLibraryId: string | null;
   onChangeRagLibrary: (id: string | null) => void;
   onNewLibrary: () => void;
+  toolControls?: ReactNode;
 }) {
   const [input, setInput] = useState('');
   const [images, setImages] = useState<ChatImage[]>([]);
@@ -342,7 +344,7 @@ export function Composer({
             )}
           </div>
         </div>
-        <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-mute">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] text-mute">
           <div className="flex items-center gap-2">
             {contextTotal > 0 ? (
               <ContextRing used={contextUsed} total={contextTotal} />
@@ -355,7 +357,8 @@ export function Composer({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {toolControls}
             <KnowledgeChip
               libraryId={ragLibraryId}
               libraries={libraries}

@@ -166,7 +166,6 @@ export const MessageView = memo(function MessageView({
     <div className="group flex gap-3">
       <Avatar role={message.role} modelId={modelId} models={models} />
       <div className="flex-1 min-w-0">
-        {!isUser && <MessageEvidence message={message} />}
         <div className="flex items-center gap-2 mb-1 overflow-hidden">
           <span className="text-[11px] font-mono text-accent whitespace-nowrap">
             {isUser ? 'You' : (modelId && shortenModelId(modelId)) || 'Assistant'}
@@ -252,19 +251,21 @@ export const MessageView = memo(function MessageView({
           )
         ) : (
           <div className="pr-2">
+            <MessageEvidence message={message} section="activity" />
             {thinking && (thinking.thinking || thinking.isThinking) && (
               <ThinkingBlock
                 content={thinking.thinking}
                 isThinking={thinking.isThinking}
               />
             )}
-            <MessageBody content={thinking?.reply ?? text} />
+            <MessageBody content={thinking?.reply ?? text} citations={message.citations} />
             {streaming && (
               <span className="inline-block w-1.5 h-3.5 bg-accent ml-0.5 align-middle blink" />
             )}
           </div>
         )}
 
+        {!isUser && <MessageEvidence message={message} />}
         {!isUser && !streaming && (
           <div className="mt-1.5 flex items-center gap-1">
             <CopyButton text={thinking?.reply ?? text} />

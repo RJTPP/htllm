@@ -811,6 +811,7 @@ export default function App() {
                   locked={generating}
                 />
                 <ChatPage
+                  onManageConnections={() => { setSettingsTab('tools'); setModal('settings'); }}
                   toolsCapable={activeProvider.capabilities.toolCalls}
                   onChangeAgent={(patch) => { if (activeThreadId) void updateThread(activeThreadId, patch); }}
                   thread={activeThread}
@@ -884,6 +885,7 @@ export default function App() {
       />
 
       <SettingsModal
+        toolsBusy={generating}
         open={modal === 'settings'}
         onClose={() => setModal(null)}
         templates={templates}

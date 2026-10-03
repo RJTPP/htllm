@@ -1,5 +1,74 @@
 import { test, expect, type Page } from '@playwright/test';
 
+test('saved citations render inline, activity follows the model, and code retains safe colors', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('messages', 'readwrite');
+    tx.objectStore('messages').put({ id: 'render-fixture', threadId: 'fixture-thread', role: 'assistant', createdAt: 1,
+      content: 'Created in September [[Source saved-chunk: test.txt]]. Author absent [[Source 1]]. Unknown [[Source 99]].\n\n```python\nimport json\n' + Array.from({ length: 20 }, (_, i) => `value_${i} = "example"`).join('\n') + '\n```',
+      reasoning: 'Checking saved evidence.', runStatus: 'complete',
+      citations: [{ id: 'saved-chunk', chunkId: 'saved-chunk', documentId: 'deleted-fixture', filename: 'test.txt', excerpt: 'Created in September. No author listed.', pageStart: 2 }],
+      activity: [{ id: 'read', tool: 'read_document', arguments: '{}', result: 'Created in September. No author listed.', status: 'complete' }],
+    });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  const citations = page.getByRole('link', { name: 'View source 1: test.txt' });
+  await expect(citations).toHaveCount(2);
+  await expect(page.getByText('[unresolved source: 99]', { exact: true })).toBeVisible();
+  const activity = page.getByText('Tool activity · complete', { exact: true });
+  const reasoning = page.getByRole('button', { name: /thought for/ });
+  expect((await activity.boundingBox())!.y).toBeLessThan((await reasoning.boundingBox())!.y);
+  const sourceList = page.getByText('Sources supplied to this answer (1)', { exact: true });
+  expect((await sourceList.boundingBox())!.y).toBeGreaterThan((await citations.first().boundingBox())!.y);
+  await citations.first().click();
+  const dialog = page.getByRole('dialog', { name: 'test.txt', exact: true });
+  await expect(dialog.getByText('Page 2', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('Original document unavailable; saved evidence shown below.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'esc', exact: true }).click();
+  await expect(citations.first()).toBeFocused();
+  await expect.poll(() => page.locator('.shiki-container span[style]').count()).toBeGreaterThan(2);
+  const colors = await page.locator('.shiki-container span[style]').evaluateAll((nodes) => [...new Set(nodes.map((node) => getComputedStyle(node).color))]);
+  expect(colors.length).toBeGreaterThan(1);
+  await page.getByRole('button', { name: /show \d+ more lines/ }).click();
+  await expect(page.getByRole('button', { name: 'show less' })).toBeVisible();
+  await page.reload(); await citations.last().click();
+  await expect(dialog.getByText('Created in September. No author listed.', { exact: true })).toBeVisible();
+});
+
+test('composer tools open a separate keyboard-accessible dialog and global settings', async ({ page }) => {
+  await seed(page, true);
+  const tools = page.getByRole('button', { name: /^Tools: .*\(3 available\)/ });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  expect((await tools.boundingBox())!.y).toBeGreaterThan((await composer.boundingBox())!.y);
+  await expect(page.getByLabel('MCP endpoint')).toHaveCount(0);
+  await tools.click();
+  const panel = page.getByRole('dialog', { name: 'Tools for this chat', exact: true });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText('3 built-in read tools available')).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(panel.getByRole('button', { name: 'esc', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(panel).toHaveCount(0); await expect(tools).toBeFocused();
+  await tools.click();
+  await page.getByRole('switch', { name: 'Use tools', exact: true }).click();
+  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).not.toBeChecked();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Tools: off (3 available)', exact: true })).toBeVisible();
+  await tools.click(); await page.getByRole('button', { name: 'Manage connections' }).click();
+  await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+  await expect(page.getByLabel('MCP endpoint')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  const box = (await settings.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(390);
+  expect(await settings.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.getByLabel('MCP endpoint').fill('http://remote.example/mcp');
+  await page.getByRole('button', { name: 'Test & add MCP' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+});
+
 test('incremental streaming follows the bottom but preserves an intentional scroll-up', async ({ page }) => {
   await seed(page);
   await page.evaluate(() => {
@@ -190,15 +259,20 @@ test('MCP discovery and external writes require approval under production CSP', 
     }
     return route.fulfill({ json: { jsonrpc: '2.0', id: request.id, result } });
   });
-  await page.getByText('Tools & connections').click();
+  await page.getByRole('button', { name: /^Tools: .*\(3 available\)/ }).click();
+  await page.getByRole('button', { name: 'Manage connections' }).click();
   await page.getByLabel('MCP name').fill('Fixture service');
   await page.getByLabel('MCP endpoint').fill('https://mcp.fixture.test/mcp');
   await page.getByRole('button', { name: 'Test & add MCP' }).click();
+  await expect(page.getByText('connection tested', { exact: true })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
+  await page.getByRole('button', { name: /^Tools: .*\(3 available\)/ }).click();
   await expect(page.getByLabel('write_note')).toBeVisible();
   await page.getByLabel('write_note').click();
   await expect(page.getByLabel('write_note')).toBeChecked();
-  await page.getByLabel('Agent', { exact: true }).click();
-  await expect(page.getByLabel('Agent', { exact: true })).toBeChecked();
+  await page.getByRole('switch', { name: 'Use tools', exact: true }).click();
+  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).toBeChecked();
+  await page.getByRole('dialog', { name: 'Tools for this chat', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
   await page.route('https://fixture.test/v1/chat/completions', async (route) => {
     const request = route.request().postDataJSON();
     const external = request.tools?.find((tool: {function: {name: string}}) => tool.function.name.startsWith('mcp_'));
@@ -224,6 +298,18 @@ test('MCP discovery and external writes require approval under production CSP', 
   await expect(page.getByRole('dialog', { name: 'Approve external tool' })).toHaveCount(0);
   await expect(page.getByText('Tool activity · stopped')).toBeVisible();
   expect(calls).toBe(1);
+  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
+  await expect(page.getByLabel('write_note')).toBeChecked();
+  await page.getByRole('button', { name: 'Manage connections' }).click();
+  await page.getByRole('button', { name: 'Refresh tools', exact: true }).click();
+  await expect(page.getByText('connection tested', { exact: true })).toBeVisible();
+  await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Tools: off (3 available)', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^Tools: .*\(3 available\)/ }).click();
+  await expect(page.getByLabel('write_note')).not.toBeChecked();
+  await page.getByRole('button', { name: 'Manage connections' }).click();
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await expect(page.getByText('No MCP servers connected.')).toBeVisible();
 });
 
 async function seedRag(page: Page) {

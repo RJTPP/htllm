@@ -22,7 +22,7 @@ Current baseline and limits: [evaluation](../eval/README.md),
 [compatibility](v1-compatibility.md), [onboarding](v1-guide.md).
 Core implementation is present; v1 is **not release-qualified**.
 
-Latest local validation: 88 unit tests, 11 production-Chrome scenarios, typecheck,
+Latest local validation: 92 unit tests, 13 production-Chrome scenarios, typecheck,
 static build, the deterministic evaluation harness, and 90 live reference-model
 answer runs ([review](v1-live-evaluation.md)). Live evaluation is opt-in by default.
 The SDD remains unchanged
@@ -41,3 +41,10 @@ Source excerpts, completed activity, Agent selection, and library binding
 survived reload. This is a one-file smoke check, not the three-run quality gate.
 Endpoint badges and onboarding now describe routing rather than claiming that
 localhost guarantees on-device inference; mDNS hosts are classified as remote.
+
+UI polish: one composer-level Tools control enables agent execution; connection
+management lives in Settings. Inline citations open saved evidence, unknown
+references remain visibly unresolved, and tool activity follows the model name
+before reasoning. Syntax colors are preserved with a restricted sanitizer.
+Chrome fixtures cover persistence, keyboard focus, citation resolution, code
+expansion, and narrow-screen dialog layout (not full mobile-app qualification).

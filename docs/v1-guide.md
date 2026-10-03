@@ -37,8 +37,10 @@ Normalized retrieval scores are not relevance probabilities.
 
 ## Agent mode
 
-Open **Tools & connections**, confirm tool-calling capability for the exact HTTP
-model, and select a library and/or external tools. Then enable Agent. This is a
+Open the **Tools: off/on** button beside Knowledge, confirm tool-calling capability
+for the exact HTTP model, and select a library and/or external tools. Enable
+**Use tools** in that panel. Tools on is Agent mode; there is no separate Agent
+toggle. Tools off keeps ordinary chat and automatic RAG when a library is selected. This is a
 per-thread setting applied on the next turn. Capability confirmation is a user
 override, not a compatibility certificate. WebLLM agents are unsupported.
 
@@ -51,10 +53,10 @@ as historical data during future budgeting/compaction, never as permission to ac
 
 ## MCP and approvals
 
-Enter a connection name, Streamable HTTP URL, and optional bearer token, then
+In **Settings → Tools & connections**, enter a connection name, Streamable HTTP URL, and optional bearer token, then
 **Test & add MCP**. HTTPS is supported; explicit localhost HTTP endpoints are
 allowed. Select tools per conversation. **Refresh tools** rediscovers definitions,
-clears that server's selections for this conversation, and invalidates session
+invalidates that server's saved selections across chats, and clears session
 trust. Other conversations must review changed definitions before using them.
 
 Every external call initially asks for approval showing server, tool, and JSON
