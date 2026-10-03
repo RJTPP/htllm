@@ -25,9 +25,10 @@ export async function getThread(id: string): Promise<Thread | undefined> {
 
 export async function updateThread(id: string, patch: Partial<Thread>): Promise<void> {
   const db = await getDb();
-  const existing = await db.get('threads', id);
-  if (!existing) return;
-  await db.put('threads', { ...existing, ...patch, id });
+  const tx = db.transaction('threads', 'readwrite');
+  const existing = await tx.store.get(id);
+  if (existing) await tx.store.put({ ...existing, ...patch, id });
+  await tx.done;
 }
 
 export async function deleteThread(id: string): Promise<void> {

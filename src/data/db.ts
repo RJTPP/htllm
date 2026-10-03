@@ -1,6 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 export interface HtllmDB {
+  mcpConnections: { key: string; value: import('../providers/types').McpConnection };
   threads: {
     key: string;
     value: import('../providers/types').Thread;
@@ -69,7 +70,7 @@ export interface HtllmDB {
 }
 
 const DB_NAME = 'htllm';
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 
 /** Stable id for the auto-created "Default" library so migrations and
  *  fresh installs both reference the same record. */
@@ -86,6 +87,7 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
       // critical for cursor iteration and writes that must complete before
       // the upgrade transaction commits.
       async upgrade(db, oldVersion, _newVersion, tx) {
+        if (oldVersion < 9) db.createObjectStore('mcpConnections', { keyPath: 'id' });
         if (oldVersion < 1) {
           db.createObjectStore('threads', { keyPath: 'id' });
 

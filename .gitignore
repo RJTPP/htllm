@@ -6,3 +6,7 @@ dist/
 .env
 .env.*
 /.claude
+test-results/
+playwright-report/
+.pnpm-store/
+eval/results/live*.json

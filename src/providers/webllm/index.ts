@@ -108,9 +108,10 @@ export class WebLLMProvider implements ChatProvider {
       throw new ProviderError('webllm', 'Engine not ready');
     }
 
-    let openaiMessages = params.messages.map((m) =>
-      toOpenAIMessage(m.role, m.content),
-    );
+    let openaiMessages = params.messages.map((m) => {
+      if (m.role === 'tool' || m.toolCalls?.length) throw new ProviderError('webllm', 'Tool calling is not supported by this provider.');
+      return toOpenAIMessage(m.role, m.content);
+    });
 
     // For Qwen3 models in WebLLM, thinking mode is controlled via prompt
     // markers. When reasoning is off, prepend /no_think to the last user

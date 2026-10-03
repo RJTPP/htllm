@@ -20,7 +20,7 @@ export function ImportExport() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!confirm('This will replace all existing data. Continue?')) {
+    if (!confirm('This replaces conversations, libraries, settings, and tool configuration. Existing API/MCP credentials will be cleared to prevent sending them to imported endpoints; embeddings must be rebuilt. Export a backup first. Continue?')) {
       e.target.value = '';
       return;
     }
@@ -28,7 +28,9 @@ export function ImportExport() {
     try {
       const json = await readFileAsText(file);
       await importAllData(json);
-      setStatus('Imported successfully — reload to see changes');
+      // Discard stale provider credentials, active runs, and React state before
+      // the user can send a request against the replaced configuration.
+      window.location.reload();
     } catch (err) {
       setStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`);
     }

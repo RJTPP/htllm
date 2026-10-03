@@ -15,7 +15,7 @@ export function DocumentUpload({
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const accept = '.txt,.md,.markdown,text/plain,text/markdown';
+  const accept = '.txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf';
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -68,7 +68,7 @@ export function DocumentUpload({
         <FilePlus size={11} /> browse files
       </button>
       <div className="font-mono text-[9px] text-mute mt-3">
-        Supported: .txt, .md · PDF coming soon
+        Supported: .txt, .md, text PDFs · scanned PDFs are not supported
       </div>
     </div>
   );

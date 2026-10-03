@@ -2,6 +2,10 @@ import { useState, useEffect, useMemo, useRef } from 'react'; // useRef used in 
 import { Marked, type Tokens } from 'marked';
 import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
 import { Check, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { sanitizeHtml, sanitizeHighlight } from '../../lib/sanitize';
+import { renderCitationHtml } from '../../lib/citations';
+import type { SourceCitation } from '../../providers/types';
+import { SourceDialog } from './SourceDialog';
 
 /** Code blocks longer than this collapse to a capped height with a
  *  "show more" toggle, so a single long paste doesn't dominate the
@@ -102,7 +106,7 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
           {isShikiHtml ? (
             <div
               className="shiki-container px-3 py-2.5 overflow-x-auto [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:font-mono [&_code]:text-[12.5px] [&_code]:leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: html }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHighlight(highlightToHtml(raw, lang || undefined)) }}
             />
           ) : (
             <pre className="px-3 py-2.5 overflow-x-auto">
@@ -138,7 +142,8 @@ function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: strin
 
 // ── Main component ──────────────────────────────────────────────────
 
-export function MessageBody({ content }: { content: string }) {
+export function MessageBody({ content, citations }: { content: string; citations?: SourceCitation[] }) {
+  const [source, setSource] = useState<SourceCitation | null>(null);
   const [highlighterVersion, setHighlighterVersion] = useState(0);
 
   // Re-render when the highlighter finishes loading or an on-demand grammar
@@ -166,6 +171,7 @@ export function MessageBody({ content }: { content: string }) {
             html: string;
             raw: string;
           };
+          if (typeof decoded.lang !== 'string' || typeof decoded.raw !== 'string' || typeof decoded.html !== 'string') throw new Error('Invalid code payload');
           return { kind: 'code' as const, ...decoded };
         } catch {
           return { kind: 'html' as const, html: part };
@@ -177,7 +183,12 @@ export function MessageBody({ content }: { content: string }) {
   }, [content, highlighterVersion]);
 
   return (
-    <div className="text-[13.5px] text-text leading-relaxed prose-custom">
+    <div className="text-[13.5px] text-text leading-relaxed prose-custom" onClick={(event) => {
+      const link = (event.target as HTMLElement).closest('a[data-source-index]');
+      if (!link || !event.currentTarget.contains(link)) return;
+      const selected = citations?.[Number(link.getAttribute('data-source-index'))];
+      if (selected) { event.preventDefault(); setSource(selected); }
+    }}>
       {segments.map((seg, i) => {
         if (seg.kind === 'code') {
           return <CodeBlock key={i} lang={seg.lang} html={seg.html} raw={seg.raw} />;
@@ -187,10 +198,11 @@ export function MessageBody({ content }: { content: string }) {
           <div
             key={i}
             className="markdown-body"
-            dangerouslySetInnerHTML={{ __html: seg.html }}
+            dangerouslySetInnerHTML={{ __html: citations ? renderCitationHtml(seg.html, citations) : sanitizeHtml(seg.html) }}
           />
         );
       })}
+      <SourceDialog source={source} onClose={() => setSource(null)} />
     </div>
   );
 }

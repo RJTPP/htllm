@@ -1,3 +1,6 @@
+import type { ToolDefinition, SourceCitation, AgentEvent, WireMessage } from './agent-types';
+export type { ToolDefinition, ToolCall, SourceCitation, AgentEvent, WireMessage, McpConnection } from './agent-types';
+
 export interface ChatProvider {
   id: string;
   displayName: string;
@@ -59,6 +62,7 @@ export interface EmbeddingModelInfo {
 export type ReasoningCapability = 'effort' | 'toggle';
 
 export interface ModelInfo {
+  toolCalls?: boolean;
   id: string;
   displayName: string;
   family: string;
@@ -70,7 +74,9 @@ export interface ModelInfo {
 }
 
 export interface ChatParams {
-  messages: Message[];
+  messages: WireMessage[];
+  tools?: ToolDefinition[];
+  toolChoice?: 'auto' | 'none' | 'required';
   modelId: string;
   temperature?: number;
   topP?: number;
@@ -85,7 +91,8 @@ export interface ChatChunk {
   delta: string;
   /** Reasoning/thinking delta from structured API fields (not in-content tags). */
   reasoning?: string;
-  finishReason?: 'stop' | 'length' | 'error';
+  finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
+  toolCalls?: { index: number; id?: string; name?: string; arguments?: string }[];
   usage?: UsageStats;
 }
 
@@ -112,6 +119,10 @@ export interface ImagePart {
 export type ContentPart = TextPart | ImagePart;
 
 export interface Message {
+  citations?: SourceCitation[];
+  retrievalStatus?: 'grounded' | 'no-matches' | 'unavailable' | 'skipped';
+  activity?: AgentEvent[];
+  runStatus?: 'running' | 'complete' | 'stopped' | 'error';
   id: string;
   threadId: string;
   role: 'user' | 'assistant' | 'system';
@@ -123,6 +134,12 @@ export interface Message {
 }
 
 export interface Thread {
+  /** Undefined preserves legacy behavior: automatic RAG only when tools are off. */
+  automaticRagEnabled?: boolean;
+  agentEnabled?: boolean;
+  enabledToolIds?: string[];
+  /** Legacy persisted capability confirmation; no longer used to gate tools. */
+  toolModelKey?: string;
   id: string;
   title: string;
   providerId: string;
@@ -225,6 +242,9 @@ export interface Library {
 }
 
 export interface Document {
+  /** Exact extracted text for sequential reading; absent on older imports. */
+  extractedText?: string;
+  pages?: { page: number; start: number; end: number }[];
   id: string;
   /** Which library this document belongs to. Every document lives in
    *  exactly one library. */
@@ -237,6 +257,8 @@ export interface Document {
 }
 
 export interface Chunk {
+  pageStart?: number;
+  pageEnd?: number;
   id: string;
   documentId: string;
   /** 0-based position within the document. */
@@ -263,6 +285,8 @@ export interface Chunk {
  * chunks table with redundant parent copies.
  */
 export interface ParentChunk {
+  pageStart?: number;
+  pageEnd?: number;
   id: string;
   documentId: string;
   /** 0-based position within the document. */

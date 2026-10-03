@@ -10,6 +10,7 @@ import { ParamControls } from '../providers/ParamControls';
 import { ProviderLogo } from '../ui/ProviderLogo';
 import { ImportExport } from './ImportExport';
 import { ProviderConfig } from './ProviderConfig';
+import { McpSettings } from './McpSettings';
 import { getHttpProviders } from '../../providers/registry';
 import { CODE_THEMES } from '../../lib/highlight';
 import { MessageBody } from '../chat/MessageBody';
@@ -143,6 +144,7 @@ const ThemePreview = memo(function ThemePreview() {
 export type SettingsTab =
   | 'templates'
   | 'providers'
+  | 'tools'
   | 'params'
   | 'knowledge'
   | 'appearance'
@@ -151,6 +153,7 @@ export type SettingsTab =
 const TABS: [SettingsTab, string][] = [
   ['templates', 'Prompt templates'],
   ['providers', 'Providers'],
+  ['tools', 'Tools & connections'],
   ['params', 'Chat defaults'],
   ['knowledge', 'Knowledge'],
   ['appearance', 'Appearance'],
@@ -182,6 +185,7 @@ function WebLLMRow() {
 
 export function SettingsModal({
   open,
+  toolsBusy = false,
   onClose,
   templates,
   setTemplates,
@@ -233,6 +237,7 @@ export function SettingsModal({
   rememberPerSessionModel: boolean;
   setRememberPerSessionModel: (value: boolean) => void;
   tab: SettingsTab;
+  toolsBusy?: boolean;
   onTabChange: (tab: SettingsTab) => void;
 }) {
   const [draft, setDraft] = useState({ title: '', content: '', description: '' });
@@ -295,7 +300,7 @@ export function SettingsModal({
 
   return (
     <Modal open={open} onClose={onClose} title="Settings" width="max-w-3xl" stableHeight>
-      <div className="flex border-b border-line">
+      <div className="flex flex-wrap border-b border-line">
         {TABS.map(([id, label]) => (
           <button
             key={id}
@@ -587,6 +592,8 @@ export function SettingsModal({
           </div>
         </div>
       )}
+
+      {open && tab === 'tools' && <McpSettings busy={toolsBusy} />}
 
       {tab === 'knowledge' && <KnowledgeSettingsPanel
         defaultLibraryId={defaultLibraryId}

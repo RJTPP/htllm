@@ -6,6 +6,7 @@ import { Info, RefreshCw, Pencil, X, Check, Copy } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { MessageBody } from './MessageBody';
 import { ThinkingBlock } from './ThinkingBlock';
+import { MessageEvidence } from './MessageEvidence';
 
 function splitContent(content: string | ContentPart[]): { text: string; images: string[] } {
   if (typeof content === 'string') return { text: content, images: [] };
@@ -250,19 +251,21 @@ export const MessageView = memo(function MessageView({
           )
         ) : (
           <div className="pr-2">
+            <MessageEvidence message={message} section="activity" />
             {thinking && (thinking.thinking || thinking.isThinking) && (
               <ThinkingBlock
                 content={thinking.thinking}
                 isThinking={thinking.isThinking}
               />
             )}
-            <MessageBody content={thinking?.reply ?? text} />
+            <MessageBody content={thinking?.reply ?? text} citations={message.citations} />
             {streaming && (
               <span className="inline-block w-1.5 h-3.5 bg-accent ml-0.5 align-middle blink" />
             )}
           </div>
         )}
 
+        {!isUser && <MessageEvidence message={message} />}
         {!isUser && !streaming && (
           <div className="mt-1.5 flex items-center gap-1">
             <CopyButton text={thinking?.reply ?? text} />

@@ -17,6 +17,8 @@ import { getParents } from '../data/parents';
 import { cosineSimilarity, minMaxNormalize } from './vector-search';
 
 export interface SearchResult {
+  pageStart?: number;
+  pageEnd?: number;
   chunkId: string;
   documentId: string;
   filename: string;
@@ -144,6 +146,7 @@ export async function hybridSearch(
     const chunk = chunkById.get(rec.chunkId);
     if (!chunk) continue; // orphan embedding — chunk was deleted
     if (!inScope(chunk)) continue;
+    if (rec.dim !== queryVector.length || rec.vector.length !== queryVector.length || !rec.vector.every(Number.isFinite)) throw new Error('Embedding index dimensions changed. Rebuild the library index.');
     const vec = Float32Array.from(rec.vector);
     vectorScored.push({ chunkId: rec.chunkId, score: cosineSimilarity(queryVector, vec) });
   }
@@ -247,6 +250,8 @@ export async function hybridSearch(
       documentId: chunk.documentId,
       filename: doc?.filename ?? '(deleted)',
       text,
+      pageStart: parent?.pageStart ?? chunk.pageStart,
+      pageEnd: parent?.pageEnd ?? chunk.pageEnd,
       ...(headingPath ? { headingPath } : {}),
       ...(chunk.parentId ? { parentId: chunk.parentId } : {}),
       score: c.combined,
