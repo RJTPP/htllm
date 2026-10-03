@@ -153,6 +153,7 @@ test('incremental streaming follows the bottom but preserves an intentional scro
     let controller: ReadableStreamDefaultController<Uint8Array>;
     const encoder = new TextEncoder();
     Object.assign(window, {
+      fixtureStreamReady: () => !!controller,
       emitFixtureText: (text: string) => controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`)),
       finishFixtureText: () => { controller.enqueue(encoder.encode('data: [DONE]\n\n')); controller.close(); },
     });
@@ -166,6 +167,7 @@ test('incremental streaming follows the bottom but preserves an intentional scro
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   await composer.fill('Stream a long fixture'); await composer.press('Enter');
   await expect(page.getByRole('button', { name: 'stop', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { fixtureStreamReady: () => boolean }).fixtureStreamReady())).toBe(true);
   const emit = (text: string) => page.evaluate((value) => (window as unknown as { emitFixtureText: (text: string) => void }).emitFixtureText(value), text);
   const scroller = page.locator('.overflow-y-auto.grid-bg');
   await emit(Array.from({ length: 60 }, (_, i) => `Paragraph ${i}: streaming evidence.\n\n`).join(''));
@@ -317,6 +319,37 @@ test('regeneration and repeated manual compaction preserve summaries across relo
   await expect(page.getByRole('button', { name: /^context compacted/ })).toHaveCount(2);
   await page.reload();
   await expect(page.getByRole('button', { name: /^context compacted/ })).toHaveCount(2);
+});
+
+test('oversized manual compaction saves only the final aggregate', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('messages', 'readwrite');
+    for (let i = 0; i < 10; i++) tx.objectStore('messages').put({ id: `long-${i}`, threadId: 'fixture-thread', role: i % 2 ? 'assistant' : 'user', content: `Turn ${i} ` + 'x'.repeat(5000), createdAt: i + 1 });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  let calls = 0;
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    const request = route.request().postDataJSON();
+    expect(request.max_tokens).toBeUndefined();
+    const aggregate = JSON.stringify(request.messages).includes('### Part 1');
+    calls++;
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: aggregate ? 'Final aggregate.' : `Partial ${calls}.` }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('/compact'); await composer.press('Enter');
+  await expect(page.getByRole('button', { name: /^context compacted/ })).toHaveCount(1);
+  expect(calls).toBeGreaterThan(2);
+  const records = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    return new Promise<{text: string; replacedMessageIds: string[]}[]>((resolve) => { const req = db.transaction('summaries').objectStore('summaries').getAll(); req.onsuccess = () => { resolve(req.result); db.close(); }; });
+  });
+  expect(records).toHaveLength(1); expect(records[0]!.text).toBe('Final aggregate.');
+  expect(records[0]!.replacedMessageIds).not.toContain('long-9');
+  expect(records[0]!.replacedMessageIds).toContain('long-8');
+  await page.reload(); await expect(page.getByRole('button', { name: /^context compacted/ })).toHaveCount(1);
 });
 
 test('MCP discovery and external writes require approval under production CSP', async ({ page }) => {

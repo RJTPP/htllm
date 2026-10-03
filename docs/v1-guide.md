@@ -66,6 +66,16 @@ estimated context budget. Stop aborts pending requests. Reload does not resume
 an interrupted run. Tool activity is saved with its owning answer and included
 as historical data during future budgeting/compaction, never as permission to act.
 
+## Compaction of long conversations
+
+Compaction keeps the existing prompt, message-retention rules, reasoning-channel
+fallback and stored-summary cap. Inputs that fit use the original single call.
+Oversized input is divided into approximately half-context parts, summarized in
+order, then aggregated with the same prompt. If the aggregate is too large it is
+reduced in further parts. Only the final aggregate is saved. Requests retain the
+existing uncapped output behavior and receive a 60-second timeout each; bounded
+round/call limits prevent endless aggregation. Token sizing is approximate.
+
 ## MCP and approvals
 
 In **Settings → Tools & connections**, enter a connection name, Streamable HTTP URL, and optional bearer token, then
