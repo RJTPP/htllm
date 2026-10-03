@@ -2,7 +2,7 @@
 
 Checked 2026-10-03. These are local implementation results, not a published release.
 Implementation checkpoint: `0cf20dc`, based on `dev` merge `24c1177` (PR #28).
-The feature branch has not been pushed or release-tagged.
+PR #29 was merged into dev at `88ed94d`. No v1 release has been tagged.
 
 | Component | Version / configuration | Evidence and boundary |
 | --- | --- | --- |

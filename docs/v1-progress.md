@@ -22,11 +22,16 @@ Current baseline and limits: [evaluation](../eval/README.md),
 [compatibility](v1-compatibility.md), [onboarding](v1-guide.md).
 Core implementation is present; v1 is **not release-qualified**.
 
-Latest local validation: 99 unit tests, 20 production-Chrome scenarios, typecheck,
+Latest local validation: 103 unit tests, 21 production-Chrome scenarios, typecheck,
 static build, the deterministic evaluation harness, and 90 live reference-model
 answer runs ([review](v1-live-evaluation.md)). Live evaluation is opt-in by default.
 The SDD remains unchanged
 pending confirmation; no release artifact has been promoted.
+
+Compaction follow-up: retain the original behavior and add only oversized-input
+splitting plus final aggregation. Deterministic tests cover the unchanged small
+input path, no output-token cap, intermediate failure, aggregation persistence,
+and repeated compaction/reload. Live model validation remains pending.
 
 Cancellation hardening: aborted HTTP requests persist as stopped, late generation
 cleanup cannot clear another run's controller, and PDF cancellation during file

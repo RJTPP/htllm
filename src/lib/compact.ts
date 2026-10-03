@@ -18,6 +18,7 @@
 import type { ChatProvider, Message } from '../providers/types';
 import { stripThinking } from './thinking';
 import { activityContext } from './message-context';
+import { getCalibrationRatio } from './token-calibration';
 
 const COMPACT_TIMEOUT_MS = 60_000;
 /** Rough chars-per-token, matching lib/tokens.ts. Used to size the stored
@@ -106,9 +107,7 @@ export async function compact(
   opts: {
     priorSummary?: string | null;
     signal?: AbortSignal;
-    /** The chat model's context window (tokens). Only used to size the cap
-     *  on the STORED summary so it can't dominate the system prompt and
-     *  re-trip the auto-compaction trigger. */
+    /** Sizes input parts and the existing stored-summary cap. */
     contextWindow?: number;
   } = {},
 ): Promise<CompactResult | null> {
@@ -117,7 +116,7 @@ export async function compact(
   const controller = new AbortController();
   const onExternalAbort = () => controller.abort();
   opts.signal?.addEventListener('abort', onExternalAbort);
-  const timer = setTimeout(() => controller.abort(), COMPACT_TIMEOUT_MS);
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
   try {
     const transcript = renderTranscript(messages);
@@ -133,40 +132,90 @@ export async function compact(
       ? Math.max(2048, Math.round(window * 0.3))
       : 2048;
 
-    // Single call — pass the whole transcript. No chunk/fold machinery:
-    // for API providers the backend window is large, and for WebLLM the
-    // 60s timeout + graceful null-on-error (caller falls back to a plain
-    // trim) cover an oversized transcript. No maxTokens — a hard cap
-    // truncates thinking models mid-reason into an empty summary.
+    // Preserve the original prompt and output handling for every request.
+    // In particular, do not add maxTokens: some thinking models otherwise
+    // consume that cap before emitting their summary in the content channel.
+    let calls = 0;
+    const summarize = async (prompt: string): Promise<string | null> => {
+      if (controller.signal.aborted || opts.signal?.aborted || ++calls > 64) return null;
+      timer = setTimeout(() => controller.abort(), COMPACT_TIMEOUT_MS);
+      try {
+        let out = '';
+        let outReasoning = '';
+        for await (const c of provider.chat({
+          messages: [
+            { id: '__compact', threadId: '', role: 'user', content: prompt, createdAt: 0 },
+          ],
+          modelId,
+          reasoningEffort: 'off',
+          signal: controller.signal,
+        })) {
+          out += c.delta;
+          if (c.reasoning) outReasoning += c.reasoning;
+        }
+        // Prefer the content channel, but fall back to the reasoning channel
+        // when content is empty. Some reasoning models (e.g. gpt-oss) ignore
+        // enable_thinking:false and emit the whole answer as `reasoning` with
+        // no `content` — without this fallback the summary comes back empty,
+        // no summary is saved, and the "compacting…" indicator vanishes with
+        // no divider.
+        const raw = out.trim() ? out : outReasoning;
+        // Trim the stored summary to the cap so it can't bloat the ongoing
+        // budget or re-trip the trigger.
+        const text = cleanSummary(raw, summaryTokenCap * CHARS_PER_TOKEN);
+        if (!text) {
+          console.warn('[compact] empty/unusable summary from model');
+          return null;
+        }
+        return controller.signal.aborted ? null : text;
+      } finally { clearTimeout(timer); }
+    };
+
     const prompt = buildPrompt(transcript, opts.priorSummary ?? null);
-    let out = '';
-    let outReasoning = '';
-    for await (const c of provider.chat({
-      messages: [
-        { id: '__compact', threadId: '', role: 'user', content: prompt, createdAt: 0 },
-      ],
-      modelId,
-      reasoningEffort: 'off',
-      signal: controller.signal,
-    })) {
-      out += c.delta;
-      if (c.reasoning) outReasoning += c.reasoning;
+    const ratio = Math.max(1, getCalibrationRatio(provider.id, modelId));
+    // Leave headroom for generation. Small inputs retain the single-call path.
+    const inputChars = window ? Math.floor(window * 0.75 * CHARS_PER_TOKEN / ratio) : Infinity;
+    if (prompt.length <= inputChars) {
+      const text = await summarize(prompt);
+      return text ? { text } : null;
     }
-    // Prefer the content channel, but fall back to the reasoning channel
-    // when content is empty. Some reasoning models (e.g. gpt-oss) ignore
-    // enable_thinking:false and emit the whole answer as `reasoning` with
-    // no `content` — without this fallback the summary comes back empty,
-    // no summary is saved, and the "compacting…" indicator vanishes with
-    // no divider.
-    const raw = out.trim() ? out : outReasoning;
-    // Trim the stored summary to the cap so it can't bloat the ongoing
-    // budget or re-trip the trigger.
-    const text = cleanSummary(raw, summaryTokenCap * CHARS_PER_TOKEN);
-    if (!text) {
-      console.warn('[compact] empty/unusable summary from model');
-      return null;
+    const overhead = buildPrompt('', null).length;
+    const partChars = Math.floor(window * 0.5 * CHARS_PER_TOKEN / ratio) - overhead;
+    if (partChars < 256) return null;
+    const split = (text: string): string[] => {
+      const parts: string[] = [];
+      for (let offset = 0; offset < text.length;) {
+        let end = Math.min(text.length, offset + partChars);
+        if (end < text.length) {
+          const boundary = text.lastIndexOf('\n\n', end);
+          if (boundary > offset + partChars / 2) end = boundary;
+          if (/[\uD800-\uDBFF]/.test(text[end - 1]!)) end--;
+        }
+        parts.push(text.slice(offset, end)); offset = end;
+      }
+      return parts;
+    };
+    // Prior history is included once, in chronological order, and carried
+    // through the aggregation instead of being repeated in every part.
+    let pending = split((opts.priorSummary ? `<previous-compaction-summary>\n${opts.priorSummary}\n</previous-compaction-summary>\n\n` : '') + transcript);
+    for (let round = 0; round < 8; round++) {
+      const summaries: string[] = [];
+      for (const part of pending) {
+        const text = await summarize(buildPrompt(part, null));
+        if (!text) return null;
+        summaries.push(text);
+      }
+      const aggregate = summaries.map((text, index) => `### Part ${index + 1}\n${text}`).join('\n\n');
+      const mergePrompt = buildPrompt(aggregate, null);
+      if (mergePrompt.length <= inputChars) {
+        const text = await summarize(mergePrompt);
+        return text ? { text } : null;
+      }
+      // A model that does not compress must not cause an unbounded loop.
+      if (aggregate.length >= pending.join('\n\n').length) return null;
+      pending = split(aggregate);
     }
-    return { text };
+    return null;
   } catch (err) {
     if (controller.signal.aborted) {
       console.warn(`[compact] aborted/timed out after ${COMPACT_TIMEOUT_MS}ms`);
