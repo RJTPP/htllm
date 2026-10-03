@@ -22,7 +22,7 @@ Current baseline and limits: [evaluation](../eval/README.md),
 [compatibility](v1-compatibility.md), [onboarding](v1-guide.md).
 Core implementation is present; v1 is **not release-qualified**.
 
-Latest local validation: 98 unit tests, 15 production-Chrome scenarios, typecheck,
+Latest local validation: 99 unit tests, 20 production-Chrome scenarios, typecheck,
 static build, the deterministic evaluation harness, and 90 live reference-model
 answer runs ([review](v1-live-evaluation.md)). Live evaluation is opt-in by default.
 The SDD remains unchanged
@@ -56,3 +56,12 @@ new imports, with completion status and saved page/section evidence. Older
 documents explicitly report their chunk-only representation; reimport is needed
 for exact original text. Tests cover gap-free pagination, escaped/unicode text,
 scope/cursor validation, context limits, backup round-trips and a multi-read agent.
+
+The composer now combines document and external tools in one two-tab panel.
+Automatic RAG is independent of model tool use, and both paths specify the same
+exact source-ID citation syntax. Existing chats retain their previous retrieval
+behavior through an undefined-setting fallback; the legacy ragEnabled field is
+not reused. Browser tests cover all four Tools/RAG combinations and persistence.
+The library selector reuses the shared custom picker, and Tools/RAG switches
+share state, hover, focus and disabled styling. Picker selection, Escape and
+focus restoration have browser regression coverage.

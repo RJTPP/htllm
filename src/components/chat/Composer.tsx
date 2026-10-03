@@ -7,8 +7,6 @@ import { COMPACT_TRIGGER_FRACTION } from '../../data/settings';
 import { Image, ArrowRight, Brain, Loader2 } from 'lucide-react';
 import { SlashMenu, type SlashCommand } from './SlashMenu';
 import { Tooltip } from '../ui/Tooltip';
-import { KnowledgeChip } from './KnowledgeChip';
-import type { LibraryWithStats } from '../../hooks/useKnowledge';
 
 const MAX_IMAGES = 3;
 
@@ -84,10 +82,6 @@ export function Composer({
   onSend,
   onStop,
   onParams,
-  libraries,
-  ragLibraryId,
-  onChangeRagLibrary,
-  onNewLibrary,
   toolControls,
 }: {
   modelReady: boolean;
@@ -109,12 +103,6 @@ export function Composer({
   onSend: (text: string, images?: ChatImage[]) => void;
   onStop: () => void;
   onParams: () => void;
-  /** Knowledge bindings — pass the full library list so the chip can
-   *  show names and surface "no model pinned" warn states. */
-  libraries: LibraryWithStats[];
-  ragLibraryId: string | null;
-  onChangeRagLibrary: (id: string | null) => void;
-  onNewLibrary: () => void;
   toolControls?: ReactNode;
 }) {
   const [input, setInput] = useState('');
@@ -359,12 +347,6 @@ export function Composer({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {toolControls}
-            <KnowledgeChip
-              libraryId={ragLibraryId}
-              libraries={libraries}
-              onSelect={onChangeRagLibrary}
-              onNewLibrary={onNewLibrary}
-            />
             <Tooltip label={reasoningTooltip}>
               <div className="flex items-center gap-1">
                 <Brain size={11} className={reasoningEffort !== 'off' ? 'text-accent' : 'text-mute/50'} />

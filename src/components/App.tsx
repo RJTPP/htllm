@@ -204,7 +204,7 @@ export default function App() {
     activeThread?.libraryId === undefined
       ? defaultLibraryId ?? null
       : activeThread.libraryId;
-  const ragConfig: RagConfig = { libraryId: ragLibraryId, agentEnabled: activeThread?.agentEnabled, enabledToolIds: activeThread?.enabledToolIds };
+  const ragConfig: RagConfig = { libraryId: ragLibraryId, automaticRagEnabled: activeThread?.automaticRagEnabled, agentEnabled: activeThread?.agentEnabled, enabledToolIds: activeThread?.enabledToolIds };
 
   // Shared library list — the composer KnowledgeChip uses it for its
   // popover; the same store is updated from the Knowledge page so any

@@ -24,26 +24,32 @@ Successfully extracted text may remain unindexed so you can retry indexing.
 Scanned/image-only, encrypted, and unreadable PDFs show explicit errors; no OCR
 is performed. Review complex-layout PDF extraction before relying on its answers.
 
-Select that library in the chat's Knowledge picker. Agent off performs one
-retrieval pass. Expand **Sources supplied to this answer**, then a filename, to
+Select that library in **Tools → Documents → Knowledge library** and enable
+**Automatic RAG** for one retrieval pass before answering. Expand **Sources supplied to this answer**, then a filename, to
 inspect its saved excerpt and page/section. Saved evidence survives reload and
 document deletion; a deleted original is labeled unavailable. Source cards show
 evidence supplied to the model, not an independent verification of its answer.
 
 Technical retrieval failure blocks generation. Retry after fixing the library,
-or explicitly select Knowledge → None. No matching evidence is distinct from
+or explicitly turn off Automatic RAG in Tools → Documents. No matching evidence is distinct from
 failure. Related retrieved text does not guarantee the requested fact exists.
 Normalized retrieval scores are not relevance probabilities.
 
 ## Agent mode
 
-Open the **Tools: off/on** button beside Knowledge. Enable
+Open the composer's **Tools: off/on** button. Enable
 **Use tools** in that panel. Tools on is Agent mode; there is no separate Agent
-toggle. Tools off keeps ordinary chat and automatic RAG when a library is selected. This is a
+toggle. The Documents tab lists built-in tools, the library selector, and an
+independent Automatic RAG switch. The External tools tab selects connected tools.
+Tools and Automatic RAG can both be on: initial retrieval supplies evidence, then
+the model may make further tool calls. Both off means ordinary chat. This is a
 per-thread setting applied on the next turn. No capability checkbox is required;
 use an HTTP model that supports tool calling. WebLLM agents are unsupported.
 Tools can stay on with Knowledge off: document tools return no evidence, while
 selected external tools remain available.
+Selecting None disables automatic retrieval without changing Tools. Existing
+chats retain their previous behavior until these settings are changed. Citations
+use `[[Source <exact supplied source ID>]]` in both retrieval and tool answers.
 
 `read_document` reads small files completely and returns a `nextCursor` for
 larger files (up to 4,000 characters per read, reduced to fit the context budget).
@@ -67,6 +73,11 @@ In **Settings → Tools & connections**, enter a connection name, Streamable HTT
 allowed. Select tools per conversation. **Refresh tools** rediscovers definitions,
 invalidates that server's saved selections across chats, and clears session
 trust. Other conversations must review changed definitions before using them.
+
+Cross-origin MCP connections require server-side CORS configuration allowing
+the app's origin, preflight requests and MCP headers, including for localhost
+servers. A bearer token does not bypass CORS. The endpoint form shows the origin
+to allow; browsers may report CORS and network failures similarly.
 
 Every external call initially asks for approval showing server, tool, and JSON
 arguments. Deny is the keyboard default; Escape denies. Only tools labeled

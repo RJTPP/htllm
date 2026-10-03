@@ -134,6 +134,8 @@ export interface Message {
 }
 
 export interface Thread {
+  /** Undefined preserves legacy behavior: automatic RAG only when tools are off. */
+  automaticRagEnabled?: boolean;
   agentEnabled?: boolean;
   enabledToolIds?: string[];
   /** Legacy persisted capability confirmation; no longer used to gate tools. */

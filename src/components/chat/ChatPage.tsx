@@ -324,7 +324,7 @@ export function ChatPage({
         </button>
       )}
       <Composer
-        toolControls={thread && <AgentControls thread={thread} libraryId={ragLibraryId} capable={toolsCapable} busy={generating} onChange={onChangeAgent} onManageConnections={onManageConnections} />}
+        toolControls={thread && <AgentControls thread={thread} libraryId={ragLibraryId} libraries={libraries} onSelectLibrary={onChangeRagLibrary} onNewLibrary={onNewLibrary} capable={toolsCapable} busy={generating} onChange={onChangeAgent} onManageConnections={onManageConnections} />}
         modelReady={modelReady}
         model={loadedModelId}
         visionOk={visionOk}
@@ -340,10 +340,6 @@ export function ChatPage({
         onSend={onSend}
         onStop={onStop}
         onParams={onParams}
-        libraries={libraries}
-        ragLibraryId={ragLibraryId}
-        onChangeRagLibrary={onChangeRagLibrary}
-        onNewLibrary={onNewLibrary}
       />
     </div>
   );

@@ -17,6 +17,13 @@ it('rejects malformed data before replacing existing records', async () => {
   expect((await getDb()).get('messages', 'm')).resolves.toBeDefined();
 });
 it('accepts older exports without optional stores', () => { expect(validateImport(JSON.stringify(backup())).version).toBe(1); });
+it('preserves the independent automatic RAG preference and rejects non-booleans', async () => {
+  const data = backup(); Object.assign(data.threads[0]!, { automaticRagEnabled: false, agentEnabled: true, ragEnabled: true });
+  await importAllData(JSON.stringify(data));
+  expect(JSON.parse(await exportAllData()).threads[0]).toMatchObject({ automaticRagEnabled: false, agentEnabled: true });
+  Object.assign(data.threads[0]!, { automaticRagEnabled: 'yes' });
+  expect(() => validateImport(JSON.stringify(data))).toThrow('automatic RAG');
+});
 it('round-trips exact extracted text and page provenance and rejects malformed originals', async () => {
   const data = { ...backup(), libraries: [{ id: 'lib', name: 'Library', embeddingModelId: '' }], documents: [{ id: 'd', libraryId: 'lib', filename: 'file.pdf', extractedText: 'whole\nfile', pages: [{ page: 1, start: 0, end: 10 }] }] };
   await importAllData(JSON.stringify(data));

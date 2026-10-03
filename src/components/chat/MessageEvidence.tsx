@@ -12,7 +12,7 @@ function Source({ source }: { source: SourceCitation }) {
 export function MessageEvidence({ message, section = 'sources' }: { message: Message; section?: 'sources' | 'activity' }) {
   return <div className="space-y-2 font-mono text-[11px] mt-2">
     {section === 'sources' && message.retrievalStatus === 'no-matches' && <p className="text-mute">No matching evidence in the selected library.</p>}
-    {section === 'sources' && message.retrievalStatus === 'unavailable' && <p className="text-red-400">Knowledge retrieval failed. Retry, or explicitly select Knowledge → None to continue without it.</p>}
+    {section === 'sources' && message.retrievalStatus === 'unavailable' && <p className="text-red-400">Knowledge retrieval failed. Retry, or turn off Automatic RAG in Tools → Documents to continue without it.</p>}
     {section === 'sources' && !!message.citations?.length && <details><summary className="cursor-pointer text-accent">Sources supplied to this answer ({message.citations.length})</summary>
       <div className="space-y-1 mt-2">{message.citations.map((source) => <Source key={source.id} source={source} />)}</div>
     </details>}

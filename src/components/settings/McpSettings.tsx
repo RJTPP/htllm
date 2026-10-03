@@ -52,12 +52,13 @@ export function McpSettings({ busy = false }: { busy?: boolean }) {
     }); }}>
       <h3 className="text-[10px] uppercase tracking-widest text-mute">Add MCP connection</h3>
       <label className="block space-y-1 text-mute"><span>Connection name</span><input aria-label="MCP name" disabled={disabled} className={input} placeholder="My tool server" value={name} onChange={(e) => setName(e.target.value)} /></label>
-      <label className="block space-y-1 text-mute"><span>Streamable HTTP endpoint</span><input aria-label="MCP endpoint" disabled={disabled} className={input} placeholder="https://server/mcp" value={url} onChange={(e) => setUrl(e.target.value)} /></label>
+      <label className="block space-y-1 text-mute"><span>Streamable HTTP endpoint</span><input aria-label="MCP endpoint" aria-describedby="mcp-cors-note" disabled={disabled} className={input} placeholder="https://server/mcp" value={url} onChange={(e) => setUrl(e.target.value)} /></label>
+      <p id="mcp-cors-note" className="text-warn text-[10px] leading-relaxed">CORS required for cross-origin connections: configure the MCP server to allow this app's origin{typeof window !== 'undefined' ? ` (${window.location.origin})` : ''}, including preflight requests and MCP headers. This also applies to localhost servers. A bearer token does not bypass CORS. The browser may report CORS and network failures similarly.</p>
       <label className="block space-y-1 text-mute"><span>Bearer token · optional</span><input aria-label="MCP bearer token" disabled={disabled} autoComplete="off" type="password" className={input} value={token} onChange={(e) => setToken(e.target.value)} /></label>
       <p className="text-mute text-[10px] leading-relaxed">Tokens stay in this browser's credential store and are excluded from backups and tool history.</p>
       <button type="submit" disabled={disabled || !url.trim()} className={`${button} border-accent/50 text-accent hover:bg-accent/10`}>{working ? 'Connecting…' : 'Test & add MCP'}</button>
     </form>
     {error && <p role="alert" className="border border-err/40 bg-err/5 p-3 text-err break-words">{error}</p>}
-    <p className="text-mute leading-relaxed">HTTPS or explicitly configured localhost endpoints only. The server must allow this browser origin. OAuth, stdio processes, and legacy SSE transport are not supported.</p>
+    <p className="text-mute leading-relaxed">HTTPS or explicitly configured localhost endpoints only. OAuth, stdio processes, and legacy SSE transport are not supported.</p>
   </div>;
 }
