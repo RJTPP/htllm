@@ -242,6 +242,10 @@ export function useChat(
         content: '',
         createdAt: Date.now(),
       });
+      if (activeThreadRef.current !== threadId) {
+        await updateMessage(assistantMsg.id, { runStatus: 'stopped' });
+        return;
+      }
       setMessages((prev) => [...prev, assistantMsg]);
       setGenerating(true);
 
@@ -620,6 +624,9 @@ export function useChat(
             requestAnimationFrame(flushToState);
           }
         }
+        // HTTP adapters may end their iterable normally after an aborted fetch.
+        // A cancelled run must never be persisted as successfully complete.
+        controller.signal.throwIfAborted();
         // Final flush — ensure the last chunk (with usage/finishReason) is rendered.
         flushToState();
         streamDone = true;
@@ -671,8 +678,10 @@ export function useChat(
           const saved = await getMessages(threadId);
           if (activeThreadRef.current === threadId) setMessages(saved);
         }
-        setGenerating(false);
-        abortRef.current = null;
+        if (abortRef.current === controller) {
+          setGenerating(false);
+          abortRef.current = null;
+        }
         onThreadUpdate?.(threadId);
       }
     },

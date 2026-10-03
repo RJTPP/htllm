@@ -12,9 +12,10 @@ The feature branch has not been pushed or release-tagged.
 | MCP client | `@modelcontextprotocol/client` 2.2.0 | Browser bundle and legacy Streamable HTTP fixture (2025-11-25); automatic SDK negotiation enabled |
 | PDF.js | 6.3.289 | Generated one-page text PDF fixture under production CSP |
 | DOMPurify | 3.4.16 | Unsafe HTML/URLs and remote Markdown images removed |
-| Reference HTTP model | `qwen3.6-35b-a3b` via user-managed LiteLLM | Endpoint reachability only (401 without credentials); tool/model quality and CORS pending |
+| Reference HTTP model | `qwen3.6-35b-a3b@iq4_xs` through `localhost:1234/v1`, user-managed LM Studio proxy | Live Chrome RAG answer and sequential `list_documents` / `read_document` passed with saved evidence and reload; full rubric pending. User reports 13,312 chat context; browser smoke used 8,192. No token required. |
+| Reference embeddings | `text-embedding-embeddinggemma-300m-qat` on the same endpoint | Live retrieval of the user's indexed one-chunk test file passed. User reports 2,048 embedding context; long-input boundary not qualified. |
 | Docker MCP Gateway | CLI 0.43.3 | Help confirms streaming transport; no gateway started or servers enabled; browser interoperability pending |
-| Ollama / LM Studio | No running endpoint qualified | Live model and runtime versions pending |
+| Ollama / LM Studio | LM Studio proxy smoke-tested; exact runtime version not supplied | Ollama remains pending; do not infer the upstream runtime from the local proxy name |
 | Edge / Firefox / Safari | Not qualified | Cross-browser release gates pending |
 | WebLLM | 0.2.83 | Existing adapter, separate live qualification pending; no agent support |
 
@@ -37,3 +38,8 @@ runtime qualification results.
 Record exact model/runtime versions and three-run answer/citation rubric scores
 before promoting v1. An SDK supporting a protocol version is not evidence that
 every server/model combination has passed interoperability tests.
+
+The first [reference-model evaluation](v1-live-evaluation.md) completed 90 answer
+runs: document evidence 45/45, absence handling 15/15, research review RAG 9/15
+versus Agent 12/15. Exact runtime and the remaining compatibility gates are still
+pending; this is not a release approval.

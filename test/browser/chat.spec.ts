@@ -1,5 +1,99 @@
 import { test, expect, type Page } from '@playwright/test';
 
+test('incremental streaming follows the bottom but preserves an intentional scroll-up', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(() => {
+    const originalFetch = window.fetch.bind(window);
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    const encoder = new TextEncoder();
+    Object.assign(window, {
+      emitFixtureText: (text: string) => controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`)),
+      finishFixtureText: () => { controller.enqueue(encoder.encode('data: [DONE]\n\n')); controller.close(); },
+    });
+    window.fetch = async (input, init) => {
+      if (String(input).endsWith('/chat/completions')) {
+        return new Response(new ReadableStream<Uint8Array>({ start(value) { controller = value; } }), { headers: { 'Content-Type': 'text/event-stream' } });
+      }
+      return originalFetch(input, init);
+    };
+  });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Stream a long fixture'); await composer.press('Enter');
+  await expect(page.getByRole('button', { name: 'stop', exact: true })).toBeVisible();
+  const emit = (text: string) => page.evaluate((value) => (window as unknown as { emitFixtureText: (text: string) => void }).emitFixtureText(value), text);
+  const scroller = page.locator('.overflow-y-auto.grid-bg');
+  await emit(Array.from({ length: 60 }, (_, i) => `Paragraph ${i}: streaming evidence.\n\n`).join(''));
+  await expect(page.getByText('Paragraph 59: streaming evidence.', { exact: true })).toBeVisible();
+  await expect.poll(() => scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(5);
+  await scroller.evaluate((el) => { el.scrollTop = 0; el.dispatchEvent(new Event('scroll')); });
+  await expect(page.getByRole('button', { name: 'Jump to latest message' })).toBeVisible();
+  await emit('More streaming text after intentional scroll-up.\n\n');
+  await expect(page.getByText('More streaming text after intentional scroll-up.', { exact: true })).toBeAttached();
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBe(0);
+  await page.getByRole('button', { name: 'Jump to latest message' }).click();
+  await emit('Final streaming paragraph.');
+  await page.evaluate(() => (window as unknown as { finishFixtureText: () => void }).finishFixtureText());
+  await expect(page.getByRole('button', { name: 'stop', exact: true })).toHaveCount(0);
+  await expect.poll(() => scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(5);
+  await page.reload();
+  await expect(page.getByText('Final streaming paragraph.', { exact: true })).toBeVisible();
+});
+
+async function savedRunStatus(page: Page, threadId = 'fixture-thread') {
+  return page.evaluate(async (id) => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    return new Promise<string | undefined>((resolve) => {
+      const req = db.transaction('messages').objectStore('messages').index('byThread').getAll(id);
+      req.onsuccess = () => { const messages = req.result.filter((message) => message.role === 'assistant'); resolve(messages.at(-1)?.runStatus); db.close(); };
+    });
+  }, threadId);
+}
+
+test('Stop marks a pending HTTP response stopped, including after reload', async ({ page }) => {
+  await seed(page);
+  let requested = false;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => { requested = true; await gate; await route.abort().catch(() => {}); });
+  try {
+    const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+    await composer.fill('Wait for my stop'); await composer.press('Enter');
+    await expect.poll(() => requested).toBe(true);
+    await page.getByRole('button', { name: 'stop', exact: true }).click();
+    await expect.poll(() => savedRunStatus(page)).toBe('stopped');
+    release(); await page.reload();
+    await expect.poll(() => savedRunStatus(page)).toBe('stopped');
+  } finally { release(); }
+});
+
+test('stop-to-switch flow isolates a delayed response from the destination thread', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('threads', 'readwrite');
+    tx.objectStore('threads').put({ id: 'destination', title: 'Destination chat', providerId: 'openai-compat', modelId: 'fixture-model', createdAt: 0, updatedAt: 0, libraryId: null });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  let requested = false; let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => { requested = true; await gate; await route.abort().catch(() => {}); });
+  try {
+    const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+    await composer.fill('Delayed source question'); await composer.press('Enter');
+    await expect.poll(() => requested).toBe(true);
+    await expect(page.getByText('generating — stop to switch threads')).toBeVisible();
+    await page.getByRole('button', { name: 'stop', exact: true }).click();
+    await expect.poll(() => savedRunStatus(page)).toBe('stopped');
+    await page.getByText('Destination chat', { exact: true }).click();
+    await expect.poll(() => savedRunStatus(page)).toBe('stopped');
+    release();
+    await expect(page.locator('.markdown-body').getByText('Delayed source question', { exact: true })).toHaveCount(0);
+    expect(await savedRunStatus(page, 'destination')).toBeUndefined();
+    await expect(page.getByRole('button', { name: 'stop', exact: true })).toHaveCount(0);
+  } finally { release(); }
+});
+
 async function seed(page: Page, agent = false) {
   page.on('pageerror', (error) => console.error('Browser error:', error.message));
   page.on('console', (message) => { if (message.type() === 'error') console.error('Browser console:', message.text()); });
@@ -32,6 +126,8 @@ test('HTTP chat works without WebGPU and sanitizes output under production CSP',
   page.on('console', (message) => { if (/violates.*Content Security Policy|EvalError/.test(message.text())) violations.push(message.text()); });
   await seed(page);
   await expect(page.getByText('GPU absent', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Chat, with optional document evidence.' })).toBeVisible();
+  await expect(page.getByText(/HTTP models receive your messages/)).toBeVisible();
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   await composer.fill('Hello'); await composer.press('Enter');
   await expect(page.getByText('Fixture answer with safe text.')).toBeVisible();

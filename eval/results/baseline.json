@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-02T17:51:11.875Z",
+  "generatedAt": "2026-10-02T21:27:03.042Z",
   "mode": "deterministic-harness",
   "model": null,
   "embedding": "synthetic lexical fixture",
@@ -21,7 +21,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 1.9867500000000007,
+      "latencyMs": 2.3813749999999914,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -39,7 +39,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.45479100000000017,
+      "latencyMs": 0.5670000000000073,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -57,7 +57,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.5387910000000034,
+      "latencyMs": 0.5655840000000012,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -76,7 +76,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.4509169999999756,
+      "latencyMs": 0.5005000000000166,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -94,7 +94,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.3033330000000092,
+      "latencyMs": 0.3085829999999987,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -112,7 +112,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.7133750000000134,
+      "latencyMs": 0.6485420000000204,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -130,7 +130,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.3536670000000015,
+      "latencyMs": 0.3009579999999801,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -148,7 +148,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.2560829999999896,
+      "latencyMs": 0.2220000000000084,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -166,7 +166,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.26883300000000077,
+      "latencyMs": 0.41687500000000455,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -184,7 +184,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.2475830000000201,
+      "latencyMs": 0.3907910000000072,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -202,7 +202,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.2046670000000006,
+      "latencyMs": 0.2514160000000061,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -220,7 +220,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.23891700000001492,
+      "latencyMs": 0.23954100000000267,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -238,7 +238,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.24395799999999213,
+      "latencyMs": 0.2809999999999775,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -256,7 +256,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.23091700000000515,
+      "latencyMs": 0.2484579999999994,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -275,7 +275,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.24412499999999682,
+      "latencyMs": 0.4039590000000146,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -291,7 +291,7 @@
       "evidenceCoverage": null,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.259208000000001,
+      "latencyMs": 0.31100000000000705,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -307,7 +307,7 @@
       "evidenceCoverage": null,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.21529100000000767,
+      "latencyMs": 0.22316699999998946,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -324,7 +324,7 @@
       "evidenceCoverage": null,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.23662500000000364,
+      "latencyMs": 0.21029199999998127,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -340,7 +340,7 @@
       "evidenceCoverage": null,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.21966700000001538,
+      "latencyMs": 0.2157500000000141,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -357,7 +357,7 @@
       "evidenceCoverage": null,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.2018329999999935,
+      "latencyMs": 0.22583300000002282,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -378,7 +378,7 @@
       "evidenceCoverage": 0.6666666666666666,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.28333299999999895,
+      "latencyMs": 0.33445800000001213,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -398,7 +398,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.29112499999999386,
+      "latencyMs": 0.3062500000000057,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -418,7 +418,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.4307499999999891,
+      "latencyMs": 0.31366599999998357,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -438,7 +438,7 @@
       "evidenceCoverage": 1,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.3819169999999872,
+      "latencyMs": 0.2756250000000193,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -459,7 +459,7 @@
       "evidenceCoverage": 0.6666666666666666,
       "noMatchingEvidence": false,
       "answerRubric": "pending-live-model",
-      "latencyMs": 0.7923749999999927,
+      "latencyMs": 0.7097919999999931,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -471,7 +471,7 @@
       "evidence": [],
       "answer": "Boundary enforced.",
       "passed": true,
-      "latencyMs": 1.0010829999999942,
+      "latencyMs": 1.147958000000017,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -483,7 +483,7 @@
       "evidence": [],
       "answer": "Boundary enforced.",
       "passed": true,
-      "latencyMs": 0.06141600000000835,
+      "latencyMs": 0.07329100000001176,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -495,7 +495,7 @@
       "evidence": [],
       "answer": "Boundary enforced.",
       "passed": true,
-      "latencyMs": 0.08791699999997604,
+      "latencyMs": 0.10004100000000449,
       "toolCount": 0,
       "tokenUsage": null
     },
@@ -507,7 +507,7 @@
       "evidence": [],
       "answer": "Boundary enforced.",
       "passed": true,
-      "latencyMs": 0.11912499999999682,
+      "latencyMs": 0.14170799999999417,
       "toolCount": 1,
       "tokenUsage": null
     },
@@ -519,7 +519,7 @@
       "evidence": [],
       "answer": "Boundary enforced.",
       "passed": true,
-      "latencyMs": 0.10395800000000577,
+      "latencyMs": 0.1043329999999969,
       "toolCount": 1,
       "tokenUsage": null
     }

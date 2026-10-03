@@ -14,8 +14,10 @@ export async function extractPdf(file: File, opts: { signal?: AbortSignal; onPro
   const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   opts.signal?.throwIfAborted();
-  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
-  const abort = () => { void task.destroy(); };
+  const data = new Uint8Array(await file.arrayBuffer());
+  opts.signal?.throwIfAborted();
+  const task = pdfjs.getDocument({ data });
+  const abort = () => { void task.destroy().catch(() => {}); };
   opts.signal?.addEventListener('abort', abort, { once: true });
   try {
     const pdf = await task.promise;
@@ -24,6 +26,7 @@ export async function extractPdf(file: File, opts: { signal?: AbortSignal; onPro
       opts.signal?.throwIfAborted();
       const p = await pdf.getPage(page);
       const content = await p.getTextContent();
+      opts.signal?.throwIfAborted();
       const text = content.items.map((item) => 'str' in item ? item.str + (item.hasEOL ? '\n' : ' ') : '').join('').trim();
       const start = result.text.length;
       result.text += text + '\n\n';
@@ -31,6 +34,7 @@ export async function extractPdf(file: File, opts: { signal?: AbortSignal; onPro
       p.cleanup();
       opts.onProgress?.(page, pdf.numPages);
     }
+    opts.signal?.throwIfAborted();
     if (!result.text.trim()) throw new UnsupportedPdfError();
     return result;
   } catch (error) {

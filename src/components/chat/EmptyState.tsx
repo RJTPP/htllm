@@ -17,18 +17,19 @@ export function EmptyState({
             readme
           </div>
           <h2 className="font-mono text-lg font-medium tracking-tight">
-            Local-only chat. No server.
+            Chat, with optional document evidence.
           </h2>
           <p className="text-sm text-mute leading-relaxed mt-2">
-            Models run entirely in your browser via WebGPU. Weights download once
-            and are cached — then never leave your device.
+            WebLLM runs in your browser. HTTP models receive your messages and
+            selected document evidence at the configured endpoint, which may
+            proxy requests to another machine. Conversations are stored in this browser.
           </p>
         </div>
         <div className="grid grid-cols-3 divide-x divide-line font-mono text-[11px]">
           {[
-            ['1 · pick', 'Open the model picker and choose by size.'],
-            ['2 · load', 'First load downloads weights to cache.'],
-            ['3 · chat', 'Generation happens on your GPU.'],
+            ['1 · pick', 'Choose a browser model or configure an HTTP provider.'],
+            ['2 · ground', 'Optionally select a library for cited answers.'],
+            ['3 · chat', 'Use Agent mode with a tool-capable HTTP model.'],
           ].map(([h, d]) => (
             <div key={h} className="px-4 py-3">
               <div className="text-accent mb-1">{h}</div>
@@ -39,7 +40,7 @@ export function EmptyState({
         <div className="px-6 py-4 border-t border-line">
           {modelReady && model ? (
             <div className="font-mono text-[11px] text-ok">
-              ✓ {shortenModelId(model)} loaded — type below to begin.
+              ✓ {shortenModelId(model)} ready — type below to begin.
             </div>
           ) : (
             <button

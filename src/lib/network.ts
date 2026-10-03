@@ -1,15 +1,14 @@
 /**
  * Locality classification for HTTP providers.
  *
- * The honest definition for users: "does my data leave this browser to
- * another machine?" — so we treat anything that isn't a loopback / mDNS
- * host as off-device. LAN IPs (192.168.x, 10.x, …) are explicitly
- * off-device too: the data physically leaves this machine.
+ * Classifies the immediate endpoint, not the inference location. Even a
+ * loopback endpoint may proxy requests elsewhere. mDNS hosts can be other
+ * machines on the LAN and must not be classified as loopback.
  */
 
 export type Locality = 'on-device' | 'off-device' | 'unknown';
 
-/** Localhost / loopback / mDNS hosts that keep the request on this device. */
+/** Localhost / loopback hosts for the immediate request. */
 const ON_DEVICE_HOSTS = new Set([
   'localhost',
   '127.0.0.1',
@@ -19,9 +18,8 @@ const ON_DEVICE_HOSTS = new Set([
 ]);
 
 /**
- * True when a request to this URL stays on the current machine. Loopback
- * addresses and *.local (mDNS) only; anything else — including private
- * RFC1918 LAN IPs — counts as leaving the device.
+ * True for an immediate loopback endpoint. This does not guarantee that
+ * the endpoint keeps the request or inference on this machine.
  */
 export function isOnDeviceUrl(url: string): boolean {
   if (!url || !url.trim()) return false;
@@ -32,7 +30,6 @@ export function isOnDeviceUrl(url: string): boolean {
     return false;
   }
   if (ON_DEVICE_HOSTS.has(host)) return true;
-  if (host.endsWith('.local')) return true; // Bonjour / mDNS
   return false;
 }
 

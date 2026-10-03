@@ -21,14 +21,22 @@ variables, then run `pnpm eval`:
 - `HTLLM_API_KEY` when needed (use a secret manager or local shell environment;
   never commit it or put its value in a command stored in project docs)
 - `HTLLM_RUNTIME_VERSION` for the exact server/runtime version
+- `HTLLM_CONTEXT_WINDOW` for the agent budget (defaults to 8,192; never set it
+  above the model server's loaded context window)
 
 This makes 90 answer runs: three repetitions of ordinary RAG for all 25 language
 tasks, plus Agent mode for the five research tasks. Tool iterations can add model
 requests. It uses synthetic documents only, a 180-second per-answer timeout,
 and the normal eight-call agent limit. It does not invoke external MCP tools.
+The fixture documents are short; this does not qualify an embedding model's
+maximum input length or long-document ingestion.
 It records answers, supplied citations, activity, latency, and usage in the
 git-ignored `results/live.json`, checkpointed after each answer. Do not run
 baseline and live files concurrently against the same database process.
+
+`node eval/summarize.mjs` prints progress, evidence coverage, latency, tool counts,
+and token usage from the live report. These mechanical metrics do not score
+answer correctness or replace the manual rubric below.
 
 Node endpoint success does not establish browser CORS or browser compatibility.
 Production browser tests and a live browser smoke test remain separate gates.

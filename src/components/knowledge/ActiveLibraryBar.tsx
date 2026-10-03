@@ -91,14 +91,14 @@ export function ActiveLibraryBar({
               >
                 {lib.embeddingModelId}
               </button>
-              <span className="font-mono text-[10.5px] text-mute flex items-center gap-1 shrink-0">
+              <span title="Endpoint location only. A local endpoint may proxy requests to another machine." className="font-mono text-[10.5px] text-mute flex items-center gap-1 shrink-0">
                 ·
                 {locality === 'on-device' ? (
                   <HardDrive size={10} className="text-mute" />
                 ) : locality === 'off-device' ? (
                   <Cloud size={10} className="text-mute" />
                 ) : null}
-                {locality === 'on-device' ? 'on-device' : locality === 'off-device' ? 'cloud' : ''}
+                {locality === 'on-device' ? 'local endpoint' : locality === 'off-device' ? 'remote endpoint' : ''}
               </span>
               <button
                 type="button"
