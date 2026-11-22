@@ -35,7 +35,8 @@ export function renderCitationHtml(html: string, sources: SourceCitation[]): str
         element.className = 'inline-citation text-accent border border-accent/40 px-1 rounded-sm text-[11px] font-mono whitespace-nowrap';
       } else {
         element.textContent = `[unresolved source: ${match[1]}]`;
-        element.className = 'text-warn';
+        element.setAttribute('title', 'The model cited a source ID that was not supplied to it.');
+        element.className = 'text-mute text-[11px] font-mono underline decoration-dotted underline-offset-2';
       }
       fragment.append(element); cursor = pattern.lastIndex;
     }

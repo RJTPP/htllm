@@ -9,7 +9,9 @@ export function fmtBytes(b: number | null | undefined): string {
   const GB = 1024 ** 3;
   if (b >= GB) return `${(b / GB).toFixed(1)} GB`;
   const MB = 1024 ** 2;
-  return `${(b / MB).toFixed(0)} MB`;
+  if (b >= MB) return `${(b / MB).toFixed(0)} MB`;
+  if (b >= 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${b} B`;
 }
 
 export function shortenModelId(id: string): string {

@@ -791,7 +791,7 @@ export default function App() {
         </header>
 
         {page === 'chat' && !isApiThread && system && !system.webgpu ? (
-          <WebGPUBlock />
+          <WebGPUBlock onOpenPicker={() => setModal('picker')} />
         ) : (
           <div className="flex-1 flex min-h-0">
             {page === 'chat' && (

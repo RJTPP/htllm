@@ -29,7 +29,7 @@ export function EmptyState({
           {[
             ['1 · pick', 'Choose a browser model or configure an HTTP provider.'],
             ['2 · ground', 'Optionally select a library for cited answers.'],
-            ['3 · chat', 'Use Agent mode with a tool-capable HTTP model.'],
+            ['3 · chat', 'Turn on Tools to let a tool-capable HTTP model read files itself.'],
           ].map(([h, d]) => (
             <div key={h} className="px-4 py-3">
               <div className="text-accent mb-1">{h}</div>
