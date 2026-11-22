@@ -88,10 +88,16 @@ export function ModelPicker({
   const httpProviders = getHttpProviders();
   const [tab, setTab] = useState<string>(defaultProviderId);
 
-  // Open the picker on the tab matching the active thread's provider.
+  // Open the picker on the tab matching the active thread's provider —
+  // except when this browser has no WebGPU, where the in-browser tab can't
+  // work: start on the first HTTP provider instead.
+  const noWebGPU = system !== null && !system.webgpu;
   useEffect(() => {
-    if (open) setTab(defaultProviderId);
-  }, [open, defaultProviderId]);
+    if (!open) return;
+    setTab(noWebGPU && defaultProviderId === WEBLLM_ID && httpProviders[0] ? httpProviders[0].id : defaultProviderId);
+    // httpProviders is a stable registry list; re-run only on open/default/GPU change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultProviderId, noWebGPU]);
 
   const grouped = useMemo(() => groupByModel(models), [models]);
   const mem = system?.deviceMemoryGB ?? null;
