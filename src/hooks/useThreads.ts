@@ -23,13 +23,14 @@ export function useThreads() {
   }, []);
 
   const create = useCallback(
-    async (providerId: string, modelId: string, folderId?: string) => {
+    async (providerId: string, modelId: string, folderId?: string, mode?: import('../providers/types').ThreadMode) => {
       const now = Date.now();
       const thread = await createThread({
         title: '',
         providerId,
         modelId,
         folderId,
+        ...(mode ? { mode } : {}),
         createdAt: now,
         updatedAt: now,
       });

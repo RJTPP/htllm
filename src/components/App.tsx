@@ -18,7 +18,7 @@ import { useChat, type RagConfig } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
 import { useToolSupport } from '../hooks/useToolSupport';
 import { useServerContext } from '../hooks/useServerContext';
-import { getModeDefaults, setModeDefault } from '../data/mode-defaults';
+import { getLastMode, getModeDefaults, setLastMode, setModeDefault } from '../data/mode-defaults';
 import { countWorkspaceFiles } from '../data/workspace';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
 import {
@@ -349,6 +349,20 @@ export default function App() {
     ? activeProvider.capabilities.vision
     : !!models.find((m) => m.id === activeModelId)?.vision;
 
+  // D-21: move a chat to the model last used in its mode, when there is one. An
+  // in-browser model is reused only if it is already loaded.
+  const applyModeModel = useCallback(
+    async (threadId: string, mode: import('../providers/types').ThreadMode) => {
+      const preferred = (await getModeDefaults())[mode];
+      if (!preferred) return;
+      if (preferred.providerId === webllmProvider.id && loadedModelId !== preferred.modelId) return;
+      setLastProviderId(preferred.providerId); setLastModelId(preferred.modelId);
+      void setSetting('lastProviderId', preferred.providerId); void setSetting('lastModelId', preferred.modelId);
+      await updateThread(threadId, { providerId: preferred.providerId, modelId: preferred.modelId });
+    },
+    [updateThread, loadedModelId],
+  );
+
   // Ensure there is always an active thread to type into — created on first
   // run (and after the last thread is deleted), independent of model state.
   const pendingRef = useRef<{ text: string; images?: import('../lib/image').ChatImage[] } | null>(null);
@@ -356,11 +370,15 @@ export default function App() {
   useEffect(() => {
     if (threadsLoaded && activeThreadId === null && !autoThreadRef.current) {
       autoThreadRef.current = true;
-      createThread(webllmProvider.id, loadedModelId ?? '').finally(() => {
+      void (async () => {
+        const mode = await getLastMode();
+        const thread = await createThread(webllmProvider.id, loadedModelId ?? '', undefined, mode);
+        if (mode !== 'chat') await applyModeModel(thread.id, mode);
+      })().finally(() => {
         autoThreadRef.current = false;
       });
     }
-  }, [threadsLoaded, activeThreadId, loadedModelId, createThread]);
+  }, [threadsLoaded, activeThreadId, loadedModelId, createThread, applyModeModel]);
 
   useEffect(() => {
     if (!modelReady || !pendingRef.current) return;
@@ -439,10 +457,13 @@ export default function App() {
       setPage('chat');
       return;
     }
-    // Carry the current provider + model into the new thread so "new chat"
-    // continues with whatever the user was just using — and keep it in the
-    // same folder as the current thread.
-    await createThread(activeProviderId, activeModelId, activeThread?.folderId);
+    // Open in the mode the user last picked. Carry the current provider + model
+    // when the mode is the same, so "new chat" continues with whatever the user
+    // was just using; otherwise use that mode's own default model (D-21). Keep it
+    // in the same folder as the current thread.
+    const mode = await getLastMode();
+    const thread = await createThread(activeProviderId, activeModelId, activeThread?.folderId, mode);
+    if (mode !== (activeThread?.mode ?? 'chat')) await applyModeModel(thread.id, mode);
     setPage('chat');
   }, [
     createThread,
@@ -452,6 +473,7 @@ export default function App() {
     activeThreadId,
     messages.length,
     generating,
+    applyModeModel,
   ]);
 
   // Global shortcuts: Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+Shift+O
@@ -696,18 +718,10 @@ export default function App() {
       // Attached files lock the mode too: they belong to a Workspace chat.
       if (await countWorkspaceFiles(activeThreadId) > 0) return;
       await updateThread(activeThreadId, { mode });
-      const preferred = (await getModeDefaults())[mode];
-      if (!preferred) return;
-      if (preferred.providerId !== webllmProvider.id) {
-        handleSelectApiModel(preferred.providerId, preferred.modelId, mode);
-      } else if (loadedModelId === preferred.modelId) {
-        // An in-browser model is reused only if it is already loaded.
-        setLastProviderId(webllmProvider.id); setLastModelId(preferred.modelId);
-        void setSetting('lastProviderId', webllmProvider.id); void setSetting('lastModelId', preferred.modelId);
-        await updateThread(activeThreadId, { providerId: webllmProvider.id, modelId: preferred.modelId });
-      }
+      void setLastMode(mode);
+      await applyModeModel(activeThreadId, mode);
     },
-    [activeThreadId, activeThread?.mode, messages.length, updateThread, handleSelectApiModel, loadedModelId],
+    [activeThreadId, activeThread?.mode, messages.length, updateThread, applyModeModel],
   );
 
   // Jump from an unconfigured provider in the model picker straight to its

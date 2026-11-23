@@ -843,6 +843,37 @@ test('switching mode on a new chat keeps each mode\'s own default model', async 
   await modes.getByRole('radio', { name: /^Chat/ }).click();
   await expect.poll(read).toEqual({ model: 'fixture-model', chat: 'fixture-model', workspace: 'workspace-model' });
 });
+test('a new chat opens in the mode last picked, with that mode\'s model', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('settings', 'readwrite');
+    tx.objectStore('settings').put({ key: 'modeDefaultModels', value: { chat: { providerId: 'openai-compat', modelId: 'fixture-model' }, workspace: { providerId: 'openai-compat', modelId: 'workspace-model' } } });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  const modes = page.getByRole('radiogroup', { name: 'Chat mode' });
+  await modes.getByRole('radio', { name: /^Workspace/ }).click();
+  await expect(modes.getByRole('radio', { name: /^Workspace/ })).toHaveAttribute('aria-checked', 'true');
+  // Give the current chat a message, so "new chat" makes a fresh one.
+  const fill = () => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const threads = await new Promise<{ id: string; updatedAt: number }[]>((resolve) => { const r = db.transaction('threads').objectStore('threads').getAll(); r.onsuccess = () => resolve(r.result); });
+    const newest = threads.sort((a, b) => b.updatedAt - a.updatedAt)[0]!;
+    const tx = db.transaction('messages', 'readwrite');
+    tx.objectStore('messages').put({ id: `m-${newest.id}`, threadId: newest.id, role: 'user', content: 'Earlier question', createdAt: 1 });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await fill(); await page.reload();
+  await page.getByRole('button', { name: 'new chat' }).click();
+  await expect(modes.getByRole('radio', { name: /^Workspace/ })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('button', { name: /workspace-model/ }).first()).toBeVisible();
+  // Picking Chat is remembered the same way, across a reload.
+  await modes.getByRole('radio', { name: /^Chat/ }).click();
+  await fill(); await page.reload();
+  await page.getByRole('button', { name: 'new chat' }).click();
+  await expect(modes.getByRole('radio', { name: /^Chat/ })).toHaveAttribute('aria-checked', 'true');
+});
 test('new chat starts a fresh draft when the current empty chat already has files', async ({ page }) => {
   await seed(page);
   await page.getByRole('radiogroup', { name: 'Chat mode' }).getByRole('radio', { name: /^Workspace/ }).click();

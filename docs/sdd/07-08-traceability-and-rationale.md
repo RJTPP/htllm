@@ -48,7 +48,7 @@ cite them.
 | D-1 | htllm stays a chat app first. It is not a coding agent: no shell, and no long autonomous loops. |
 | D-2 | Two modes: **Chat** (any model, including small WebLLM models) and **Workspace** (models that can call tools). |
 | D-3 | The mode is chosen for a new chat and cannot be switched midway. |
-| D-4 | New chats start in Chat. The new-chat screen shows the mode choice explicitly. |
+| D-4 | New chats start in the mode the user last picked on an empty chat, and in Chat until they first pick one. The new-chat screen shows the mode choice explicitly. (Revised 2026-11-23; it was "always Chat".) |
 | D-5 | Each chat has its own Workspace: a virtual folder used as a scratchpad and for input and output. It is not a runtime. |
 | D-6 | Small functions are allowed only if they are easy and safe in the browser. |
 | D-7 | The Knowledge library stays, reframed as the global layer above the per-chat workspaces. |
