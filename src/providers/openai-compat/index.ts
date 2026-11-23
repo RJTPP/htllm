@@ -125,6 +125,8 @@ interface EmbeddingModelEntry {
   };
   /** OpenRouter lists accepted request parameters; 'tools' means tool calling. */
   supported_parameters?: string[];
+  /** OpenRouter: the model's maximum context. */
+  context_length?: number;
 }
 
 /** Ollama's /api/show is one request per model; cap the fan-out. */
@@ -222,6 +224,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
   async configure(baseURL: string, apiKey: string): Promise<void> {
     this.baseURL = normalizeBaseURL(baseURL);
     this.detectedTools.clear();
+    this.detectedContext.clear();
     await setSetting(this.baseURLSettingKey, this.baseURL);
     if (this.spec.usesKey) {
       this.apiKey = apiKey.trim();
@@ -287,6 +290,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
         reasoning: detectReasoning(m.id),
         toolCalls: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : undefined,
       }));
+    for (const m of data) if (typeof m.id === 'string' && Number.isSafeInteger(m.context_length) && m.context_length! > 0) this.detectedContext.set(m.id, m.context_length!);
     if (this.spec.toolProbe === 'lmstudio' && models[0]) await this.detectToolSupport(models[0].id);
     if (this.spec.toolProbe === 'ollama') {
       await Promise.all(models.slice(0, MAX_TOOL_PROBES).map((m) => this.detectToolSupport(m.id)));
@@ -296,6 +300,16 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
 
   /** Per-model tool support reported by the server, cached per model id. */
   private detectedTools = new Map<string, boolean>();
+  /** Context the server accepts per model: LM Studio's loaded context, OpenRouter's maximum. */
+  private detectedContext = new Map<string, number>();
+
+  async detectContextWindow(modelId: string): Promise<number | undefined> {
+    if (!this.detectedContext.has(modelId) && this.spec.toolProbe === 'lmstudio') {
+      this.detectedTools.delete(modelId);
+      await this.detectToolSupport(modelId);
+    }
+    return this.detectedContext.get(modelId);
+  }
 
   /** Origin of a `/v1` base URL, for the servers' native metadata APIs. */
   private nativeOrigin(): string | null {
@@ -316,10 +330,14 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
       if (this.spec.toolProbe === 'lmstudio') {
         const res = await fetch(`${origin}/api/v0/models`);
         if (!res.ok) return undefined;
-        const json = (await res.json()) as { data?: { id?: unknown; capabilities?: unknown }[] };
+        const json = (await res.json()) as { data?: { id?: unknown; capabilities?: unknown; state?: unknown; loaded_context_length?: unknown }[] };
         for (const entry of Array.isArray(json.data) ? json.data : []) {
           if (typeof entry.id === 'string' && Array.isArray(entry.capabilities)) {
             this.detectedTools.set(entry.id, entry.capabilities.includes('tool_use'));
+          }
+          // Only a loaded model has a runtime context; requests beyond it fail.
+          if (typeof entry.id === 'string' && entry.state === 'loaded' && Number.isSafeInteger(entry.loaded_context_length) && (entry.loaded_context_length as number) > 0) {
+            this.detectedContext.set(entry.id, entry.loaded_context_length as number);
           }
         }
       } else {
