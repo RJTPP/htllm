@@ -16,6 +16,8 @@ export interface ChatProvider {
   listModels(): Promise<ModelInfo[]>;
   /** Per-model tool support reported by the server; undefined when unknown. */
   detectToolSupport?(modelId: string): Promise<boolean | undefined>;
+  /** Context window the server will actually accept for this model, when it says. */
+  detectContextWindow?(modelId: string): Promise<number | undefined>;
   chat(params: ChatParams): AsyncIterable<ChatChunk>;
   unload?(): Promise<void>;
 }

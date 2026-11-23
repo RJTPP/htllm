@@ -82,6 +82,7 @@ export function ParamControls({
   onChange,
   reasoningCapability,
   contextMin = 1024,
+  serverContext,
 }: {
   params: ModelParams;
   onChange: (patch: Partial<ModelParams>) => void;
@@ -91,6 +92,8 @@ export function ParamControls({
   /** Lower bound for the context_window slider. Raised to the auto-compaction
    *  floor when Compression=auto, since below it compaction can't run. */
   contextMin?: number;
+  /** Context the server reports for the active model; offered as a one-click value. */
+  serverContext?: number;
 }) {
   const levels = reasoningCapability === 'toggle' ? TOGGLE_LEVELS : EFFORT_LEVELS;
 
@@ -129,10 +132,16 @@ export function ParamControls({
         label="context_window"
         value={params.contextWindow}
         min={contextMin}
-        max={32768}
+        max={Math.max(32768, serverContext ?? 0)}
         step={512}
         onChange={set('contextWindow')}
       />
+      {serverContext && serverContext !== params.contextWindow && (
+        <div className="-mt-2 flex items-center gap-2 font-mono text-[10px] text-mute">
+          <span>server reports {serverContext.toLocaleString()} for this model{params.contextWindow > serverContext ? '; larger values are capped' : ''}</span>
+          <button onClick={() => onChange({ contextWindow: serverContext })} className="text-accent hover:underline">use {serverContext.toLocaleString()}</button>
+        </div>
+      )}
       <ParamSlider
         label="temperature"
         value={params.temperature}
