@@ -27,3 +27,21 @@ describe('STORE_NAMES', () => {
     expect([...STORE_NAMES].sort()).toEqual([...db.objectStoreNames].sort());
   });
 });
+
+describe('clearStore cascade', () => {
+  it('clears dependent stores so the next backup still imports', async () => {
+    const { clearStore } = await import('./storage-stats');
+    const { exportAllData, validateImport } = await import('../lib/export');
+    const db = await getDb();
+    const t = await createThread({ title: 'A', providerId: 'p', modelId: 'm', createdAt: 1, updatedAt: 1 });
+    await db.put('messages', { id: 'm1', threadId: t.id, role: 'user', content: 'hi', createdAt: 1 });
+    await db.put('workspaceFiles', { id: 'f', threadId: t.id, path: '/notes/a.md', kind: 'note', text: 'x', mimeType: 'text/markdown', version: 1, createdAt: 1, updatedAt: 1 });
+    await db.put('workspaceVersions', { fileId: 'f', threadId: t.id, version: 1, text: 'x', change: 'create', createdAt: 1 });
+    expect(await clearStore('workspaceVersions')).toEqual(['workspaceVersions', 'workspaceFiles']);
+    expect(await db.count('workspaceFiles')).toBe(0);
+    const afterFiles = await exportAllData(); expect(() => validateImport(afterFiles)).not.toThrow();
+    await clearStore('threads');
+    expect(await db.count('messages')).toBe(0);
+    const afterThreads = await exportAllData(); expect(() => validateImport(afterThreads)).not.toThrow();
+  });
+});

@@ -49,3 +49,15 @@ describe('versionsByMessages', () => {
     expect(await versionsByMessages(t.id, [])).toEqual([]);
   });
 });
+
+describe('chat existence', () => {
+  it('refuses uploads and note writes for a chat that was deleted meanwhile', async () => {
+    const t = await thread();
+    await deleteThreadCascade(t.id);
+    await expect(addUpload({ threadId: t.id, path: '/uploads/late.txt', text: 'x', mimeType: 'text/plain' })).rejects.toThrow('no longer exists');
+    await expect(writeNote({ threadId: t.id, path: '/notes/late.md', text: 'x', change: 'write' })).rejects.toThrow('no longer exists');
+    const db = await getDb();
+    expect(await db.getAll('workspaceFiles')).toEqual([]);
+    expect(await db.getAll('workspaceVersions')).toEqual([]);
+  });
+});
