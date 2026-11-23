@@ -6,10 +6,24 @@ const report = JSON.parse(await readFile(process.argv[2] ?? 'eval/results/live.j
 const rows = report.results;
 if (!Array.isArray(rows)) throw new Error('Expected a results array');
 const average = (values) => values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-// Same reference syntax and matching as src/lib/citations.ts.
-const references = (answer) => [...answer.matchAll(/\[\[Source(?::\s*|\s+)([^\]\n]+)\]\]/g)].map((m) => m[1].trim());
-const resolves = (ref, sources) => sources.some((s) => [s.id, s.chunkId, `${s.id}: ${s.filename}`, `${s.chunkId}: ${s.filename}`].includes(ref))
-  || sources.filter((s) => s.filename === ref).length === 1 || (/^[1-9]\d*$/.test(ref) && Number(ref) <= sources.length);
+// Same reference syntax and matching as src/lib/citations.ts; keep them in step.
+const references = (answer) => [...answer.matchAll(/\[\[Source(?::\s*|\s+)([^\]\n]+)\]((?:\s*[,;]\s*\[Source(?::\s*|\s+)[^\]\n]+\])*)\]/g)]
+  .flatMap((m) => [m[1], ...[...m[2].matchAll(/\[Source(?::\s*|\s+)([^\]\n]+)\]/g)].map((x) => x[1])])
+  .flatMap((ref) => ref.split(/\s*[,;]\s*Source(?::\s*|\s+)/)).map((ref) => ref.trim());
+const resolves = (ref, sources) => {
+  if (sources.some((s) => [s.id, s.chunkId, `${s.id}: ${s.filename}`, `${s.chunkId}: ${s.filename}`].includes(ref))) return true;
+  if (/^[1-9]\d*$/.test(ref)) return Number(ref) <= sources.length;
+  const matches = (name) => sources.filter((s) => s.filename === name || s.filename.endsWith(`/${name}`));
+  const named = matches(ref);
+  if (named.length) return named.length === 1;
+  const line = /^(.+?):L?(\d+)(?:-L?(\d+))?$/.exec(ref);
+  if (!line) return false;
+  const inFile = matches(line[1].trim()); const start = Number(line[2]); const end = Number(line[3] ?? line[2]);
+  const covering = inFile.filter((s) => s.lineStart !== undefined && s.lineStart <= end && (s.lineEnd ?? s.lineStart) >= start);
+  return covering.length === 1 || inFile.length === 1;
+};
+// Reasoning written into the reply as tags; the app moves it to the thinking block.
+const inlineReasoning = (answer) => /<(?:think|thought)(?:>|\s)/.test(answer);
 const complete = rows.filter((row) => !row.error);
 const unresolvedCitations = complete.flatMap((row) => references(row.answer).filter((ref) => !resolves(ref, row.sources))
   .map((ref) => ({ id: row.id, run: row.run, mode: row.mode, ref })));
@@ -26,6 +40,7 @@ for (const kind of ['document', 'absent', 'research']) {
       expectedEvidenceSupplied: kind === 'absent' ? null : done.filter((row) => row.expectedDocuments.every((id) => row.sources.some((source) => source.documentId === id || source.filename === `${id}.md`))).length,
       answersWithCitations: done.filter((row) => references(row.answer).length).length,
       budgetReached: done.filter((row) => row.budgetReached).length,
+      inlineReasoning: done.filter((row) => inlineReasoning(row.answer)).length,
       averageLatencyMs: average(done.map((row) => row.latencyMs)),
       averageToolCount: average(done.map((row) => row.toolCount)),
       usageRecorded: withUsage.length,

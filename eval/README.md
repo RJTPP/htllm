@@ -109,6 +109,14 @@ Mechanics:
 3. Research answers often cite nothing, although every fact came from a file the model
    read.
 
+Findings 1 and 2 are now handled in the app:
+- the reply view moves every reasoning block into the thinking section;
+- citations by path, name, line or range resolve when exactly one supplied source fits,
+  and grouped references render one citation each.
+
+`summarize.mjs` uses the same matching, so the baseline now has no unresolved citations.
+It reports the raw tags, which stay in `answer`, as `inlineReasoning`. Finding 3 is open.
+
 The October v1 numbers (`qwen3.6-35b-a3b`, v1 tools: evidence 45/45, absent 15/15,
 research 12/15) used a different model and tool set, so they aren't comparable.
 
