@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Wrench, Settings2, FileText, Pencil } from 'lucide-react';
+import { Wrench, Settings2, FileText, Pencil } from 'lucide-react';
 import type { Thread, McpConnection } from '../../providers/types';
 import { listMcpConnections } from '../../data/mcp';
 import { toolId } from '../../services/mcp';
 import { Modal } from '../ui/Modal';
+import { Switch } from '../ui/Switch';
 import { ToolApproval } from './ToolApproval';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { LibraryPickerModal } from '../knowledge/LibraryPickerModal';
@@ -16,6 +17,9 @@ export function AgentControls({ thread, libraryId, libraries, onSelectLibrary, o
   const [open, setOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tab, setTab] = useState<'documents' | 'external'>('documents');
+  // True after a tool-selection change switched Tools off, until the user
+  // turns it back on or reopens the panel.
+  const [reconfirm, setReconfirm] = useState(false);
   const automaticRagEnabled = thread.automaticRagEnabled ?? !thread.agentEnabled;
   // Freeze the legacy default before changing Tools, so the controls are independent.
   const onChange = (patch: Partial<Thread>) => saveChange({ automaticRagEnabled, ...patch });
@@ -36,60 +40,88 @@ export function AgentControls({ thread, libraryId, libraries, onSelectLibrary, o
     return () => { live = false; window.removeEventListener('mcp-connections-changed', refresh); };
   }, [open, thread.id]);
   useEffect(() => { setOpen(false); setPickerOpen(false); }, [thread.id]);
+  useEffect(() => { if (!open) setReconfirm(false); }, [open]);
   const enabled = thread.enabledToolIds ?? [];
   const available = connections.flatMap((connection) => connection.tools.map((_, index) => toolId(connection, index)));
   const selectedCount = enabled.filter((id) => available.includes(id)).length;
   const count = selectedCount + 3;
-  const reason = !capable ? 'Tool use requires an HTTP model.' : '';
-  const switchStyle = (on: boolean) => `border px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-accent disabled:opacity-40 disabled:cursor-not-allowed ${on ? 'border-accent/60 text-accent bg-accent/10 hover:bg-accent/20' : 'border-line text-mute hover:text-text hover:border-line-hi'}`;
+  const reason = !capable ? 'Tools need an HTTP model that supports tool calling.' : '';
   const library = libraries.find(({ lib }) => lib.id === libraryId)?.lib;
+  const sectionTitle = 'text-[10px] uppercase tracking-widest text-mute';
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const toggleTool = (id: string, checked: boolean) => {
+    // Changing the tool set re-confirms Tools: it turns off until the user
+    // switches it back on, so a new external tool is never enabled silently.
+    if (thread.agentEnabled) setReconfirm(true);
+    onChange({ enabledToolIds: checked ? [...enabled, id] : enabled.filter((value) => value !== id), agentEnabled: false });
+  };
   const chip = 'inline-flex items-center gap-1 px-1.5 py-0.5 border transition-colors focus-visible:outline focus-visible:outline-accent disabled:opacity-40 disabled:cursor-not-allowed';
   return <>
     <button aria-label={`Tools: ${thread.agentEnabled ? 'on' : 'off'} (${count} available)`} aria-haspopup="dialog" onClick={() => setOpen(true)} className={`${chip} ${thread.agentEnabled ? 'border-accent/60 text-accent bg-accent/10' : 'border-line text-mute hover:text-text'}`}>
       <Wrench size={11} /> tools: {thread.agentEnabled ? 'on' : 'off'} <span className="text-mute">· {count}</span>{libraryId && automaticRagEnabled && <span className="text-accent">· RAG</span>}
     </button>
-    <Modal open={open} onClose={() => setOpen(false)} title="Tools for this chat" subtitle="Selections apply to the next turn" width="max-w-xl">
-      <div className="p-4 space-y-5 font-mono text-[11px]">
-        <div className="border border-line bg-surface p-3 space-y-2">
-          <div className="flex items-center gap-2 text-text"><Bot size={14} /> Model tool use <span className="ml-auto text-accent">{thread.agentEnabled ? 'on' : 'off'}</span></div>
-          <p className="text-mute leading-relaxed">Let the model choose document reads and external calls. Automatic RAG below is independent of this switch.</p>
-          {reason && <p className="text-warn" role="status">{reason}</p>}
-          <button role="switch" aria-label="Use tools" aria-checked={!!thread.agentEnabled} disabled={busy || (!!reason && !thread.agentEnabled)} onClick={() => onChange({ agentEnabled: !thread.agentEnabled })} className={switchStyle(!!thread.agentEnabled)}>Tools {thread.agentEnabled ? 'on' : 'off'}</button>
+    <Modal open={open} onClose={() => setOpen(false)} title="Tools for this chat" subtitle="Applies from your next message" width="max-w-xl">
+      <div className="font-mono text-[11px]">
+        {/* Master switch: the one place Tools is turned on or off. */}
+        <div className="flex items-start gap-3 px-4 py-4 border-b border-line">
+          <Wrench size={14} className="mt-0.5 shrink-0 text-mute" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] text-text">Tools</div>
+            <p className="mt-1 text-mute leading-relaxed">Let the model call the document and external tools below while it answers.</p>
+            {reason && <p className="mt-1 text-warn" role="status">{reason}</p>}
+          </div>
+          <Switch label="Use tools" checked={!!thread.agentEnabled} disabled={busy || (!!reason && !thread.agentEnabled)} onChange={(next) => { setReconfirm(false); onChange({ agentEnabled: next }); }} />
         </div>
-        <div className="flex gap-2" role="tablist" aria-label="Tool categories">
-          {(['documents', 'external'] as const).map((value) => <button key={value} role="tab" aria-selected={tab === value} id={`tools-tab-${value}`} aria-controls={`tools-panel-${value}`} onClick={() => setTab(value)} className={`px-3 py-2 border ${tab === value ? 'border-accent/50 text-accent' : 'border-line text-mute'}`}>{value === 'documents' ? 'Documents' : 'External tools'}</button>)}
+        <div className="flex gap-5 px-4 border-b border-line" role="tablist" aria-label="Tool categories">
+          {(['documents', 'external'] as const).map((value) => <button key={value} role="tab" aria-selected={tab === value} id={`tools-tab-${value}`} aria-controls={`tools-panel-${value}`} onClick={() => setTab(value)} className={`-mb-px py-2.5 border-b-2 transition-colors focus-visible:outline focus-visible:outline-accent ${tab === value ? 'border-accent text-text' : 'border-transparent text-mute hover:text-text'}`}>{value === 'documents' ? 'Documents' : 'External tools'}</button>)}
         </div>
-        {tab === 'documents' && <section role="tabpanel" id="tools-panel-documents" aria-labelledby="tools-tab-documents" className="border-t border-line pt-4 space-y-3">
-          <h3 className="text-[10px] uppercase tracking-widest text-mute">Document tools</h3>
-          <ul className="space-y-2 text-mute"><li><code className="text-text">list_documents</code> — list the selected library</li><li><code className="text-text">search_knowledge</code> — find relevant evidence</li><li><code className="text-text">read_document</code> — read files with continuation</li></ul>
-          <div className="flex gap-2 text-text"><FileText size={14} />{libraryId ? '3 built-in read tools available' : 'No library selected'}</div>
-          <div className="space-y-1"><div>Knowledge library</div>
+        <div className="p-4 min-h-[320px]">
+        {tab === 'documents' && <section role="tabpanel" id="tools-panel-documents" aria-labelledby="tools-tab-documents" className="space-y-5">
+          <div className="space-y-2">
+            <h3 className={sectionTitle}>Knowledge library</h3>
             <button aria-label="Choose knowledge library" aria-haspopup="dialog" disabled={busy} onClick={() => setPickerOpen(true)} className="w-full flex items-center justify-between gap-2 bg-surface border border-line hover:border-accent/40 px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-accent disabled:opacity-40 disabled:cursor-not-allowed">
               <span className="min-w-0 truncate text-text">{library?.name ?? 'None — no document access'}</span><Pencil size={12} className="text-mute shrink-0" />
             </button>
+            {libraryId && !library?.embeddingModelId && <p className="text-warn">This library has no embedding model yet. Pin one in Knowledge before it can be searched.</p>}
           </div>
-          <p className="text-mute">With no library, document tools return no evidence. External tools are unaffected.</p>
-          <button role="switch" aria-label="Automatic RAG" aria-checked={!!libraryId && automaticRagEnabled} disabled={busy || !libraryId} onClick={() => onChange({ automaticRagEnabled: !automaticRagEnabled })} className={switchStyle(!!libraryId && automaticRagEnabled)}>Automatic RAG {libraryId && automaticRagEnabled ? 'on' : 'off'}</button>
-          <p className="text-mute">Search the selected library once before answering, whether Tools is on or off.</p>
-          {libraryId && !libraries.find(({ lib }) => lib.id === libraryId)?.lib.embeddingModelId && <p className="text-warn">Configure this library's embedding model in Knowledge before searching.</p>}
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-text">Automatic RAG</div>
+              <p className="mt-1 text-mute leading-relaxed">Search the library once before each answer. Works with Tools on or off.</p>
+            </div>
+            <Switch label="Automatic RAG" checked={!!libraryId && automaticRagEnabled} disabled={busy || !libraryId} onChange={() => onChange({ automaticRagEnabled: !automaticRagEnabled })} />
+          </div>
+          <div className="space-y-2">
+            <h3 className={sectionTitle}>Built-in document tools</h3>
+            <ul className="border border-line divide-y divide-line">
+              {([['list_documents', 'List files in the library'], ['search_knowledge', 'Find relevant passages'], ['read_document', 'Read a file, page by page']] as const).map(([name, description]) => (
+                <li key={name} className="flex gap-3 px-3 py-2"><code className="w-36 shrink-0 text-text">{name}</code><span className="text-mute">{description}</span></li>
+              ))}
+            </ul>
+            <p className="flex items-center gap-1.5 text-mute"><FileText size={12} className="shrink-0" />
+              {libraryId ? <span>3 built-in read tools available</span> : <><span>No library selected</span><span>· these tools return no evidence.</span></>}
+            </p>
+          </div>
         </section>}
-        {tab === 'external' && <section role="tabpanel" id="tools-panel-external" aria-labelledby="tools-tab-external" className="border-t border-line pt-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-[10px] uppercase tracking-widest text-mute">External tools · {selectedCount} selected</h3>
-            <button onClick={() => { setOpen(false); onManageConnections(); }} className="inline-flex items-center gap-1 text-accent hover:underline"><Settings2 size={12} /> Manage connections</button>
+        {tab === 'external' && <section role="tabpanel" id="tools-panel-external" aria-labelledby="tools-tab-external" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className={sectionTitle}>MCP tools · {selectedCount} selected</h3>
+            <button onClick={() => { setOpen(false); onManageConnections(); }} className="inline-flex items-center gap-1 text-mute hover:text-text transition-colors"><Settings2 size={12} /> Manage connections</button>
           </div>
-          {!connections.length && <p className="border border-dashed border-line p-3 text-mute">No MCP connections yet. Add a server in Settings → Tools & connections.</p>}
-          {connections.map((connection) => <div key={connection.id} className="border border-line bg-surface">
-            <div className="px-3 py-2 border-b border-line text-text">{connection.name}<span className="ml-2 text-mute">{connection.tools.length} tools</span></div>
+          {!connections.length && <p className="border border-dashed border-line p-4 text-mute">No connections yet. Add an MCP server under Manage connections.</p>}
+          {connections.map((connection) => <div key={connection.id} className="border border-line">
+            <div className="flex items-baseline justify-between gap-2 px-3 py-2 border-b border-line bg-surface"><span className="min-w-0 truncate text-text">{connection.name}</span><span className="shrink-0 text-mute">{plural(connection.tools.length, 'tool')}</span></div>
             {!connection.tools.length && <p className="p-3 text-mute">No tools discovered.</p>}
-            {connection.tools.map((tool, index) => { const id = toolId(connection, index); return <label className="flex items-start gap-2 p-3 border-b last:border-b-0 border-line cursor-pointer" key={id}>
-              <input type="checkbox" className="accent-accent mt-0.5" disabled={busy} checked={enabled.includes(id)} onChange={(e) => onChange({ enabledToolIds: e.target.checked ? [...enabled, id] : enabled.filter((value) => value !== id), agentEnabled: false })} />
-              <span className="min-w-0"><span className="text-text break-all">{tool.name}</span>{tool.description && <span className="block text-mute mt-1 break-words">{tool.description}</span>}</span>
+            {connection.tools.map((tool, index) => { const id = toolId(connection, index); return <label className="flex items-start gap-2.5 px-3 py-2.5 border-b last:border-b-0 border-line cursor-pointer hover:bg-surface/60" key={id}>
+              <input type="checkbox" className="accent-accent mt-0.5 [color-scheme:dark]" disabled={busy} checked={enabled.includes(id)} onChange={(e) => toggleTool(id, e.target.checked)} />
+              <span className="min-w-0"><span className="text-text break-all">{tool.name}</span>{tool.description && <span className="block text-mute mt-0.5 break-words">{tool.description}</span>}</span>
             </label>; })}
           </div>)}
-          {enabled.some((id) => !available.includes(id)) && <p className="text-warn">Some saved selections are unavailable. Select tools again after a connection refresh.</p>}
-          <p className="text-mute leading-relaxed">External calls require approval. Session trust is offered only for selected read tools; writes and unknown actions always ask.</p>
+          {reconfirm && !thread.agentEnabled && <p role="status" className="border border-warn/40 bg-warn/5 p-2.5 text-warn">Selection changed, so Tools turned off. Turn it back on above to use the new set.</p>}
+          {enabled.some((id) => !available.includes(id)) && <p className="text-warn">Some saved selections are no longer available. Select tools again after a connection refresh.</p>}
+          <p className="text-mute leading-relaxed">Every external call asks for approval first.{!(reconfirm && !thread.agentEnabled) && ' Changing the selection turns Tools off until you turn it back on.'}</p>
           {error && <p role="alert" className="text-err">{error}</p>}
         </section>}
+        </div>
       </div>
     </Modal>
     <LibraryPickerModal open={open && pickerOpen} onClose={() => setPickerOpen(false)} libraries={libraries} activeLibraryId={libraryId} allowNone title="Knowledge for this chat" noneLabel="None — no document access" onSelect={onSelectLibrary} onNewLibrary={() => { setPickerOpen(false); setOpen(false); onNewLibrary(); }} />

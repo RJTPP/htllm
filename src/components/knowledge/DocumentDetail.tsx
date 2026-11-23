@@ -185,6 +185,12 @@ export function DocumentDetail({
                   >
                     <div className="text-mute">
                       chunk #{c.index + 1}
+                      {c.pageStart != null && (
+                        <span className="ml-1">
+                          · p. {c.pageStart}
+                          {c.pageEnd != null && c.pageEnd !== c.pageStart ? `–${c.pageEnd}` : ''}
+                        </span>
+                      )}
                       {c.headingPath && <span className="ml-1 text-accent/60">· {c.headingPath}</span>}
                     </div>
                     <div

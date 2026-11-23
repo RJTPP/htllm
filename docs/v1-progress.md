@@ -28,6 +28,12 @@ answer runs ([review](v1-live-evaluation.md)). Live evaluation is opt-in by defa
 The SDD remains unchanged
 pending confirmation; no release artifact has been promoted.
 
+UI pass (2026-11-23, `feat/ui-pass`): 105 unit tests and 21/21 production-Chrome
+scenarios on Chrome 157. The production-CSP scenario now ignores only the
+inline-handler violation Chrome 157 reports while DOMPurify parses the untrusted
+fixture in its detached document; it still fails on any other violation and
+asserts the fixture's alert never fires.
+
 Compaction follow-up: retain the original behavior and add only oversized-input
 splitting plus final aggregation. Deterministic tests cover the unchanged small
 input path, no output-token cap, intermediate failure, aggregation persistence,

@@ -13,7 +13,8 @@ the app's browser origin through CORS. Network, CORS, and certificate failures
 may look identical to browser JavaScript.
 
 HTTP chat and Knowledge do not need WebGPU. WebLLM does; model downloads and GPU
-capability are separate from HTTP endpoint qualification.
+capability are separate from HTTP endpoint qualification. Without WebGPU, the chat
+screen offers **use an HTTP model**, which opens the model picker on an HTTP tab.
 
 ## Documents and evidence
 
@@ -35,12 +36,14 @@ or explicitly turn off Automatic RAG in Tools → Documents. No matching evidenc
 failure. Related retrieved text does not guarantee the requested fact exists.
 Normalized retrieval scores are not relevance probabilities.
 
-## Agent mode
+## Tools (agent mode)
 
-Open the composer's **Tools: off/on** button. Enable
-**Use tools** in that panel. Tools on is Agent mode; there is no separate Agent
-toggle. The Documents tab lists built-in tools, the library selector, and an
-independent Automatic RAG switch. The External tools tab selects connected tools.
+Open the composer's **tools: off/on** button and turn on the **Tools** switch at the
+top of the panel. Tools on is agent mode; there is no separate Agent toggle. The
+Documents tab holds the library selector, an independent Automatic RAG switch and
+the built-in tools. The External tools tab selects connected tools. Changing that
+selection turns Tools off until you switch it back on, so a newly selected external
+tool is never enabled silently.
 Tools and Automatic RAG can both be on: initial retrieval supplies evidence, then
 the model may make further tool calls. Both off means ordinary chat. This is a
 per-thread setting applied on the next turn. No capability checkbox is required;
