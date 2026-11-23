@@ -25,8 +25,6 @@
 | --- | --- | --- | --- |
 | `components/providers/ModelPicker.tsx` and `components/ui/ProviderLogo.tsx` compare against the WebLLM provider id. | Constraint violation (AD-2) | Maintainer | Move the difference into provider capabilities when either file changes. |
 | `lib/ingest.ts`, `lib/embed-pipeline.ts` and `lib/export.ts` call `getDb()` directly; `lib/export.ts` imports from `services/`. | Layering slip | Maintainer | Route through the `data/` writers in a dedicated refactor. |
-| `services/tools.ts` still exports `documentTools` (the v1 `list_documents`, `search_knowledge`, `read_document`), used only by its own test. | Legacy code | Maintainer | Remove it with its test. |
-| The `safeRegex` comment in `lib/workspace-text.ts` says matching runs on the main thread; it now runs in the regex worker. | Stale comment | Maintainer | Update the comment. |
 | The release workflow (`.github/workflows/release.yml`). | Built, not yet run (the first run is the first tag; Pages needs the repo public). | Owner | Watch the first tagged run. |
 | Ollama, vLLM and cloud endpoints; reasoning replay under `reasoning`. | Unverified live (mocks only) | Owner | Tracked after release; listed in release notes as expected to work. |
 | Firefox and Safari. | Unqualified | Owner | Tracked after release. |

@@ -24,7 +24,7 @@ Claude desktop app's built-in browser) for the live checks.
 
 | Component | Version | What it covers |
 | --- | --- | --- |
-| Node / pnpm | 26.13.1 / 11.2.2 | Typecheck, 214 unit tests, the deterministic eval, static build |
+| Node / pnpm | 26.13.1 / 11.2.2 | Typecheck, 208 unit tests, the deterministic eval, static build |
 | Playwright + Chrome | 1.63.0 + Chrome 157.0.8103.79 | 41 scenarios against the production build, under base `/` and `/htllm/`. Model and MCP servers are mocked, so these check app behavior and the CSP, not real-server CORS. |
 | MCP client | `@modelcontextprotocol/client` 2.2.0 | Discovery, approval, denial and reload against a Streamable HTTP fixture |
 | PDF.js | 6.3.289 | Text extraction with page offsets; image-only PDFs rejected |

@@ -32,7 +32,7 @@ The design depends on a few load-bearing rules:
 - file rules, approvals and limits enforced in code rather than in prompts.
 
 **Implementation readiness:**
-- The code described here is built and tested: typecheck, 212 unit tests, 39
+- The code described here is built and tested: typecheck, 208 unit tests, 41
   production-build browser scenarios, and the deterministic eval with its safety
   scenarios.
 - A live Workspace baseline was recorded on Gemma 4 26B (reference R-4).
@@ -40,11 +40,10 @@ The design depends on a few load-bearing rules:
 **Open items before and after release:**
 - **Roadmap R4, before release:**
   - the first tagged run of the release workflow (Pages deploy and zip);
-  - the live smoke tests from the Pages origin;
-  - version 1.0.0, the changelog and release notes;
+  - the owner's in-browser WebLLM chat, and the smoke test from the hosted origin;
   - re-pointing this document's baseline after the rebase merge.
-- **Known code gaps (§7.2):** the provider-id comparisons in two components, the
-  `lib/` IndexedDB access, the legacy `documentTools`, and one stale comment.
+- **Known code gaps (§7.2):** the provider-id comparisons in two components, and the
+  `lib/` IndexedDB access.
 - **Tracked after release:** answer quality across models (citations in research
   answers), Chat-mode RAG in the live eval, other backends and browsers, and WebLLM in
   Workspace.

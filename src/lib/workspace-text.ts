@@ -136,8 +136,8 @@ export function lexicalSearch(files: { path: string; text: string }[], query: st
 /**
  * Build a regex the model supplied, refusing shapes known to backtrack
  * catastrophically (nested quantifiers, backreferences) and very long or
- * quantifier-heavy patterns. Matching runs on the main thread, where a
- * timeout cannot interrupt a single `test()`, so the guard is the defense.
+ * quantifier-heavy patterns. This is the first defense; matching itself runs in
+ * the regex worker (`services/regex-runner.ts`), which is terminated at its deadline.
  */
 export function safeRegex(pattern: string, ignoreCase: boolean): RegExp {
   if (pattern.length > 200) throw new Error('Pattern is too long (200 characters at most).');

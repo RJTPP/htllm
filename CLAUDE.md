@@ -76,8 +76,8 @@ Pages → Components → Hooks → Services → Providers → Data + Workers
   knowledge, providers, settings, sidebar, storage, system, command, landing, nav, ui
 - `src/hooks/` — useChat, useThreads, useFolders, useKnowledge, useLibraries,
   useModelParams, useSystem
-- `src/services/` — chat/agent execution loop, Workspace tools and uploads, document
-  reader, retrieval, MCP client, approvals
+- `src/services/` — chat/agent execution loop, Workspace tools and uploads, add-to-library,
+  regex and JS runners, retrieval, MCP client, approvals
 - `src/providers/` — ChatProvider/EmbeddingProvider interfaces, WebLLM client,
   OpenAI-compatible provider, registry
 - `src/data/` — IndexedDB via idb (DB v10): threads, messages, keys, settings,
