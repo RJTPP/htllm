@@ -4,7 +4,7 @@ All notable changes to htllm are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-23
 
 The first public release. Everything below is new.
 
@@ -67,3 +67,5 @@ The first public release. Everything below is new.
   sanitized, and HTML and SVG files are shown as code.
 - **Hosting:** at `https://htllm.rjtpp.com`, on its own origin, and as an offline zip
   for any static server.
+
+[1.0.0]: https://github.com/RJTPP/htllm/releases/tag/v1.0.0
