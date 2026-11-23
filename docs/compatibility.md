@@ -17,6 +17,14 @@ served on `localhost`.
 | One real MCP tool with approval | `@modelcontextprotocol/server-everything` 2.2.1 over Streamable HTTP on `localhost:3001` | Reported working by the owner (approval prompt and result not separately recorded). |
 | In-browser WebLLM chat | `@mlc-ai/web-llm` 0.2.83, `Qwen2.5-0.5B-Instruct-q4f16_1-MLC` (the first Qwen2.5 0.5B Q4 option), production build on `localhost` | Passed (run by the owner): the model loaded on WebGPU and replied in a Chat-mode chat. |
 
+### From the hosted site (`https://htllm.rjtpp.com`, release `v1.0.0`)
+
+| Check | Result |
+| --- | --- |
+| Site served by GitHub Pages | Passed: landing page, app, icons and link-preview image load; HTTP redirects to HTTPS; no third-party requests; no console errors. |
+| LM Studio from the HTTPS origin | Passed in the owner's Chrome, after allowing local network access. The Claude desktop app's built-in browser blocks `localhost` requests from a public origin (`ERR_BLOCKED_BY_CLIENT`), so use a regular browser there. |
+| `run_js` worker under the live CSP | Passed: the QuickJS wasm is served as `application/wasm`; a script read a supplied file and returned the right value; `fetch`, timers, `document`, `indexedDB` and `postMessage` were all undefined; an infinite loop stopped at its deadline. |
+
 Browsers used: Chrome 157.0.8103.79 for the automated suite, and Chromium 156 (the
 Claude desktop app's built-in browser) for the live checks.
 
@@ -46,9 +54,6 @@ pnpm build:subpath && pnpm test:browser:subpath
   reasoning replay under the `reasoning` field (Ollama) was only tested with mocks.
 - **Browsers:** Firefox and Safari. Edge isn't separately checked either; it shares
   Chrome's engine.
-- **Hosting:** the hosted copy at `https://htllm.rjtpp.com` (live from the first
-  release), including reaching a `localhost` server from that HTTPS origin, is checked
-  after the first deploy.
 - **The Docker MCP gateway** (0.44.3): it can't be used from a browser directly, because
   it rejects the CORS preflight.
 - **Other model families** in Workspace (Qwen, Llama, gpt-oss): only Gemma 4 was used live.
