@@ -54,11 +54,13 @@ they are fixed rather than copied.
 
 ```sh
 pnpm dev           # Dev server (port 4321)
-pnpm build         # Static build to dist/
+pnpm build         # Static build to dist/ (base /, also the offline zip)
+pnpm build:pages   # The same with base /htllm/, for GitHub Pages
 pnpm preview       # Preview the built site
 pnpm typecheck     # astro check + tsc --noEmit
 pnpm test          # Vitest unit tests
 pnpm test:browser  # Playwright against the production build (run pnpm build first; port 4322)
+pnpm test:browser:pages  # The same against pnpm build:pages
 pnpm eval          # Deterministic 30-task evaluation (eval/)
 ```
 

@@ -67,13 +67,15 @@ flowchart LR
 ```
 
 **Hosting:**
-- **GitHub Pages:** the site lives at `https://rjtpp.github.io/htllm/`, so it is built
-  with an Astro `base` of `/htllm/`. Asset links already use `import.meta.env.BASE_URL`.
-  Making every app path base-aware and the deploy workflow are roadmap R4.2 work, not
-  yet built.
-- **Release zip (planned, roadmap R4.2):** a zip of the built site attached to each `v*`
-  release. It needs its own build with a root base path (`/`), because a `/htllm/` build
-  only serves correctly under that path.
+- **Base path:** set at build time by `HTLLM_BASE`. `pnpm build` uses `/`, and
+  `pnpm build:pages` uses `/htllm/`. Page links go through `lib/base-path.ts`, and asset,
+  worker and wasm URLs are prefixed by Vite. The browser suite runs under both bases and
+  checks that no same-origin request leaves the base.
+- **GitHub Pages:** the site lives at `https://rjtpp.github.io/htllm/`.
+- **Release zip:** the `/` build, zipped and attached to a draft release.
+- **Workflow:** `.github/workflows/release.yml` runs on each `v*` tag. It runs typecheck,
+  unit tests, both builds and both browser runs; deploys the `/htllm/` build to Pages;
+  and attaches the zip.
 - Any static server that serves the files with the right MIME types works, including
   `astro preview`.
 
