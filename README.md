@@ -129,6 +129,7 @@ pnpm dev           # dev server on port 4321
 pnpm typecheck     # astro check + tsc
 pnpm test          # unit tests (Vitest)
 pnpm build && pnpm test:browser   # Playwright against the production build (Chrome)
+pnpm build:pages && pnpm test:browser:pages   # the same under the Pages base path /htllm/
 pnpm eval          # deterministic evaluation; see eval/README.md for live runs
 ```
 

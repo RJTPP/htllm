@@ -4,8 +4,10 @@ import tailwind from '@astrojs/tailwind';
 import staticCspHashes from './scripts/csp.mjs';
 
 export default defineConfig({
-  // Pages origin, for absolute link-preview URLs (the /htllm/ base is added in R4).
+  // Pages origin, for absolute link-preview URLs.
   site: 'https://rjtpp.github.io',
+  // `/` for local and zip builds; `pnpm build:pages` sets `/htllm/` for GitHub Pages.
+  base: process.env.HTLLM_BASE || '/',
   output: 'static',
   integrations: [
     react(),

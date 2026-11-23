@@ -81,9 +81,10 @@ The repo goes public at release, and everything is ready and verified before the
    compatibility record is rewritten with the R4.3 smoke-test versions.
 
 **R4 · Release**
-1. Version 1.0.0 in `package.json`, `CHANGELOG.md`, `LICENSE` (MIT), and release notes
-   with known limitations.
-2. Pages readiness:
+1. Version 1.0.0 in `package.json`, `CHANGELOG.md`, `LICENSE` (MIT, added by the owner),
+   and release notes with known limitations (`docs/releases/v1.0.0.md`, which the release
+   workflow uses as the release text).
+2. Pages readiness (done; the workflow runs for the first time at the first tag):
    - Astro `base: '/htllm/'` with every app path made base-aware;
    - the build and browser suite run under `/htllm/`;
    - a GitHub Actions workflow that deploys to Pages and attaches the `dist` zip to the

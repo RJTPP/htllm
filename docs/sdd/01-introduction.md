@@ -35,8 +35,8 @@ The SDD exists to:
   embedded through an HTTP embedding endpoint, and searched by hybrid (keyword plus
   vector) retrieval with citations.
 - **Release form:** GitHub Pages under `/htllm/`, and a zip of the built site for any
-  static server. The base path, the zip build and the deploy workflow are planned in
-  roadmap R4.2 and not yet built.
+  static server. Both builds and the deploy workflow exist
+  (`.github/workflows/release.yml`); the first deploy happens at the first version tag.
 
 **Out of scope:**
 - Any server component, account system, sync between devices, telemetry or analytics.

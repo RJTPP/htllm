@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ShaderBackdrop } from './ShaderBackdrop';
+import { appPath } from '../../lib/base-path';
 import { getSetting, ACCENT_PRESETS, type AccentColor } from '../../data/settings';
 
 const VISITED_KEY = 'htllm:visited';
@@ -19,7 +20,7 @@ function goToApp() {
   } catch {
     // localStorage may be unavailable; navigation still proceeds.
   }
-  window.location.href = '/app';
+  window.location.href = appPath('app');
 }
 
 export default function Landing() {
@@ -49,7 +50,7 @@ export default function Landing() {
       visited = false;
     }
     if (visited) {
-      window.location.replace('/app');
+      window.location.replace(appPath('app'));
     } else {
       setPhase('show');
     }
@@ -163,8 +164,8 @@ export default function Landing() {
           <div className="grid grid-cols-3 gap-2.5 mt-8 font-mono text-[11px] max-w-xl">
             {[
               ['private', 'threads · keys stay in IndexedDB'],
-              ['local', 'inference on your GPU via WebLLM'],
-              ['open', 'provider-agnostic — local now, BYOK next'],
+              ['local', 'in-browser models on your GPU via WebLLM'],
+              ['open', 'any OpenAI-compatible server, or your own key'],
             ].map(([h, d]) => (
               <div key={h} className="border border-line bg-bg/60 backdrop-blur-sm p-3">
                 <div className="text-accent uppercase tracking-widest mb-1.5">{h}</div>

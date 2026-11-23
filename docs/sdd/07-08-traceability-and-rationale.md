@@ -5,7 +5,7 @@
 | Concern | Decisions | Sections | Components | Verified by |
 | --- | --- | --- | --- | --- |
 | C-1 Data stays on device | AD-1, AD-4, AD-22 | 2.2, 5.6 | E-8, E-13 | Browser: no third-party requests on load. Unit: keys excluded from export, credentials refused on import. |
-| C-2 Static hosting | AD-1, AD-23 | 2.3, 4.2 | Pages, `BaseLayout` | `pnpm build`; browser suite against the production build. Pages base path: roadmap R4.2. |
+| C-2 Static hosting | AD-1, AD-23 | 2.3, 4.2 | Pages, `BaseLayout` | `pnpm build` and `pnpm build:pages`; the browser suite under `/` and `/htllm/`, including a check that every same-origin request stays under the base. |
 | C-3 No code execution from model output | AD-20, AD-24 | 5.2, 5.8 | E-11, E-12 | Browser: output sanitized under the production CSP; `run_js` under CSP. Unit: sandbox has no host globals. |
 | C-4 Approval, no retry on unknown | D-14, D-22, AD-25 | 5.7, 5.8 | E-2, E-10 | Eval safety scenarios S01–S05; browser: MCP writes require approval. |
 | C-5 Citations only from supplied evidence | D-18 | 5.7 | E-12 | Unit: citation resolver; browser: citations survive reload and source deletion. |
@@ -27,7 +27,7 @@
 | `lib/ingest.ts`, `lib/embed-pipeline.ts` and `lib/export.ts` call `getDb()` directly; `lib/export.ts` imports from `services/`. | Layering slip | Maintainer | Route through the `data/` writers in a dedicated refactor. |
 | `services/tools.ts` still exports `documentTools` (the v1 `list_documents`, `search_knowledge`, `read_document`), used only by its own test. | Legacy code | Maintainer | Remove it with its test. |
 | The `safeRegex` comment in `lib/workspace-text.ts` says matching runs on the main thread; it now runs in the regex worker. | Stale comment | Maintainer | Update the comment. |
-| Pages base path `/htllm/` and the deploy workflow. | Not built | Maintainer | Roadmap R4.2. |
+| The release workflow (`.github/workflows/release.yml`). | Built, not yet run (the first run is the first tag; Pages needs the repo public). | Owner | Watch the first tagged run. |
 | Ollama, vLLM and cloud endpoints; reasoning replay under `reasoning`. | Unverified live (mocks only) | Owner | Tracked after release; listed in release notes as expected to work. |
 | Firefox and Safari. | Unqualified | Owner | Tracked after release. |
 | Research answers in Workspace often cite nothing (eval R03–R05 on Gemma 4). | Quality | Maintainer | Prompt work, measured with the live eval. |
