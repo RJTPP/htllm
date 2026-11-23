@@ -37,6 +37,34 @@ test('saved citations render inline, activity follows the model, and code retain
   await expect(dialog.getByText('Created in September. No author listed.', { exact: true })).toBeVisible();
 });
 
+test('reasoning written as tags in later tool rounds stays out of the reply, and path citations resolve', async ({ page }) => {
+  // Recorded shape from the live eval: Gemma 4 on LM Studio sends reasoning separately
+  // in early tool rounds and as mixed tags in later ones.
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('messages', 'readwrite');
+    tx.objectStore('messages').put({ id: 'tagged-fixture', threadId: 'fixture-thread', role: 'assistant', createdAt: 1, runStatus: 'complete',
+      reasoning: 'Listing the files first.',
+      content: '<thought\nThe search found nothing, check cedar.<thought>Still checking.</think><think>Read all files.</think>Rollback starts at 2 percent [[Source /library/Notes/operations.md:L1-1]]. Owners are named [[Source atlas:L1-1], [Source /library/Notes/operations.md]].',
+      citations: [
+        { id: 'atlas:L1-1', chunkId: 'atlas:L1-1', documentId: 'atlas', filename: '/library/Notes/atlas.md', excerpt: 'Atlas owner is Mira Chen.', lineStart: 1, lineEnd: 1 },
+        { id: 'ops:L1-1', chunkId: 'ops:L1-1', documentId: 'ops', filename: '/library/Notes/operations.md', excerpt: 'Rollback begins at 2 percent.', lineStart: 1, lineEnd: 1 },
+      ],
+    });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  await expect(page.getByText(/Rollback starts at 2 percent/)).toBeVisible();
+  await expect(page.getByText(/check cedar|Still checking|Read all files|<thought|<\/think>/)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'View source 2: /library/Notes/operations.md' })).toHaveCount(2);
+  await expect(page.getByRole('link', { name: 'View source 1: /library/Notes/atlas.md' })).toHaveCount(1);
+  await expect(page.getByText(/unresolved source/)).toHaveCount(0);
+  await page.getByRole('button', { name: /thought for|thinking/ }).first().click();
+  await expect(page.getByText(/Listing the files first/)).toBeVisible();
+  await expect(page.getByText(/Read all files/)).toBeVisible();
+});
+
 test('composer tools open a separate keyboard-accessible dialog and global settings', async ({ page }) => {
   await seed(page, true);
   const tools = page.getByRole('button', { name: /^Tools: .*\(9 available\)/ });
