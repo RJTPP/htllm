@@ -64,20 +64,47 @@ Chats that had Tools switched on before this release open as Workspace chats; al
 others open as Chat. Citations use `[[Source <exact supplied source ID>]]` in both
 retrieval and tool answers.
 
-`read_document` reads small files completely and returns a `nextCursor` for
-larger files (up to 4,000 characters per read, reduced to fit the context budget).
-Continue until `complete` is true; tool/context limits can leave a file partially
-read. Page or section evidence accompanies each portion. Newly imported files
-retain exact extracted text in browser storage and backups. Older imports expose
-legacy chunks with `originalAvailable: false`; reimport them for exact whole-file
-reading. For PDFs this covers extracted text, not images or OCR.
+### Working with files in a Workspace
 
-Built-in `list_documents`, `search_knowledge`, and `read_document` are restricted
-to the selected library. They run without approval. The loop executes at most
-eight calls sequentially, with a 60-second timeout per tool and the existing
-estimated context budget. Stop aborts pending requests. Reload does not resume
-an interrupted run. Tool activity is saved with its owning answer and included
-as historical data during future budgeting/compaction, never as permission to act.
+Each Workspace chat has its own folder of files:
+
+- **/uploads**: files you attach with the paperclip in the composer. These are text,
+  Markdown, CSV, JSON, code, or PDFs with a text layer, up to 25 MB each. They are
+  read-only to the model. PDFs are stored as extracted text with page numbers.
+  Attaching a file locks the chat's mode, like sending a message does.
+- **/notes**: the model's own files. It creates, edits and copies into them. Every change
+  is kept as a numbered version.
+- **/library/&lt;name&gt;**: the attached Knowledge library, plus any extra libraries
+  attached under **More libraries**. These are read-only.
+
+The model works through tools: `list_files`, `read_file` (by line range, continuing
+with `offset`), `search` (by meaning and keywords), `grep` (exact text or a simple
+pattern), `write_file`, `edit_file`, `copy_file` and `present_file`. It also has
+`calculate` for exact arithmetic, and `query_csv` when a CSV is attached and the model's
+context is larger than 8k. Lines longer than 400 characters are wrapped, so every part
+of a long PDF page can be read by line number. Uploads and library files can be cited;
+the model's notes cannot.
+
+When the model hands you a file with `present_file`, it appears in the reply as a
+card. Click the card to open it in the side panel, at the version it had then; step
+through versions and download any of them. The **files** button (top right) lists the
+chat's uploads and notes. Markdown is rendered, CSV shows as a table, JSON and code are
+highlighted, and HTML and SVG are shown as code, never run.
+
+Limits depend on the model's context window: up to 8k gives reads of 120 lines and 12
+tool calls per answer; up to 32k gives 250 lines and 16 calls; larger gives 400 lines and
+24 calls. When an answer stops at the limit, a **continue →** button sends a follow-up.
+If the server reports the model's context (LM Studio, OpenRouter), thread parameters
+offer it, and larger settings are capped to it.
+
+If you regenerate or edit an earlier message, files changed by the removed replies stay
+as they are; a notice lists them. Deleting a Workspace chat deletes its files, and the
+confirmation says how many.
+
+Tool activity is saved with its answer and replayed as history on later turns. Long
+results older than the last two answers are shortened to a stub, and the model can
+read the file again if needed. Stop aborts pending requests, and reload does not resume
+an interrupted run.
 
 ## Compaction of long conversations
 
