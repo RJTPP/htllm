@@ -62,7 +62,7 @@ The repo goes public at release, and everything is ready and verified before the
 3. Narrow windows (done: below 768 px the chat list is a drawer, status chips hide, short placeholder):
    fix the composer squeeze below about 600 px. Screenshots and a proposal
    come first.
-4. QuickJS `run_js`: design it with the user (sandbox limits, file access, dependency
+4. QuickJS `run_js` (done): design it with the user (sandbox limits, file access, dependency
    approval), then build it.
 5. Self-host the fonts (done; Geist, JetBrains Mono) instead of loading them from Google Fonts:
    no third-party request on load, and the offline zip works.

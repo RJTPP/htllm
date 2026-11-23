@@ -892,6 +892,37 @@ test('on a phone-sized window the chat list is a drawer and the chat keeps the w
   await expect(page.getByRole('button', { name: 'Open chat list' })).toBeHidden();
   await expect(newChat).toBeVisible();
 });
+test('run_js runs model-written code in the QuickJS worker under the production CSP', async ({ page }) => {
+  const violations: string[] = [];
+  page.on('console', (message) => { if (/violates.*Content Security Policy|EvalError/.test(message.text())) violations.push(message.text()); });
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction(['threads', 'workspaceFiles'], 'readwrite');
+    const store = tx.objectStore('threads');
+    const thread = await new Promise<Record<string, unknown>>((resolve) => { const req = store.get('fixture-thread'); req.onsuccess = () => resolve(req.result); });
+    store.put({ ...thread, modelParams: { temperature: 1, topP: 1, maxTokens: 1024, presencePenalty: 0, frequencyPenalty: 0, contextWindow: 16384, reasoningEffort: 'low' } });
+    tx.objectStore('workspaceFiles').put({ id: 'nums', threadId: 'fixture-thread', path: '/uploads/nums.txt', kind: 'upload', text: '3\n4\n5', mimeType: 'text/plain', version: 1, createdAt: 1, updatedAt: 1 });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  let offered = false; let toolResult = '';
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    const request = route.request().postDataJSON();
+    offered ||= (request.tools ?? []).some((t: { function: { name: string } }) => t.function.name === 'run_js');
+    const tool = request.messages.find((m: { role: string }) => m.role === 'tool');
+    if (tool) toolResult = tool.content;
+    const code = "const n = read('/uploads/nums.txt').split('\\n').map(Number); print('sum of squares'); n.reduce((s, x) => s + x * x, 0)";
+    const delta = tool ? { content: 'Computed.' } : { tool_calls: [{ index: 0, id: 'js', function: { name: 'run_js', arguments: JSON.stringify({ code, files: ['/uploads/nums.txt'] }) } }] };
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta, finish_reason: tool ? 'stop' : 'tool_calls' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Sum the squares'); await composer.press('Enter');
+  await expect(page.getByText('Computed.', { exact: true })).toBeVisible({ timeout: 20000 });
+  expect(offered).toBe(true);
+  expect(toolResult).toBe('Output:\nsum of squares\n\nResult: 50');
+  expect(violations.filter((text) => !/Executing inline event handler/.test(text))).toEqual([]);
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';

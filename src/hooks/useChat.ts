@@ -626,7 +626,7 @@ export function useChat(
           if (!provider.capabilities.toolCalls) throw new Error('Tool use requires an HTTP model.');
           const external = await externalTools(rag?.enabledToolIds ?? [], controller.signal);
           closeTools = external.close;
-          tools = [...workspaceTools({ threadId, libraryIds, band, messageId: assistantMsg.id, readVersions: new Map() }, { csv: band.chars > 3000 && await hasCsv(threadId, libraryIds) }), ...external.tools];
+          tools = [...workspaceTools({ threadId, libraryIds, band, messageId: assistantMsg.id, readVersions: new Map() }, { csv: band.chars > 3000 && await hasCsv(threadId, libraryIds), js: band.chars > 3000 }), ...external.tools];
           sendMessages.unshift({ id: '__agent', threadId, role: 'system', createdAt: Date.now(), content: `${WORKSPACE_PROMPT}\n\n${await workspaceSummary({ threadId, libraryIds })}` });
           // Small files attached to this message go in whole, as citable reads.
           const lastUserIndex = sendMessages.map((m) => m.role).lastIndexOf('user');
