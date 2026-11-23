@@ -30,6 +30,7 @@ const HTTP_SPECS: HttpProviderSpec[] = [
     description: 'Ollama HTTP endpoint. Inference runs wherever the configured server routes it.',
     corsNote:
       'To allow browser access, start Ollama with OLLAMA_ORIGINS set — e.g. OLLAMA_ORIGINS=* ollama serve.',
+    toolProbe: 'ollama',
   },
   {
     id: LMSTUDIO_ID,
@@ -40,6 +41,7 @@ const HTTP_SPECS: HttpProviderSpec[] = [
     description: 'LM Studio HTTP endpoint. A local endpoint may proxy inference to another machine.',
     corsNote:
       'To allow browser access, run the LM Studio local server with its CORS toggle enabled in server settings.',
+    toolProbe: 'lmstudio',
   },
 ];
 

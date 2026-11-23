@@ -51,3 +51,33 @@ it('replays reasoning in the field it arrived in and skips empty reasoning field
   expect(request.messages[1]).not.toHaveProperty('reasoning_content');
   expect(output[0]).toMatchObject({ reasoning: 'ollama thought', reasoningField: 'reasoning' });
 });
+const probeProvider = (toolProbe?: 'lmstudio' | 'ollama') => new OpenAICompatibleProvider({ id: 'p', displayName: 'p', usesKey: false, offDevice: false, defaultBaseURL: 'http://localhost:9/v1', description: 'p', toolProbe });
+const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+it('reads tool support from OpenRouter-style supported_parameters', async () => {
+  vi.stubGlobal('fetch', async () => json({ data: [{ id: 'a', supported_parameters: ['tools', 'temperature'] }, { id: 'b', supported_parameters: ['temperature'] }, { id: 'c' }] }));
+  const models = await probeProvider().listModels();
+  expect(models.map((m) => m.toolCalls)).toEqual([true, false, undefined]);
+});
+it('probes LM Studio capabilities once for all models', async () => {
+  const fetch = vi.fn(async (url: string) => url.endsWith('/api/v0/models')
+    ? json({ data: [{ id: 'gemma', capabilities: ['tool_use'] }, { id: 'tiny', capabilities: [] }] })
+    : json({ data: [{ id: 'gemma' }, { id: 'tiny' }, { id: 'other' }] }));
+  vi.stubGlobal('fetch', fetch);
+  const models = await probeProvider('lmstudio').listModels();
+  expect(models.map((m) => m.toolCalls)).toEqual([true, false, undefined]);
+  expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/api/v0/models'))).toHaveLength(1);
+  expect(fetch.mock.calls.some(([url]) => url === 'http://localhost:9/api/v0/models')).toBe(true);
+});
+it('probes Ollama per model and treats probe failures as unknown', async () => {
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/api/show')) {
+      const model = JSON.parse(String(init?.body)).model;
+      if (model === 'broken') throw new TypeError('Failed to fetch');
+      return json({ capabilities: model === 'qwen' ? ['completion', 'tools'] : ['completion'] });
+    }
+    return json({ data: [{ id: 'qwen' }, { id: 'gemma' }, { id: 'broken' }] });
+  });
+  const provider = probeProvider('ollama');
+  expect((await provider.listModels()).map((m) => m.toolCalls)).toEqual([true, false, undefined]);
+  expect(await provider.detectToolSupport('qwen')).toBe(true);
+});
