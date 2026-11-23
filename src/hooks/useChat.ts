@@ -62,6 +62,8 @@ export interface RagConfig {
   libraryId: string | null;
   agentEnabled?: boolean;
   enabledToolIds?: string[];
+  /** Workspace chat (D-14): tools must run; a model that cannot use them is an error. */
+  workspace?: boolean;
 }
 
 /**
@@ -258,6 +260,7 @@ export function useChat(
       let streamDone = false;
 
       try {
+        if (rag?.workspace && !agent) throw new Error('Workspace needs a model that can use tools. Choose a tool-capable HTTP model in the model picker.');
         // D10b — load both active summaries for this thread (if any).
         // 'history' covers older turns; 'tail' covers a recent oversized
         // exchange summarized into its own block. We filter the union of

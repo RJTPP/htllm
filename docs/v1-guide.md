@@ -36,23 +36,33 @@ or explicitly turn off Automatic RAG in Tools → Documents. No matching evidenc
 failure. Related retrieved text does not guarantee the requested fact exists.
 Normalized retrieval scores are not relevance probabilities.
 
-## Tools (agent mode)
+## Chat and Workspace modes
 
-Open the composer's **tools: off/on** button and turn on the **Tools** switch at the
-top of the panel. Tools on is agent mode; there is no separate Agent toggle. The
-Documents tab holds the library selector, an independent Automatic RAG switch and
-the built-in tools. The External tools tab selects connected tools. Changing that
-selection turns Tools off until you switch it back on, so a newly selected external
-tool is never enabled silently.
-Tools and Automatic RAG can both be on: initial retrieval supplies evidence, then
-the model may make further tool calls. Both off means ordinary chat. This is a
-per-thread setting applied on the next turn. No capability checkbox is required;
-use an HTTP model that supports tool calling. WebLLM agents are unsupported.
-Tools can stay on with Knowledge off: document tools return no evidence, while
-selected external tools remain available.
-Selecting None disables automatic retrieval without changing Tools. Existing
-chats retain their previous behavior until these settings are changed. Citations
-use `[[Source <exact supplied source ID>]]` in both retrieval and tool answers.
+Each new chat shows a **Chat mode** choice on its empty screen: **Chat** (the default)
+or **Workspace**. The choice can change until you send the first message, then it is
+locked. Each mode remembers the model you last used in it. Workspace chats carry a
+small folder mark in the sidebar.
+
+**Chat** has no tools. Its composer button reads **knowledge: off** or the library name
+and opens *Knowledge for this chat*: the library selector and the **Automatic RAG**
+switch (on by default when a library is attached), which searches the library once
+before each answer. Selecting None turns retrieval off.
+
+**Workspace** always uses tools. There is no on/off switch. Its composer button reads
+**tools: on** and opens *Tools for this chat*. The Documents tab attaches a library
+(read-only to the model) and lists the built-in tools. The External tools tab selects
+connected MCP tools, and every external call still asks for approval. Workspace never
+retrieves automatically: the model searches when it needs to.
+
+Workspace needs an HTTP model that can call tools. The model picker shows a **tools /
+no tools** badge per HTTP model, read from the server where it reports this (LM Studio,
+Ollama, OpenRouter) or assumed otherwise (shown with `?`). Click the badge to override
+it. A Workspace chat with a model marked "no tools" refuses to send and says why.
+In-browser WebLLM models stay in Chat (see `docs/review/2026-11-23-research/webllm-tools.md`).
+
+Chats that had Tools switched on before this release open as Workspace chats; all
+others open as Chat. Citations use `[[Source <exact supplied source ID>]]` in both
+retrieval and tool answers.
 
 `read_document` reads small files completely and returns a `nextCursor` for
 larger files (up to 4,000 characters per read, reduced to fit the context budget).
