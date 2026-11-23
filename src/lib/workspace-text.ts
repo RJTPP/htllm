@@ -149,7 +149,7 @@ export function safeRegex(pattern: string, ignoreCase: boolean): RegExp {
 }
 
 /** Lines longer than this are matched on their first part only. */
-const GREP_LINE_CAP = 1000;
+export const GREP_LINE_CAP = 1000;
 
 export function grepFiles(files: { path: string; text: string }[], pattern: string, opts: { regex?: boolean; ignoreCase?: boolean; max?: number } = {}): { hits: LineHit[]; more: number } {
   const max = opts.max ?? 50;

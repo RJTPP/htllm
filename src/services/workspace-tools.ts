@@ -6,7 +6,8 @@ import { getChunksForDocument } from '../data/chunks';
 import { getLibrary } from '../data/libraries';
 import { retrieve } from './retrieval';
 import { normalizeWorkspacePath } from '../lib/workspace-path';
-import { grepFiles, lexicalSearch, lineSpans, pageAt, readWindow, snippet, type Band, type Pages } from '../lib/workspace-text';
+import { GREP_LINE_CAP, grepFiles, lexicalSearch, lineSpans, pageAt, readWindow, snippet, splitLines, type Band, type LineHit, type Pages } from '../lib/workspace-text';
+import { testRegex } from './regex-runner';
 import { calculate, formatNumber } from '../lib/calc';
 import { queryCsv, type CsvQuery } from '../lib/csv-query';
 
@@ -19,7 +20,11 @@ export interface WorkspaceContext {
   messageId?: string;
   /** Versions this turn has read, by path. write/edit require a current read. */
   readVersions: Map<string, number>;
+  /** Library files for this turn: large, and unchanged by the chat, so mounted once. */
+  libraryCache?: Promise<Mounted[]>;
 }
+
+const mounted = (ctx: WorkspaceContext) => mountWorkspace(ctx);
 
 /** A file as the model sees it: workspace files plus the attached library. */
 export interface Mounted {
@@ -39,13 +44,11 @@ export interface Mounted {
 
 const segment = (name: string) => name.replace(/[\\/\u0000-\u001f\u007f]/g, '-').trim() || 'untitled';
 
-/** Mount the chat's files and the attached libraries (read-only) as one tree. */
-export async function mountWorkspace(ctx: Pick<WorkspaceContext, 'threadId' | 'libraryIds'>): Promise<Mounted[]> {
-  const files: Mounted[] = (await listWorkspaceFiles(ctx.threadId)).map((file) => ({
-    path: file.path, kind: file.kind, id: file.id, text: file.text, pages: file.pages, version: file.version, file,
-  }));
+/** Mount the attached libraries (read-only), each under its own /library folder. */
+async function mountLibraries(libraryIds: string[]): Promise<Mounted[]> {
+  const files: Mounted[] = [];
   const roots = new Set<string>();
-  for (const libraryId of [...new Set(ctx.libraryIds)]) {
+  for (const libraryId of [...new Set(libraryIds)]) {
     const library = await getLibrary(libraryId);
     if (!library) continue;
     let root = `/library/${segment(library.name)}`;
@@ -61,7 +64,19 @@ export async function mountWorkspace(ctx: Pick<WorkspaceContext, 'threadId' | 'l
       files.push({ path, kind: 'library', id: doc.id, text, pages: legacy ? undefined : doc.pages, version: 1, legacy, libraryId });
     }
   }
-  return files.sort((a, b) => a.path.localeCompare(b.path));
+  return files;
+}
+
+/**
+ * Mount the chat's files (always fresh: the user may change them mid-turn)
+ * and the attached libraries (cached for the turn when a context is reused).
+ */
+export async function mountWorkspace(ctx: Pick<WorkspaceContext, 'threadId' | 'libraryIds' | 'libraryCache'>): Promise<Mounted[]> {
+  const files: Mounted[] = (await listWorkspaceFiles(ctx.threadId)).map((file) => ({
+    path: file.path, kind: file.kind, id: file.id, text: file.text, pages: file.pages, version: file.version, file,
+  }));
+  const libraries = await (ctx.libraryCache ??= mountLibraries(ctx.libraryIds));
+  return [...files, ...libraries].sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** Resolve a model-supplied path to a mounted file, with a helpful error. */
@@ -109,7 +124,7 @@ const object = (properties: Record<string, unknown>, required: string[]) => ({ t
 
 /** The read side of the Workspace tool set (list, read, search, grep). */
 export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
-  const load = () => mountWorkspace(ctx);
+  const load = () => mounted(ctx);
   return [
     {
       name: 'list_files',
@@ -135,7 +150,10 @@ export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
         const file = findMounted(await load(), String(args.path));
         signal.throwIfAborted();
         const limit = Math.min(ctx.band.lines, typeof args.limit === 'number' ? args.limit : ctx.band.lines);
-        const window = readWindow(file.path, file.text, file.pages, typeof args.offset === 'number' ? args.offset : 1, limit, Math.min(ctx.band.chars, maxChars ?? ctx.band.chars));
+        // Leave room for the Source ID line and notes added below, so the result never
+        // exceeds the cap (truncation would cut the continue hint and drop the citation).
+        const reserve = citable(file) ? file.id.length + 40 + (file.legacy ? 110 : 0) : 60;
+        const window = readWindow(file.path, file.text, file.pages, typeof args.offset === 'number' ? args.offset : 1, limit, Math.min(ctx.band.chars, maxChars ?? ctx.band.chars) - reserve);
         ctx.readVersions.set(file.path, file.version);
         if (!citable(file) || window.endLine < window.startLine) return { text: window.output + (file.kind === 'note' ? '\n(Your note: not evidence, do not cite it.)' : '') };
         const citation = lineCitation(file, window.startLine, window.endLine, window.excerpt);
@@ -204,7 +222,16 @@ export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
         const files = await load();
         const prefix = typeof args.path === 'string' && args.path.trim() ? normalizeWorkspacePath(args.path) : '';
         const scope = files.filter((f) => !prefix || f.path === prefix || f.path.startsWith(`${prefix}/`));
-        const { hits, more } = grepFiles(scope, String(args.pattern), { regex: args.regex === true, ignoreCase: args.ignoreCase === true });
+        let hits: LineHit[]; let more = 0;
+        if (args.regex === true) {
+          // Regexes run in a worker with a deadline (a bad pattern cannot freeze the page).
+          const lines = scope.flatMap((f) => splitLines(f.text).map((text, i) => ({ path: f.path, line: i + 1, text, score: 1 })));
+          const matches = await testRegex(String(args.pattern), args.ignoreCase === true, lines.map((l) => l.text.slice(0, GREP_LINE_CAP)));
+          const all = lines.filter((_, i) => matches[i]);
+          hits = all.slice(0, 50); more = all.length - hits.length;
+        } else {
+          ({ hits, more } = grepFiles(scope, String(args.pattern), { ignoreCase: args.ignoreCase === true }));
+        }
         if (!hits.length) return { text: `No lines match ${JSON.stringify(args.pattern)}${prefix ? ` under ${prefix}` : ''}.` };
         const cap = Math.min(ctx.band.chars, maxChars ?? ctx.band.chars) - 120;
         let text = ''; let shown = 0;
@@ -269,6 +296,7 @@ export function locateEdit(text: string, old: string): { start: number; end: num
 
 /** The write side of the Workspace tool set (write, edit, copy, present). */
 export function workspaceWriteTools(ctx: WorkspaceContext): ExecutableTool[] {
+  // Writes check versions against fresh state, not the turn's cached tree.
   const load = () => mountWorkspace(ctx);
   const save = async (path: string, text: string, change: 'write' | 'edit' | 'copy', expectedVersion: number | undefined, copiedFrom?: WorkspaceFile['copiedFrom']) => {
     if (text.length > MAX_NOTE_CHARS) throw new Error(`Notes are limited to ${MAX_NOTE_CHARS} characters; split the content into several files.`);
@@ -373,7 +401,7 @@ export function workspaceFunctionTools(ctx: WorkspaceContext, opts: { csv: boole
       limit: { type: 'integer', minimum: 1, maximum: 200 },
     }, ['path']),
     execute: async (args, _signal, maxChars) => {
-      const file = findMounted(await mountWorkspace(ctx), String(args.path));
+      const file = findMounted(await mounted(ctx), String(args.path));
       const ext = file.path.split('.').pop()?.toLowerCase();
       if (ext !== 'csv' && ext !== 'tsv') throw new Error(`${file.path} is not a CSV or TSV file.`);
       const { table, matched, total } = queryCsv(file.text, args as CsvQuery, ext === 'tsv' ? '\t' : undefined);

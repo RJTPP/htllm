@@ -10,9 +10,16 @@ function fenced(text: string, language = ''): string {
   return `${fence}${language}\n${text}\n${fence}`;
 }
 
+/** Above this size, rich rendering (Markdown, highlighting) falls back to plain text. */
+const RICH_LIMIT = 200_000;
+/** Plain text shows at most this many lines; the rest is a download away. */
+const LINE_LIMIT = 5000;
+
 /** Render a workspace file's text by type (D-27). Nothing is executed: HTML/SVG show as code. */
 export function FileContent({ path, text, mimeType }: { path: string; text: string; mimeType?: string }) {
-  const { kind, language } = renderKind(path, mimeType);
+  const detected = renderKind(path, mimeType);
+  const tooBig = text.length > RICH_LIMIT && detected.kind !== 'csv';
+  const { kind, language } = tooBig ? { kind: 'text' as const, language: undefined } : detected;
   const csv = useMemo(() => (kind === 'csv' ? parseCsv(text) : null), [kind, text]);
   const json = useMemo(() => {
     if (kind !== 'json') return null;
@@ -35,16 +42,19 @@ export function FileContent({ path, text, mimeType }: { path: string; text: stri
   }
   if (kind === 'json' && json !== null) return <MessageBody content={fenced(json, 'json')} />;
   if (kind === 'code') return <MessageBody content={fenced(text, language)} />;
-  const lines = text.split('\n');
+  const all = text.split('\n');
+  const lines = all.slice(0, LINE_LIMIT);
   const width = String(lines.length).length;
   return (
     <pre className="font-mono text-[11.5px] leading-relaxed text-text whitespace-pre-wrap break-words">
+      {tooBig && <div className="font-sans text-[11px] text-mute mb-2">Large file: shown as plain text.</div>}
       {lines.map((line, i) => (
         <div key={i} className="flex gap-3">
           <span className="select-none text-mute/70 text-right shrink-0" style={{ width: `${width}ch` }}>{i + 1}</span>
           <span className="min-w-0">{line || ' '}</span>
         </div>
       ))}
+      {all.length > LINE_LIMIT && <div className="font-sans text-[11px] text-mute mt-2">Showing the first {LINE_LIMIT.toLocaleString()} of {all.length.toLocaleString()} lines. Download the file to see all of it.</div>}
     </pre>
   );
 }
