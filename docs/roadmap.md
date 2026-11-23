@@ -1,7 +1,7 @@
 # htllm v1 — Chat, simple RAG, optional agents
 
 > **Status (2026-11-23):** the v1 scope is built, and the "Agent toggle" became the
-> Chat/Workspace modes (plan and progress: [review/2026-11-23.md](review/2026-11-23.md)).
+> Chat/Workspace modes (design and decisions: [sdd/](sdd/index.md)).
 > The release gates were revised the same day; the original gates are kept below for
 > the record.
 
@@ -74,7 +74,8 @@ The repo goes public at release, and everything is ready and verified before the
 1. Move the live eval to the Workspace tools, and run one baseline on the available model
    (done: Gemma 4 26B on LM Studio, results and findings in `eval/README.md`).
 2. SDD: drift check, then update in place, absorbing the decisions and design from
-   `docs/review/`. Then remove `docs/review/`.
+   `docs/review/`. Then remove `docs/review/` (done: eight-file SDD v1.0.0; the review
+   is in git history).
 3. Write a README (what, features, privacy, quick start, providers, limitations,
    development). Polish `docs/guide.md` and `docs/compatibility.md`.
 
@@ -85,14 +86,16 @@ The repo goes public at release, and everything is ready and verified before the
    - Astro `base: '/htllm/'` with every app path made base-aware;
    - the build and browser suite run under `/htllm/`;
    - a GitHub Actions workflow that deploys to Pages and attaches the `dist` zip to the
-     release on a `v*` tag.
+     release on a `v*` tag. The zip is a second build with base `/`, because a `/htllm/`
+     build only works under that path.
    The first live deploy happens when the repo goes public.
 3. Live smoke test against the gates below, including connecting to LM Studio from the
    Pages origin (Chrome local-network access, CORS). Claude runs the LM Studio Chat and Workspace
    checks; the user runs one real MCP tool and one WebLLM chat. Versions are recorded in
    `docs/compatibility.md`.
 4. Final PR `wip/release` → `dev` (the user reviews and rebase-merges), then `dev` →
-   `main`, the `v1.0.0` tag, and a GitHub release.
+   `main`, the `v1.0.0` tag, and a GitHub release. After the rebase merge, re-point the
+   SDD's `Doc Baseline Commit` to the merged commit.
 
 ## Release gates (revised 2026-11-23)
 
@@ -153,5 +156,5 @@ MCP Apps, arbitrary scripts, reranking, separate query rewriting, local embeddin
 inference, and broader adapters are outside v1. Add them only after measured
 failures justify the added scope. The pre-v1 phase plan is in git history (`docs/archive/pre-v1-roadmap.md`).
 
-The existing `docs/sdd/` set predates this implementation and awaits its separately
-confirmed reconciliation; do not use its older phase-specific claims as v1 status.
+The design is described in [`docs/sdd/`](sdd/index.md) (v1.0.0), including decisions
+D-1 to D-31.

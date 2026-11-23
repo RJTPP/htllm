@@ -5,15 +5,16 @@
 htllm is a fully client-side chat application. There is no server, no telemetry and no
 secrets in source. Models run either in the browser through WebLLM (in a Web Worker) or
 through OpenAI-compatible HTTP endpoints the user configures (Ollama, LM Studio, cloud).
-v1 adds a Knowledge library (PDF/TXT/MD, cited RAG), document tools, and MCP tools with
-user approval.
+Each chat is either Chat (any model, optional cited RAG over a Knowledge library) or
+Workspace (tool-capable HTTP models working on a per-chat folder of files, with small
+functions and MCP tools behind user approval).
 
 Docs:
 - [docs/roadmap.md](docs/roadmap.md): the plan to 1.0.0 and the release gates.
 - [docs/guide.md](docs/guide.md): how to use the app.
 - [docs/compatibility.md](docs/compatibility.md): what has been tested, with versions.
-- [docs/review/2026-11-23.md](docs/review/2026-11-23.md): product decisions D-1 to D-31
-  (Chat vs Workspace modes). It moves into the SDD before 1.0.0.
+- [docs/sdd/](docs/sdd/index.md): the design (layers, data model, contracts), with product
+  decisions D-1 to D-31 and architectural decisions in §8.1.
 
 ## Hard Constraints (load-bearing)
 
@@ -46,8 +47,8 @@ they are fixed rather than copied.
   classes without concrete need.
 - Don't use version ranges in dependencies — pin exact versions. Ask before adding a
   runtime dependency.
-- Don't trust `docs/sdd/` for current behavior until it is updated (roadmap R3): it still
-  describes Phase 2.
+- Don't let `docs/sdd/` drift: update it in the same PR when a decision, store or contract
+  changes.
 
 ## Commands
 
@@ -81,7 +82,7 @@ Pages → Components → Hooks → Services → Providers → Data + Workers
   prompt-templates, folders, libraries, documents, chunks, parents, embeddings, summaries,
   mcp connections, workspace files and versions; mode defaults, tool overrides; reset and
   storage stats
-- `src/workers/` — WebLLM worker
+- `src/workers/` — WebLLM worker, regex worker (grep deadline), QuickJS worker (`run_js`)
 - `src/lib/` — utilities: chunking, PDF extraction, ingest/embedding pipelines, hybrid and
   vector search, RAG context, citations, compaction, token budgeting, sanitizing, export,
   formatting, workspace paths and text (line model, search, grep), calculator, CSV
@@ -101,6 +102,6 @@ Dark-by-default. Colors: bg #0a0a0a, surface #141414, line #262626, text #e5e5e5
 
 ## SDD
 
-Specification at `docs/sdd/` (IEEE 1016-inspired, 16 sections). It is stale since May 2026
-until the R3 update. Until then, the decisions document above and the code are the source of
-truth.
+Specification at `docs/sdd/` (IEEE 1016-inspired, eight files, v1.0.0). `index.md` records
+the baseline commit it describes. Where the code and the SDD disagree, the code wins, and the
+SDD gets fixed.
