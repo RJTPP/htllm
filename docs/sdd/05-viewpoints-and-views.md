@@ -234,8 +234,8 @@ The Tools panel counts the always-on set.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> EmptyChat: new chat (default Chat)
-  EmptyChat --> EmptyChat: switch mode (swaps to that mode's default model)
+  [*] --> EmptyChat: new chat (mode last picked; Chat at first)
+  EmptyChat --> EmptyChat: switch mode (remembered; swaps to that mode's default model)
   EmptyChat --> ChatLocked: first message in Chat
   EmptyChat --> WorkspaceLocked: first message or first upload in Workspace
   ChatLocked --> [*]: delete chat

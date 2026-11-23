@@ -37,9 +37,11 @@ Normalized retrieval scores are not relevance probabilities.
 
 ## Chat and Workspace modes
 
-Each new chat shows a **Chat mode** choice on its empty screen: **Chat** (the default)
-or **Workspace**. The choice can change until you send the first message, then it is
-locked. Each mode remembers the model you last used in it. Workspace chats carry a
+Each new chat shows a **Chat mode** choice on its empty screen: **Chat** or **Workspace**.
+A new chat starts in the mode you last picked (Chat at first). The choice can change
+until you send the first message or attach a file, then it is locked. Each mode
+remembers the model you last used in it, and a new chat in the other mode switches to
+that model. Workspace chats carry a
 small folder mark in the sidebar.
 
 **Chat** has no tools. Its composer button reads **knowledge: off** or the library name

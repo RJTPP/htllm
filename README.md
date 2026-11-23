@@ -59,8 +59,8 @@ your local network.
 
 ## Chat and Workspace
 
-Each new chat starts as **Chat**. You can switch it to **Workspace** while it's empty; the
-choice locks at the first message.
+A new chat starts in the mode you last picked (**Chat** at first). You can switch it while
+it's empty; the choice locks at the first message.
 
 | | Chat | Workspace |
 | --- | --- | --- |
