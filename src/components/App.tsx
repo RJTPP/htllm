@@ -424,7 +424,9 @@ export default function App() {
     // Thread switching is locked during generation so the stream can't
     // bleed into another thread.
     if (generating) return;
-    if (activeThreadId && messages.length === 0) {
+    // Reuse the current chat only while it is a true draft: no messages and
+    // no attached files (files lock its mode, like a message does).
+    if (activeThreadId && messages.length === 0 && (await countWorkspaceFiles(activeThreadId)) === 0) {
       setPage('chat');
       return;
     }
@@ -659,7 +661,7 @@ export default function App() {
   // Selecting a model from an HTTP provider binds the active thread to that
   // provider — no download step, so the thread is immediately ready to chat.
   const handleSelectApiModel = useCallback(
-    (providerId: string, modelId: string) => {
+    (providerId: string, modelId: string, mode?: import('../providers/types').ThreadMode) => {
       // Update the global model (so per-session-off chats follow) AND the
       // current chat (its own binding when per-session is on, kept in
       // sync otherwise).
@@ -670,7 +672,8 @@ export default function App() {
       if (activeThreadId) {
         updateThread(activeThreadId, { providerId, modelId });
       }
-      void setModeDefault(activeThread?.mode ?? 'chat', providerId, modelId);
+      // A mode switch passes its new mode: the thread state here may still be the old one.
+      void setModeDefault(mode ?? activeThread?.mode ?? 'chat', providerId, modelId);
       setModal(null);
     },
     [activeThreadId, activeThread?.mode, updateThread],
@@ -687,7 +690,7 @@ export default function App() {
       const preferred = (await getModeDefaults())[mode];
       if (!preferred) return;
       if (preferred.providerId !== webllmProvider.id) {
-        handleSelectApiModel(preferred.providerId, preferred.modelId);
+        handleSelectApiModel(preferred.providerId, preferred.modelId, mode);
       } else if (loadedModelId === preferred.modelId) {
         // An in-browser model is reused only if it is already loaded.
         setLastProviderId(webllmProvider.id); setLastModelId(preferred.modelId);

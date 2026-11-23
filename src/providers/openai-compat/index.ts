@@ -225,6 +225,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
     this.baseURL = normalizeBaseURL(baseURL);
     this.detectedTools.clear();
     this.detectedContext.clear();
+    this.listedOnce = false;
     await setSetting(this.baseURLSettingKey, this.baseURL);
     if (this.spec.usesKey) {
       this.apiKey = apiKey.trim();
@@ -291,6 +292,9 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
         toolCalls: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : undefined,
       }));
     for (const m of data) if (typeof m.id === 'string' && Number.isSafeInteger(m.context_length) && m.context_length! > 0) this.detectedContext.set(m.id, m.context_length!);
+    // OpenRouter-style metadata feeds the same cache the send-time check reads.
+    for (const m of models) if (m.toolCalls !== undefined) this.detectedTools.set(m.id, m.toolCalls);
+    this.listedOnce = true;
     if (this.spec.toolProbe === 'lmstudio' && models[0]) await this.detectToolSupport(models[0].id);
     if (this.spec.toolProbe === 'ollama') {
       await Promise.all(models.slice(0, MAX_TOOL_PROBES).map((m) => this.detectToolSupport(m.id)));
@@ -300,6 +304,8 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
 
   /** Per-model tool support reported by the server, cached per model id. */
   private detectedTools = new Map<string, boolean>();
+  /** Whether /models has been read since the base URL was set. */
+  private listedOnce = false;
   /** Context the server accepts per model: LM Studio's loaded context, OpenRouter's maximum. */
   private detectedContext = new Map<string, number>();
 
@@ -324,8 +330,13 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
    */
   async detectToolSupport(modelId: string): Promise<boolean | undefined> {
     if (this.detectedTools.has(modelId)) return this.detectedTools.get(modelId);
+    // Generic endpoints: read /models once (supported_parameters), as the picker does.
+    if (!this.spec.toolProbe) {
+      if (!this.listedOnce) { this.listedOnce = true; await this.listModels().catch(() => undefined); }
+      return this.detectedTools.get(modelId);
+    }
     const origin = this.nativeOrigin();
-    if (!origin || !this.spec.toolProbe) return undefined;
+    if (!origin) return undefined;
     try {
       if (this.spec.toolProbe === 'lmstudio') {
         const res = await fetch(`${origin}/api/v0/models`);
