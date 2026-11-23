@@ -77,7 +77,8 @@ The repo goes public at release, and everything is ready and verified before the
    `docs/review/`. Then remove `docs/review/` (done: eight-file SDD v1.0.0; the review
    is in git history).
 3. Write a README (what, features, privacy, quick start, providers, limitations,
-   development). Polish `docs/guide.md` and `docs/compatibility.md`.
+   development) (done). Polish `docs/guide.md` and `docs/compatibility.md`: the
+   compatibility record is rewritten with the R4.3 smoke-test versions.
 
 **R4 · Release**
 1. Version 1.0.0 in `package.json`, `CHANGELOG.md`, `LICENSE` (MIT), and release notes
