@@ -15,6 +15,7 @@ import { useThreads } from '../hooks/useThreads';
 import { useFolders } from '../hooks/useFolders';
 import { useChat, type RagConfig } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
+import { useToolSupport } from '../hooks/useToolSupport';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
 import {
   getSetting,
@@ -204,7 +205,6 @@ export default function App() {
     activeThread?.libraryId === undefined
       ? defaultLibraryId ?? null
       : activeThread.libraryId;
-  const ragConfig: RagConfig = { libraryId: ragLibraryId, automaticRagEnabled: activeThread?.automaticRagEnabled, agentEnabled: activeThread?.agentEnabled, enabledToolIds: activeThread?.enabledToolIds };
 
   // Shared library list — the composer KnowledgeChip uses it for its
   // popover; the same store is updated from the Knowledge page so any
@@ -229,6 +229,9 @@ export default function App() {
   // WebLLM's active model is whatever's actually loaded (one at a time);
   // API threads use the resolved wanted model directly.
   const activeModelId = isApiThread ? wantedModelId : (loadedModelId ?? '');
+  const toolSupport = useToolSupport(activeProvider, activeModelId);
+  // Tools run only when the thread has them on AND the model may use them.
+  const ragConfig: RagConfig = { libraryId: ragLibraryId, automaticRagEnabled: activeThread?.automaticRagEnabled, agentEnabled: !!activeThread?.agentEnabled && toolSupport.support.supported, enabledToolIds: activeThread?.enabledToolIds };
 
   // D8 Part B — factory for Contextual Retrieval. Knowledge page passes
   // this into useKnowledge; when a library has opted in, the embed pipeline
@@ -812,7 +815,8 @@ export default function App() {
                 />
                 <ChatPage
                   onManageConnections={() => { setSettingsTab('tools'); setModal('settings'); }}
-                  toolsCapable={activeProvider.capabilities.toolCalls}
+                  toolsCapable={toolSupport.support.supported}
+                  toolsUnavailableReason={toolSupport.support.source === 'provider' ? 'Tools need an HTTP model that supports tool calling.' : 'This model reports no tool support. You can override this in the model picker.'}
                   onChangeAgent={(patch) => { if (activeThreadId) void updateThread(activeThreadId, patch); }}
                   thread={activeThread}
                   messages={messages}
@@ -878,6 +882,8 @@ export default function App() {
         onEvict={handleEvict}
         onParamsChange={setGlobalDefaults}
         defaultProviderId={activeProviderId}
+        toolOverrides={toolSupport.overrides}
+        onToolOverride={(providerId, modelId, value) => void toolSupport.setOverride(providerId, modelId, value)}
         apiModelId={isApiThread ? activeThread?.modelId ?? null : null}
         onSelectApiModel={handleSelectApiModel}
         onConfigureProvider={handleConfigureProvider}

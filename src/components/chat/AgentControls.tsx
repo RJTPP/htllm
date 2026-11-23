@@ -9,8 +9,8 @@ import { ToolApproval } from './ToolApproval';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
 import { LibraryPickerModal } from '../knowledge/LibraryPickerModal';
 
-export function AgentControls({ thread, libraryId, libraries, onSelectLibrary, onNewLibrary, capable, busy, onChange: saveChange, onManageConnections }: {
-  thread: Thread; libraryId: string | null; capable: boolean; busy: boolean;
+export function AgentControls({ thread, libraryId, libraries, onSelectLibrary, onNewLibrary, capable, unavailableReason, busy, onChange: saveChange, onManageConnections }: {
+  thread: Thread; libraryId: string | null; capable: boolean; unavailableReason?: string; busy: boolean;
   libraries: LibraryWithStats[]; onSelectLibrary: (id: string | null) => void; onNewLibrary: () => void;
   onChange: (patch: Partial<Thread>) => void; onManageConnections: () => void;
 }) {
@@ -45,7 +45,7 @@ export function AgentControls({ thread, libraryId, libraries, onSelectLibrary, o
   const available = connections.flatMap((connection) => connection.tools.map((_, index) => toolId(connection, index)));
   const selectedCount = enabled.filter((id) => available.includes(id)).length;
   const count = selectedCount + 3;
-  const reason = !capable ? 'Tools need an HTTP model that supports tool calling.' : '';
+  const reason = !capable ? unavailableReason ?? 'Tools need an HTTP model that supports tool calling.' : '';
   const library = libraries.find(({ lib }) => lib.id === libraryId)?.lib;
   const sectionTitle = 'text-[10px] uppercase tracking-widest text-mute';
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;

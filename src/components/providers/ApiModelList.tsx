@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { ModelInfo } from '../../providers/types';
 import type { OpenAICompatibleProvider } from '../../providers/openai-compat/index';
-import { Search, Check } from 'lucide-react';
+import { Search, Check, Wrench } from 'lucide-react';
+import { overrideKey } from '../../data/tool-overrides';
+import { nextOverride, resolveToolSupport } from '../../lib/tool-support';
 
 type LoadState =
   | { kind: 'unconfigured' }
@@ -14,12 +16,16 @@ export function ApiModelList({
   apiModelId,
   onSelect,
   onConfigure,
+  toolOverrides,
+  onToolOverride,
 }: {
   provider: OpenAICompatibleProvider;
   apiModelId: string | null;
   onSelect: (modelId: string) => void;
   /** Jump to Settings → Providers to configure this endpoint. */
   onConfigure: () => void;
+  toolOverrides: Record<string, boolean>;
+  onToolOverride: (providerId: string, modelId: string, value: boolean | undefined) => void;
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [search, setSearch] = useState('');
@@ -133,21 +139,38 @@ export function ApiModelList({
             <div className="space-y-1">
               {g.models.map((m) => {
                 const selected = m.id === apiModelId;
+                const tools = resolveToolSupport(true, m.toolCalls, toolOverrides[overrideKey(provider.id, m.id)]);
+                const toolsTitle = `${tools.supported ? 'Can use tools' : 'Cannot use tools'} (${
+                  tools.source === 'override' ? 'set by you' : tools.source === 'detected' ? 'reported by the server' : 'not reported; assumed'
+                }). Click to change.`;
                 return (
-                  <button
+                  <div
                     key={m.id}
-                    onClick={() => onSelect(m.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 border text-left transition-colors ${
+                    className={`w-full flex items-center border transition-colors ${
                       selected
                         ? 'border-accent/60 bg-accent/10'
                         : 'border-line bg-surface hover:border-line-hi'
                     }`}
                   >
-                    <span className="font-mono text-[12px] text-text truncate flex-1">
-                      {m.id}
-                    </span>
-                    {selected && <Check size={13} className="text-accent shrink-0" />}
-                  </button>
+                    <button onClick={() => onSelect(m.id)} className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 text-left">
+                      <span className="font-mono text-[12px] text-text truncate flex-1">
+                        {m.id}
+                      </span>
+                      {selected && <Check size={13} className="text-accent shrink-0" />}
+                    </button>
+                    <button
+                      onClick={() => onToolOverride(provider.id, m.id, nextOverride(tools, m.toolCalls))}
+                      title={toolsTitle}
+                      aria-label={`Tool support for ${m.id}: ${tools.supported ? 'tools' : 'no tools'}${tools.source === 'override' ? ' (set by you)' : ''}`}
+                      className={`shrink-0 mr-2 inline-flex items-center gap-1 px-1.5 py-0.5 border font-mono text-[10px] transition-colors ${
+                        tools.supported ? 'border-line text-mute hover:text-text' : 'border-line text-mute line-through hover:text-text'
+                      } ${tools.source === 'override' ? 'border-accent/50' : ''}`}
+                    >
+                      <Wrench size={10} />
+                      {tools.supported ? 'tools' : 'no tools'}
+                      {tools.source === 'assumed' && '?'}
+                    </button>
+                  </div>
                 );
               })}
             </div>

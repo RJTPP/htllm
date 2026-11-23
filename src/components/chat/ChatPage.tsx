@@ -52,10 +52,12 @@ export function ChatPage({
   slashCommands,
   onChangeAgent,
   toolsCapable,
+  toolsUnavailableReason,
   onManageConnections,
 }: {
   onChangeAgent: (patch: Partial<Thread>) => void;
   toolsCapable: boolean;
+  toolsUnavailableReason?: string;
   onManageConnections: () => void;
   thread: Thread | null;
   messages: Message[];
@@ -324,7 +326,7 @@ export function ChatPage({
         </button>
       )}
       <Composer
-        toolControls={thread && <AgentControls thread={thread} libraryId={ragLibraryId} libraries={libraries} onSelectLibrary={onChangeRagLibrary} onNewLibrary={onNewLibrary} capable={toolsCapable} busy={generating} onChange={onChangeAgent} onManageConnections={onManageConnections} />}
+        toolControls={thread && <AgentControls thread={thread} libraryId={ragLibraryId} libraries={libraries} onSelectLibrary={onChangeRagLibrary} onNewLibrary={onNewLibrary} capable={toolsCapable} unavailableReason={toolsUnavailableReason} busy={generating} onChange={onChangeAgent} onManageConnections={onManageConnections} />}
         modelReady={modelReady}
         model={loadedModelId}
         visionOk={visionOk}

@@ -14,6 +14,8 @@ export interface ChatProvider {
     vision: boolean;
   };
   listModels(): Promise<ModelInfo[]>;
+  /** Per-model tool support reported by the server; undefined when unknown. */
+  detectToolSupport?(modelId: string): Promise<boolean | undefined>;
   chat(params: ChatParams): AsyncIterable<ChatChunk>;
   unload?(): Promise<void>;
 }

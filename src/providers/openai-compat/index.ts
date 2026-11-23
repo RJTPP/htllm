@@ -29,6 +29,13 @@ export interface HttpProviderSpec {
   description: string;
   // Shown to the user when the endpoint needs CORS configured to be reachable.
   corsNote?: string;
+  /**
+   * Server-specific metadata endpoint that reports per-model tool support.
+   * 'lmstudio': GET <origin>/api/v0/models → capabilities includes 'tool_use'.
+   * 'ollama':   POST <origin>/api/show {model} → capabilities includes 'tools'.
+   * Generic endpoints rely on OpenRouter-style `supported_parameters` in /models.
+   */
+  toolProbe?: 'lmstudio' | 'ollama';
 }
 
 interface OpenAITextPart {
@@ -116,7 +123,12 @@ interface EmbeddingModelEntry {
   architecture?: {
     output_modalities?: string[];
   };
+  /** OpenRouter lists accepted request parameters; 'tools' means tool calling. */
+  supported_parameters?: string[];
 }
+
+/** Ollama's /api/show is one request per model; cap the fan-out. */
+const MAX_TOOL_PROBES = 40;
 
 /**
  * Known embedding model ids keyed by URL host. Used as a last-resort
@@ -209,6 +221,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
   /** Persists base URL + key. Key goes to the keys store, never logged. */
   async configure(baseURL: string, apiKey: string): Promise<void> {
     this.baseURL = normalizeBaseURL(baseURL);
+    this.detectedTools.clear();
     await setSetting(this.baseURLSettingKey, this.baseURL);
     if (this.spec.usesKey) {
       this.apiKey = apiKey.trim();
@@ -254,7 +267,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
     }
     const json = (await res.json()) as { data?: EmbeddingModelEntry[] };
     const data = Array.isArray(json.data) ? json.data : [];
-    return data
+    const models: ModelInfo[] = data
       .filter((m): m is EmbeddingModelEntry => typeof m.id === 'string')
       // Hide embedding models from the chat picker. Trust the provider tag
       // when present; otherwise fall back to the id pattern.
@@ -272,7 +285,53 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
         cached: true,
         vision: true,
         reasoning: detectReasoning(m.id),
+        toolCalls: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : undefined,
       }));
+    if (this.spec.toolProbe === 'lmstudio' && models[0]) await this.detectToolSupport(models[0].id);
+    if (this.spec.toolProbe === 'ollama') {
+      await Promise.all(models.slice(0, MAX_TOOL_PROBES).map((m) => this.detectToolSupport(m.id)));
+    }
+    return models.map((m) => ({ ...m, toolCalls: m.toolCalls ?? this.detectedTools.get(m.id) }));
+  }
+
+  /** Per-model tool support reported by the server, cached per model id. */
+  private detectedTools = new Map<string, boolean>();
+
+  /** Origin of a `/v1` base URL, for the servers' native metadata APIs. */
+  private nativeOrigin(): string | null {
+    const match = /^(.*)\/v1\/?$/.exec(this.baseURL);
+    return match ? match[1]! : null;
+  }
+
+  /**
+   * Whether the server says this model can call tools. Undefined when the
+   * server does not say (the caller then assumes it can, per D-23).
+   * Probe failures are not errors: metadata is a hint, never a gate.
+   */
+  async detectToolSupport(modelId: string): Promise<boolean | undefined> {
+    if (this.detectedTools.has(modelId)) return this.detectedTools.get(modelId);
+    const origin = this.nativeOrigin();
+    if (!origin || !this.spec.toolProbe) return undefined;
+    try {
+      if (this.spec.toolProbe === 'lmstudio') {
+        const res = await fetch(`${origin}/api/v0/models`);
+        if (!res.ok) return undefined;
+        const json = (await res.json()) as { data?: { id?: unknown; capabilities?: unknown }[] };
+        for (const entry of Array.isArray(json.data) ? json.data : []) {
+          if (typeof entry.id === 'string' && Array.isArray(entry.capabilities)) {
+            this.detectedTools.set(entry.id, entry.capabilities.includes('tool_use'));
+          }
+        }
+      } else {
+        const res = await fetch(`${origin}/api/show`, { method: 'POST', body: JSON.stringify({ model: modelId }) });
+        if (!res.ok) return undefined;
+        const json = (await res.json()) as { capabilities?: unknown };
+        if (Array.isArray(json.capabilities)) this.detectedTools.set(modelId, json.capabilities.includes('tools'));
+      }
+    } catch {
+      return undefined;
+    }
+    return this.detectedTools.get(modelId);
   }
 
   /**
