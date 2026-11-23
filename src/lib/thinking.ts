@@ -22,8 +22,8 @@ export interface ThinkingResult {
 const OPENER = /<(?:think|thought)(?:>|(?=\s))/g;
 const CLOSER = /<\/(?:think|thought)>/g;
 
-/** Character ranges of fenced code blocks, where tags are literal text. */
-function fencedRanges(content: string): [number, number][] {
+/** Character ranges of fenced code blocks and inline code spans, where tags are literal text. */
+function codeRanges(content: string): [number, number][] {
   const ranges: [number, number][] = [];
   const fence = /^ {0,3}(```|~~~)/gm;
   let open: number | null = null; let marker = '';
@@ -32,13 +32,15 @@ function fencedRanges(content: string): [number, number][] {
     else if (m[1] === marker) { ranges.push([open, m.index + m[0].length]); open = null; }
   }
   if (open !== null) ranges.push([open, content.length]);
+  const inFence = (at: number) => ranges.some(([a, b]) => at >= a && at < b);
+  for (const m of content.matchAll(/`[^`\n]+`/g)) if (!inFence(m.index)) ranges.push([m.index, m.index + m[0].length]);
   return ranges;
 }
 
 /**
  * Parse thinking blocks from assistant message content.
  *
- * Every `<think>`/`<thought>` block outside fenced code is reasoning, wherever it
+ * Every `<think>`/`<thought>` block outside code is reasoning, wherever it
  * appears: in a Workspace turn each tool round adds its own text, so blocks can
  * follow earlier reply text. Three states:
  * 1. Complete: blocks closed. Returns the joined reasoning and the rest as reply.
@@ -47,14 +49,18 @@ function fencedRanges(content: string): [number, number][] {
  * 3. No thinking: thinking=null, reply unchanged.
  */
 export function parseThinking(content: string): ThinkingResult {
-  const fenced = fencedRanges(content);
-  const inFence = (at: number) => fenced.some(([a, b]) => at >= a && at < b);
+  const code = codeRanges(content);
+  // A tag mentioned in prose ("wraps reasoning in <think> tags") follows a word and a
+  // space. Reasoning starts the reply or a line (indented or not), or follows the
+  // previous round's text directly.
+  const literal = (at: number) => code.some(([a, b]) => at >= a && at < b)
+    || /\S[ \t]+$/.test(content.slice(content.lastIndexOf('\n', at - 1) + 1, at));
   const parts: string[] = []; const reply: string[] = [];
   let cursor = 0; let isThinking = false;
   while (cursor < content.length) {
     OPENER.lastIndex = cursor;
     let open = OPENER.exec(content);
-    while (open && inFence(open.index)) { OPENER.lastIndex = open.index + 1; open = OPENER.exec(content); }
+    while (open && literal(open.index)) { OPENER.lastIndex = open.index + 1; open = OPENER.exec(content); }
     if (!open) break;
     reply.push(content.slice(cursor, open.index));
     const bodyStart = open.index + open[0].length;

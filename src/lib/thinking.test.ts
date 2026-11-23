@@ -25,6 +25,11 @@ describe('parseThinking', () => {
     const text = 'Example:\n```html\n<think>literal</think>\n```\nDone.';
     expect(parseThinking(text)).toEqual({ thinking: null, reply: text, isThinking: false });
   });
+  it('keeps tags mentioned in prose or inline code as text', () => {
+    for (const text of ['Qwen wraps reasoning in `<think>` tags.', 'Qwen wraps reasoning in <think> tags, closed by </think>.', 'Use <thought tags sparingly.'])
+      expect(parseThinking(text)).toEqual({ thinking: null, reply: text, isThinking: false });
+    expect(parseThinking('Line one.\n<think>plan</think>Answer.').reply).toBe('Line one.\nAnswer.');
+  });
   it('does not treat similar words or tags as thinking', () => {
     expect(parseThinking('A <thoughtful> reply about <thinking>.').thinking).toBeNull();
   });
