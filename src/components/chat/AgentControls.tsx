@@ -51,8 +51,8 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
   const enabled = thread.enabledToolIds ?? [];
   const available = connections.flatMap((connection) => connection.tools.map((_, index) => toolId(connection, index)));
   const selectedCount = enabled.filter((id) => available.includes(id)).length;
-  // query_csv appears only when a CSV is attached, so it is not counted here.
-  const count = selectedCount + WORKSPACE_TOOL_SUMMARY.length - 1;
+  // query_csv and run_js depend on the chat (a CSV, a larger context), so they are not counted.
+  const count = selectedCount + WORKSPACE_TOOL_SUMMARY.length - 2;
   const reason = workspace && !capable ? unavailableReason ?? 'Tools need an HTTP model that supports tool calling.' : '';
   const library = libraries.find(({ lib }) => lib.id === libraryId)?.lib;
   const attached = thread.attachedLibraryIds ?? [];

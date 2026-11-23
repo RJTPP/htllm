@@ -82,8 +82,11 @@ Each Workspace chat has its own folder of files:
 The model works through tools: `list_files`, `read_file` (by line range, continuing
 with `offset`), `search` (by meaning and keywords), `grep` (exact text or a simple
 pattern), `write_file`, `edit_file`, `copy_file` and `present_file`. It also has
-`calculate` for exact arithmetic, and `query_csv` when a CSV is attached and the model's
-context is larger than 8k. Lines longer than 400 characters are wrapped, so every part
+`calculate` for exact arithmetic, and, when the model's context is larger than 8k,
+`query_csv` (when a CSV is attached) and `run_js`. `run_js` runs a short JavaScript program in
+an isolated engine (QuickJS) inside a background worker. The script can read only the files it
+lists and can print results. It has no network, no file writing, no access to the page, and
+stops after 3 seconds. Lines longer than 400 characters are wrapped, so every part
 of a long PDF page can be read by line number. Uploads and library files can be cited;
 the model's notes cannot.
 
