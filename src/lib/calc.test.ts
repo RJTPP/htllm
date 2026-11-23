@@ -11,12 +11,13 @@ describe('calculate', () => {
     expect(calculate('round(10 / 3, 2)')).toBe(3.33);
     expect(calculate('max(3, sqrt(16), 2) + abs(-1)')).toBe(5);
     expect(calculate('15% * 200')).toBe(30);
-    expect(calculate('1,234 + 1')).toBe(1235);
+    // Commas separate arguments only: min(2,300) is two arguments, not 2300.
+    expect(calculate('min(2,300)')).toBe(2);
     expect(formatNumber(calculate('0.1 + 0.2'))).toBe('0.3');
     expect(calculate('2 * pi')).toBeCloseTo(6.283185, 5);
   });
   it('refuses code, unknown names and bad input instead of evaluating them', () => {
-    for (const bad of ['alert(1)', 'constructor', '1 +', '2 ** 3', '1 / 0', '5 % 0', '((((1', '"a"', 'sqrt(-1)', 'x']) {
+    for (const bad of ['1,234 + 1', 'alert(1)', 'constructor', '1 +', '2 ** 3', '1 / 0', '5 % 0', '((((1', '"a"', 'sqrt(-1)', 'x']) {
       expect(() => calculate(bad)).toThrow();
     }
     expect(() => calculate('('.repeat(200) + '1' + ')'.repeat(200))).toThrow('nested too deeply');

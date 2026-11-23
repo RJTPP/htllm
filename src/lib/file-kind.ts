@@ -15,11 +15,16 @@ export function extensionOf(path: string): string {
 }
 
 export function renderKind(path: string, mimeType?: string): { kind: RenderKind; language?: string } {
+  // A recognized extension wins over the stored MIME type (notes default to Markdown).
   const ext = extensionOf(path);
-  if (ext === 'md' || ext === 'markdown' || mimeType === 'text/markdown') return { kind: 'markdown' };
-  if (ext === 'csv' || mimeType === 'text/csv') return { kind: 'csv' };
-  if (ext === 'json' || mimeType === 'application/json') return { kind: 'json' };
+  if (ext === 'md' || ext === 'markdown') return { kind: 'markdown' };
+  if (ext === 'csv') return { kind: 'csv' };
+  if (ext === 'json') return { kind: 'json' };
   if (CODE[ext]) return { kind: 'code', language: CODE[ext] };
+  if (ext) return { kind: 'text' };
+  if (mimeType === 'text/markdown') return { kind: 'markdown' };
+  if (mimeType === 'text/csv') return { kind: 'csv' };
+  if (mimeType === 'application/json') return { kind: 'json' };
   return { kind: 'text' };
 }
 

@@ -191,6 +191,8 @@ export interface WorkspaceVersion {
   /** Assistant message whose turn made this version; undefined for user edits. */
   messageId?: string;
   change: 'create' | 'write' | 'edit' | 'copy' | 'user';
+  /** D-31: the source of a copy, kept with the version it produced. */
+  copiedFrom?: WorkspaceFile['copiedFrom'];
   createdAt: number;
 }
 

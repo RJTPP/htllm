@@ -807,6 +807,29 @@ test('new chat starts a fresh draft when the current empty chat already has file
   await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toBeVisible();
   await expect.poll(threadCount).toBe(before + 1);
 });
+test('the viewer renders a generated CSV note as a table and shows each version\'s own copy source', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction(['workspaceFiles', 'workspaceVersions'], 'readwrite');
+    tx.objectStore('workspaceFiles').put({ id: 'csv', threadId: 'fixture-thread', path: '/notes/totals.csv', kind: 'note', text: 'item,total\nTent,200', mimeType: 'text/markdown', version: 1, createdAt: 1, updatedAt: 1 });
+    tx.objectStore('workspaceVersions').put({ fileId: 'csv', threadId: 'fixture-thread', version: 1, text: 'item,total\nTent,200', change: 'create', createdAt: 1 });
+    tx.objectStore('workspaceFiles').put({ id: 'cp', threadId: 'fixture-thread', path: '/notes/quote.md', kind: 'note', text: 'from b', mimeType: 'text/markdown', version: 2, createdAt: 1, updatedAt: 2, copiedFrom: { path: '/uploads/b.txt', startLine: 5, endLine: 9 } });
+    tx.objectStore('workspaceVersions').put({ fileId: 'cp', threadId: 'fixture-thread', version: 1, text: 'from a', change: 'copy', createdAt: 1, copiedFrom: { path: '/uploads/a.txt', startLine: 1, endLine: 2 } });
+    tx.objectStore('workspaceVersions').put({ fileId: 'cp', threadId: 'fixture-thread', version: 2, text: 'from b', change: 'copy', createdAt: 2, copiedFrom: { path: '/uploads/b.txt', startLine: 5, endLine: 9 } });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Workspace files' }).click();
+  const panel = page.getByRole('complementary', { name: 'Workspace files' });
+  await panel.getByRole('button', { name: /totals\.csv/ }).click();
+  await expect(panel.getByRole('cell', { name: 'Tent' })).toBeVisible();
+  await panel.getByRole('button', { name: 'Back to files' }).click();
+  await panel.getByRole('button', { name: /quote\.md/ }).click();
+  await expect(panel.getByText('copied from /uploads/b.txt, lines 5–9')).toBeVisible();
+  await panel.getByRole('button', { name: 'Previous version' }).click();
+  await expect(panel.getByText('copied from /uploads/a.txt, lines 1–2')).toBeVisible();
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
