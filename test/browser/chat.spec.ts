@@ -276,7 +276,7 @@ test('HTTP chat works without WebGPU and sanitizes output under production CSP',
   page.on('console', (message) => { if (/violates.*Content Security Policy|EvalError/.test(message.text())) violations.push(message.text()); });
   await seed(page);
   await expect(page.getByText('GPU absent', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Chat, with optional document evidence.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Chat, or work with files.' })).toBeVisible();
   await expect(page.getByText(/HTTP models receive your messages/)).toBeVisible();
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   await composer.fill('Hello'); await composer.press('Enter');
@@ -291,6 +291,26 @@ test('HTTP chat works without WebGPU and sanitizes output under production CSP',
   expect(dialogs).toBe(0);
   await page.reload(); await expect(page.getByText('Fixture answer with safe text.')).toBeVisible();
   expect(dialogs).toBe(0);
+});
+test('new chats offer Chat or Workspace and lock the choice at the first message', async ({ page }) => {
+  await seed(page);
+  const modes = page.getByRole('radiogroup', { name: 'Chat mode' });
+  await expect(modes.getByRole('radio', { name: /^Chat/ })).toHaveAttribute('aria-checked', 'true');
+  await modes.getByRole('radio', { name: /^Workspace/ }).click();
+  await expect(modes.getByRole('radio', { name: /^Workspace/ })).toHaveAttribute('aria-checked', 'true');
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Hello'); await composer.press('Enter');
+  await expect(page.getByText('Fixture answer with safe text.')).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toHaveCount(0);
+  await expect(page.getByLabel('Workspace chat')).toBeVisible();
+  const mode = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const thread = await new Promise<{ mode?: string }>((resolve) => { const req = db.transaction('threads').objectStore('threads').get('fixture-thread'); req.onsuccess = () => resolve(req.result); });
+    db.close(); return thread.mode;
+  });
+  expect(mode).toBe('workspace');
+  await page.reload();
+  await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toHaveCount(0);
 });
 test('document agent runs a tool, persists its trail, and reloads safely', async ({ page }) => {
   await seed(page, true);
