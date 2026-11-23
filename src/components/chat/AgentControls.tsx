@@ -3,6 +3,7 @@ import { Wrench, Settings2, FileText, Pencil, BookOpen } from 'lucide-react';
 import type { Thread, McpConnection, ThreadMode } from '../../providers/types';
 import { listMcpConnections } from '../../data/mcp';
 import { toolId } from '../../services/mcp';
+import { WORKSPACE_TOOL_SUMMARY } from '../../services/workspace-tools';
 import { Modal } from '../ui/Modal';
 import { Switch } from '../ui/Switch';
 import { ToolApproval } from './ToolApproval';
@@ -48,7 +49,7 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
   const enabled = thread.enabledToolIds ?? [];
   const available = connections.flatMap((connection) => connection.tools.map((_, index) => toolId(connection, index)));
   const selectedCount = enabled.filter((id) => available.includes(id)).length;
-  const count = selectedCount + 3;
+  const count = selectedCount + WORKSPACE_TOOL_SUMMARY.length;
   const reason = workspace && !capable ? unavailableReason ?? 'Tools need an HTTP model that supports tool calling.' : '';
   const library = libraries.find(({ lib }) => lib.id === libraryId)?.lib;
   const sectionTitle = 'text-[10px] uppercase tracking-widest text-mute';
@@ -93,14 +94,14 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
           {tab === 'documents' && <section role="tabpanel" id="tools-panel-documents" aria-labelledby="tools-tab-documents" className="space-y-5">
             {libraryPicker('Attached library (read-only)')}
             <div className="space-y-2">
-              <h3 className={sectionTitle}>Built-in document tools</h3>
+              <h3 className={sectionTitle}>Built-in workspace tools</h3>
               <ul className="border border-line divide-y divide-line">
-                {([['list_documents', 'List files in the library'], ['search_knowledge', 'Find relevant passages'], ['read_document', 'Read a file, page by page']] as const).map(([name, description]) => (
+                {WORKSPACE_TOOL_SUMMARY.map(([name, description]) => (
                   <li key={name} className="flex gap-3 px-3 py-2"><code className="w-36 shrink-0 text-text">{name}</code><span className="text-mute">{description}</span></li>
                 ))}
               </ul>
               <p className="flex items-center gap-1.5 text-mute"><FileText size={12} className="shrink-0" />
-                {libraryId ? <span>3 built-in read tools available</span> : <><span>No library selected</span><span>· these tools return no evidence.</span></>}
+                {library ? <span>Library mounted read-only at /library/{library.name.replace(/[\\/]/g, '-')}</span> : <><span>No library attached</span><span>· the model works with uploads and notes only.</span></>}
               </p>
             </div>
           </section>}
