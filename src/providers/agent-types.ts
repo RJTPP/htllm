@@ -13,6 +13,9 @@ export interface SourceCitation {
   headingPath?: string;
   pageStart?: number;
   pageEnd?: number;
+  /** Line range of a Workspace read (1-based, inclusive). */
+  lineStart?: number;
+  lineEnd?: number;
 }
 export interface AgentEvent {
   id: string;
