@@ -57,7 +57,7 @@ The repo goes public at release, and everything is ready and verified before the
    - an accurate editable default;
    - an always-added line with today's date;
    - in Chat mode, the note that the chat has no tools or file access.
-2. "Add to library": send an upload to a Knowledge library, indexing the stored text and
+2. "Add to library" (done): send an upload to a Knowledge library, indexing the stored text and
    page offsets so PDF pages survive.
 3. Narrow windows: fix the composer squeeze below about 600 px. Screenshots and a proposal
    come first.
