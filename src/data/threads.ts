@@ -35,3 +35,19 @@ export async function deleteThread(id: string): Promise<void> {
   const db = await getDb();
   await db.delete('threads', id);
 }
+
+/** Delete a thread with its messages and summaries in one transaction, so a
+ *  failure part-way cannot leave orphaned rows or a thread without history. */
+export async function deleteThreadCascade(id: string): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(['threads', 'messages', 'summaries'], 'readwrite');
+  for (const store of ['messages', 'summaries'] as const) {
+    let cursor = await tx.objectStore(store).index('byThread').openCursor(IDBKeyRange.only(id));
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
+    }
+  }
+  await tx.objectStore('threads').delete(id);
+  await tx.done;
+}

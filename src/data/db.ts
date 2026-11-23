@@ -69,6 +69,25 @@ export interface HtllmDB {
   };
 }
 
+/** Every IndexedDB object store, in display order. Reset, storage stats and backups use this list. */
+export const STORE_NAMES = [
+  'threads',
+  'messages',
+  'keys',
+  'settings',
+  'promptTemplates',
+  'folders',
+  'libraries',
+  'documents',
+  'chunks',
+  'parents',
+  'embeddings',
+  'summaries',
+  'mcpConnections',
+] as const;
+
+export type StoreName = (typeof STORE_NAMES)[number];
+
 const DB_NAME = 'htllm';
 const DB_VERSION = 9;
 

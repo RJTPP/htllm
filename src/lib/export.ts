@@ -143,7 +143,19 @@ export function validateImport(json: string): ExportData {
       }
       if (store === 'threads') {
         if (row.automaticRagEnabled !== undefined && typeof row.automaticRagEnabled !== 'boolean') throw new Error('Invalid automatic RAG setting');
-        if (row.agentEnabled !== undefined && typeof row.agentEnabled !== 'boolean') throw new Error('Invalid Agent setting');
+        if (row.agentEnabled !== undefined && typeof row.agentEnabled !== 'boolean') throw new Error('Invalid Tools setting');
+        for (const key of ['systemPrompt', 'folderId', 'toolModelKey']) {
+          if (row[key] !== undefined && typeof row[key] !== 'string') throw new Error(`Invalid thread ${key}`);
+        }
+        if (row.ragEnabled !== undefined && typeof row.ragEnabled !== 'boolean') throw new Error('Invalid thread ragEnabled');
+        if (row.modelParams !== undefined) {
+          const params = row.modelParams as Record<string, unknown>;
+          if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('Invalid model parameters');
+          for (const key of ['temperature', 'topP', 'maxTokens', 'presencePenalty', 'frequencyPenalty', 'contextWindow']) {
+            if (params[key] !== undefined && (typeof params[key] !== 'number' || !Number.isFinite(params[key]))) throw new Error('Invalid model parameters');
+          }
+          if (params.reasoningEffort !== undefined && typeof params.reasoningEffort !== 'string') throw new Error('Invalid model parameters');
+        }
         if (row.libraryId != null && typeof row.libraryId !== 'string') throw new Error('Invalid library selection');
         if (row.enabledToolIds !== undefined && (!Array.isArray(row.enabledToolIds) || !row.enabledToolIds.every((id: unknown) => typeof id === 'string'))) throw new Error('Invalid tool selections');
       }

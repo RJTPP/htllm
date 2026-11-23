@@ -3,11 +3,9 @@ import type { Thread } from '../providers/types';
 import {
   createThread,
   listThreads,
-  deleteThread as deleteThreadFromDb,
+  deleteThreadCascade,
   updateThread as updateThreadInDb,
 } from '../data/threads';
-import { deleteMessagesForThread } from '../data/messages';
-import { deleteSummariesForThread } from '../data/summaries';
 
 export function useThreads() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -48,9 +46,7 @@ export function useThreads() {
 
   const remove = useCallback(
     async (id: string) => {
-      await deleteMessagesForThread(id);
-      await deleteSummariesForThread(id);
-      await deleteThreadFromDb(id);
+      await deleteThreadCascade(id);
       setThreads((prev) => prev.filter((t) => t.id !== id));
       if (activeThreadId === id) {
         const remaining = threads.filter((t) => t.id !== id);
