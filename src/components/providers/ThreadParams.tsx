@@ -10,6 +10,7 @@ export function ThreadParams({
   defaults,
   reasoningCapability,
   contextMin,
+  serverContext,
   onApply,
   onReset,
 }: {
@@ -19,6 +20,8 @@ export function ThreadParams({
   defaults: ModelParams;
   reasoningCapability?: ReasoningCapability;
   contextMin?: number;
+  /** Context the server reports for the active model. */
+  serverContext?: number;
   onApply: (next: ModelParams) => void;
   onReset: () => void;
 }) {
@@ -58,6 +61,7 @@ export function ThreadParams({
           onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
           reasoningCapability={reasoningCapability ?? null}
           contextMin={contextMin}
+          serverContext={serverContext}
         />
         <div className="flex items-center justify-between border-t border-line pt-3">
           <span className="font-mono text-[10px] text-mute">

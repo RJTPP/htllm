@@ -16,6 +16,7 @@ import { useFolders } from '../hooks/useFolders';
 import { useChat, type RagConfig } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
 import { useToolSupport } from '../hooks/useToolSupport';
+import { useServerContext } from '../hooks/useServerContext';
 import { getModeDefaults, setModeDefault } from '../data/mode-defaults';
 import { countWorkspaceFiles } from '../data/workspace';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
@@ -292,10 +293,13 @@ export default function App() {
   // When a thread hasn't been customized, the reasoning effort default
   // depends on model capability: 'low' for effort models, 'off' for toggle
   // models. Customized threads keep their explicit stored value.
+  // A server that reports the context it accepts caps the setting: a request
+  // larger than the loaded context would fail anyway.
+  const serverContext = useServerContext(activeProvider, activeModelId);
   const params = useMemo<ModelParams>(() => {
-    if (activeThread?.modelParams) return rawParams;
-    return { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
-  }, [rawParams, activeThread?.modelParams, activeReasoningCapability]);
+    const base = activeThread?.modelParams ? rawParams : { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
+    return serverContext && base.contextWindow > serverContext ? { ...base, contextWindow: serverContext } : base;
+  }, [rawParams, activeThread?.modelParams, activeReasoningCapability, serverContext]);
 
   const {
     messages,
@@ -965,6 +969,7 @@ export default function App() {
         defaults={globalDefaults}
         reasoningCapability={activeReasoningCapability}
         contextMin={compressionMode === 'auto' ? MIN_AUTO_COMPACT_CONTEXT_TOKENS : undefined}
+        serverContext={serverContext}
         onApply={handleThreadParamsApply}
         onReset={handleThreadParamsReset}
       />

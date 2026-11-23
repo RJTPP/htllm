@@ -81,3 +81,16 @@ it('probes Ollama per model and treats probe failures as unknown', async () => {
   expect((await provider.listModels()).map((m) => m.toolCalls)).toEqual([true, false, undefined]);
   expect(await provider.detectToolSupport('qwen')).toBe(true);
 });
+it('reports LM Studio loaded context and OpenRouter maximum context per model', async () => {
+  vi.stubGlobal('fetch', async (url: string) => url.endsWith('/api/v0/models')
+    ? json({ data: [{ id: 'gemma', capabilities: ['tool_use'], state: 'loaded', loaded_context_length: 16384, max_context_length: 262144 }, { id: 'idle', capabilities: [], state: 'not-loaded', max_context_length: 8192 }] })
+    : json({ data: [{ id: 'gemma' }, { id: 'idle' }] }));
+  const lm = probeProvider('lmstudio');
+  expect(await lm.detectContextWindow('gemma')).toBe(16384);
+  expect(await lm.detectContextWindow('idle')).toBeUndefined();
+  vi.stubGlobal('fetch', async () => json({ data: [{ id: 'big', context_length: 131072 }, { id: 'none' }] }));
+  const router = probeProvider();
+  await router.listModels();
+  expect(await router.detectContextWindow('big')).toBe(131072);
+  expect(await router.detectContextWindow('none')).toBeUndefined();
+});
