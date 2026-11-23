@@ -8,8 +8,12 @@ through OpenAI-compatible HTTP endpoints the user configures (Ollama, LM Studio,
 v1 adds a Knowledge library (PDF/TXT/MD, cited RAG), document tools, and MCP tools with
 user approval.
 
-The current plan of record is [docs/review/2026-11-23.md](docs/review/2026-11-23.md),
-which also holds the product decisions D-1 to D-31 (Chat vs Workspace modes).
+Docs:
+- [docs/roadmap.md](docs/roadmap.md): the plan to 1.0.0 and the release gates.
+- [docs/guide.md](docs/guide.md): how to use the app.
+- [docs/compatibility.md](docs/compatibility.md): what has been tested, with versions.
+- [docs/review/2026-11-23.md](docs/review/2026-11-23.md): product decisions D-1 to D-31
+  (Chat vs Workspace modes). It moves into the SDD before 1.0.0.
 
 ## Hard Constraints (load-bearing)
 
@@ -36,15 +40,14 @@ they are fixed rather than copied.
 
 ## Don't
 
-- Don't edit `prototype/index.html` — it's the frozen behavior reference.
 - Don't add native OpenAI or Anthropic providers — their APIs don't allow browser CORS.
   The generic OpenAI-compatible provider covers CORS-enabled endpoints.
 - Don't introduce Redux/Zustand/Jotai, a DI container, an event bus or repository base
   classes without concrete need.
 - Don't use version ranges in dependencies — pin exact versions. Ask before adding a
   runtime dependency.
-- Don't trust `docs/sdd/` for current behavior: it still describes Phase 2 and is
-  reconciled after the Workspace work.
+- Don't trust `docs/sdd/` for current behavior until it is updated (roadmap R3): it still
+  describes Phase 2.
 
 ## Commands
 
@@ -98,5 +101,6 @@ Dark-by-default. Colors: bg #0a0a0a, surface #141414, line #262626, text #e5e5e5
 
 ## SDD
 
-Specification at `docs/sdd/` (IEEE 1016-inspired, 16 sections). Stale since May 2026; see
-the plan of record above for current design.
+Specification at `docs/sdd/` (IEEE 1016-inspired, 16 sections). It is stale since May 2026
+until the R3 update. Until then, the decisions document above and the code are the source of
+truth.
