@@ -7,6 +7,8 @@ import { getLibrary } from '../data/libraries';
 import { retrieve } from './retrieval';
 import { normalizeWorkspacePath } from '../lib/workspace-path';
 import { grepFiles, lexicalSearch, lineSpans, pageAt, readWindow, snippet, type Band, type Pages } from '../lib/workspace-text';
+import { calculate, formatNumber } from '../lib/calc';
+import { queryCsv, type CsvQuery } from '../lib/csv-query';
 
 export interface WorkspaceContext {
   threadId: string;
@@ -74,6 +76,8 @@ export const WORKSPACE_TOOL_SUMMARY: readonly (readonly [string, string])[] = [
   ['edit_file', 'Change exact text in a note'],
   ['copy_file', 'Copy a file or lines into a note'],
   ['present_file', 'Hand a finished file to you'],
+  ['calculate', 'Exact arithmetic'],
+  ['query_csv', 'Filter and total a CSV (when one is attached)'],
 ];
 
 /** D-18: uploads and library documents are evidence; the model's notes are not. */
@@ -340,9 +344,42 @@ export function workspaceWriteTools(ctx: WorkspaceContext): ExecutableTool[] {
   ];
 }
 
-/** All eight built-in Workspace tools. */
-export function workspaceTools(ctx: WorkspaceContext): ExecutableTool[] {
-  return [...workspaceReadTools(ctx), ...workspaceWriteTools(ctx)];
+/** D-6 functions: arithmetic always; CSV queries when a CSV exists and the context allows. */
+export function workspaceFunctionTools(ctx: WorkspaceContext, opts: { csv: boolean }): ExecutableTool[] {
+  const tools: ExecutableTool[] = [{
+    name: 'calculate',
+    description: 'Evaluate arithmetic exactly: + - * / % ^, parentheses, sqrt abs round(x,digits) min max floor ceil ln log exp, pi, e. Use instead of mental math.',
+    parameters: object({ expression: { type: 'string', minLength: 1, maxLength: 500 } }, ['expression']),
+    execute: async (args) => ({ text: `${String(args.expression).trim()} = ${formatNumber(calculate(String(args.expression)))}` }),
+  }];
+  if (opts.csv) tools.push({
+    name: 'query_csv',
+    description: 'Filter, group, aggregate and sort a CSV/TSV file (first row is the header). Returns a Markdown table.',
+    parameters: object({
+      path: { type: 'string' },
+      columns: { type: 'array', items: { type: 'string' } },
+      filter: { type: 'array', items: object({ column: { type: 'string' }, op: { enum: ['=', '!=', '>', '<', '>=', '<=', 'contains'] }, value: { type: ['string', 'number'] } }, ['column', 'op', 'value']) },
+      group_by: { type: 'string' },
+      aggregate: object({ fn: { enum: ['count', 'sum', 'avg', 'min', 'max'] }, column: { type: 'string' } }, ['fn']),
+      sort: object({ column: { type: 'string' }, desc: { type: 'boolean' } }, ['column']),
+      limit: { type: 'integer', minimum: 1, maximum: 200 },
+    }, ['path']),
+    execute: async (args, _signal, maxChars) => {
+      const file = findMounted(await mountWorkspace(ctx), String(args.path));
+      const ext = file.path.split('.').pop()?.toLowerCase();
+      if (ext !== 'csv' && ext !== 'tsv') throw new Error(`${file.path} is not a CSV or TSV file.`);
+      const { table, matched, total } = queryCsv(file.text, args as CsvQuery, ext === 'tsv' ? '\t' : undefined);
+      const text = `${file.path}: ${matched} of ${total} rows matched.\n${table}`;
+      const cap = Math.min(ctx.band.chars, maxChars ?? ctx.band.chars);
+      return { text: text.length > cap ? `${text.slice(0, cap - 80)}\n(Table cut to fit; lower limit or select fewer columns.)` : text };
+    },
+  });
+  return tools;
+}
+
+/** The built-in Workspace tools: eight file tools plus the D-6 functions. */
+export function workspaceTools(ctx: WorkspaceContext, opts: { csv?: boolean } = {}): ExecutableTool[] {
+  return [...workspaceReadTools(ctx), ...workspaceWriteTools(ctx), ...workspaceFunctionTools(ctx, { csv: !!opts.csv })];
 }
 
 /** Short listing of the workspace for the system prompt, so the model knows what exists. */
@@ -351,4 +388,9 @@ export async function workspaceSummary(ctx: Pick<WorkspaceContext, 'threadId' | 
   if (!files.length) return 'Files right now: none. The user can attach files; you can write notes under /notes.';
   const shown = files.slice(0, max).map((f) => `- ${f.path} (${f.kind === 'note' ? `note v${f.version}` : `${f.kind}, read-only`}, ${fmtSize(f.text.length)})`);
   return ['Files right now:', ...shown, ...(files.length > max ? [`- …and ${files.length - max} more (use list_files).`] : [])].join('\n');
+}
+
+/** Whether the workspace holds a CSV/TSV, so query_csv is worth offering. */
+export async function hasCsv(threadId: string, libraryId: string | null): Promise<boolean> {
+  return (await mountWorkspace({ threadId, libraryId })).some((f) => /\.(csv|tsv)$/i.test(f.path));
 }

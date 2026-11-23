@@ -13,7 +13,7 @@ import { stripThinking } from '../lib/thinking';
 import { retrieve } from '../services/retrieval';
 import { stripEchoedToolData, stubOldActivity, withActivityContext } from '../lib/message-context';
 import { executeChat } from '../services/agent';
-import { workspaceSummary, workspaceTools } from '../services/workspace-tools';
+import { hasCsv, workspaceSummary, workspaceTools } from '../services/workspace-tools';
 import { contextBand } from '../lib/workspace-text';
 import { externalTools } from '../services/mcp';
 import { approveTool } from '../services/approvals';
@@ -610,7 +610,7 @@ export function useChat(
           if (!provider.capabilities.toolCalls) throw new Error('Tool use requires an HTTP model.');
           const external = await externalTools(rag?.enabledToolIds ?? [], controller.signal);
           closeTools = external.close;
-          tools = [...workspaceTools({ threadId, libraryId: rag?.libraryId ?? null, band, messageId: assistantMsg.id, readVersions: new Map() }), ...external.tools];
+          tools = [...workspaceTools({ threadId, libraryId: rag?.libraryId ?? null, band, messageId: assistantMsg.id, readVersions: new Map() }, { csv: band.chars > 3000 && await hasCsv(threadId, rag?.libraryId ?? null) }), ...external.tools];
           sendMessages.unshift({ id: '__agent', threadId, role: 'system', createdAt: Date.now(), content: `${WORKSPACE_PROMPT}\n\n${await workspaceSummary({ threadId, libraryId: rag?.libraryId ?? null })}` });
         }
         await updateMessage(assistantMsg.id, { runStatus: 'running', citations, retrievalStatus });
