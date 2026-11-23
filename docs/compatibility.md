@@ -1,4 +1,4 @@
-# v1 compatibility and qualification
+# Compatibility
 
 Checked 2026-10-03. These are local implementation results, not a published release.
 Implementation checkpoint: `0cf20dc`, based on `dev` merge `24c1177` (PR #28).
@@ -39,7 +39,7 @@ Record exact model/runtime versions and three-run answer/citation rubric scores
 before promoting v1. An SDK supporting a protocol version is not evidence that
 every server/model combination has passed interoperability tests.
 
-The first [reference-model evaluation](v1-live-evaluation.md) completed 90 answer
-runs: document evidence 45/45, absence handling 15/15, research review RAG 9/15
-versus Agent 12/15. Exact runtime and the remaining compatibility gates are still
-pending; this is not a release approval.
+The first reference-model evaluation (2026-10-03, `qwen3.6-35b-a3b` on an LM Studio
+proxy, v1 document tools) completed 90 answer runs: document evidence 45/45, absence
+handling 15/15, research review RAG 9/15 versus Agent 12/15. It predates the Workspace
+tools; the 1.0.0 smoke test results will be recorded here.

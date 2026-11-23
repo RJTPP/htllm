@@ -1,7 +1,6 @@
-# Using the v1 implementation
+# Using htllm
 
-This implementation is under qualification, not a released v1.
-See [compatibility](v1-compatibility.md) for what has actually been tested.
+See [compatibility](compatibility.md) for what has actually been tested.
 
 ## Model and chat
 
