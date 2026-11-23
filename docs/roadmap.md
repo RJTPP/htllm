@@ -82,7 +82,7 @@ The repo goes public at release, and everything is ready and verified before the
    compatibility record is rewritten with the R4.3 smoke-test versions.
 
 **R4 · Release**
-1. (Done; set the changelog date when tagging.) Version 1.0.0 in `package.json`,
+1. (Done; released 2026-11-23.) Version 1.0.0 in `package.json`,
    `CHANGELOG.md`, `LICENSE` (MIT, added by the owner), and release notes with known
    limitations (`docs/releases/v1.0.0.md`, which the release workflow uses as the
    release text).
