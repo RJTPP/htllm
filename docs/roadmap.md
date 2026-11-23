@@ -29,6 +29,52 @@ and unverified gates are tracked in [v1-progress.md](v1-progress.md).
    three reference-model runs, live provider/MCP checks, browser compatibility,
    onboarding, design-document reconciliation, and versioned release packaging.
 
+## Plan to 1.0.0 (agreed 2026-11-23)
+
+Built on the integration branch `wip/release`. Each step is a PR into it, and one final PR
+goes to `dev`. Release form: a tagged GitHub release (`v1.0.0`) with no hosting. License: MIT.
+
+**R1 · Clean the repo** (git history keeps everything removed)
+1. Remove stale and prototype material:
+   - `prototype/`
+   - `docs/archive/`
+   - `docs/architecture-review.md`, `docs/phase-3-part-2-plan.md`
+   - `docs/v1-progress.md`, `docs/v1-live-evaluation.md`
+   - `.agent-doc-skills/`, `skills-lock.json`
+2. Rename `docs/v1-guide.md` → `docs/guide.md` and `docs/v1-compatibility.md` →
+   `docs/compatibility.md`, and fix links.
+3. Update `CLAUDE.md`: doc pointers, and drop the prototype rule.
+
+**R2 · Product work**
+1. System prompt:
+   - an accurate editable default;
+   - an always-added line with today's date;
+   - in Chat mode, the note that the chat has no tools or file access.
+2. "Add to library": send an upload to a Knowledge library, indexing the stored text and
+   page offsets so PDF pages survive.
+3. Narrow windows: fix the composer squeeze below about 600 px. Screenshots and a proposal
+   come first.
+4. QuickJS `run_js`: design it with the user (sandbox limits, file access, dependency
+   approval), then build it.
+5. Icons: list every placeholder (favicon, wordmark, unknown-brand square, assistant
+   avatar), show two or three concepts, apply the one chosen.
+
+**R3 · Docs and quality**
+1. Move the live eval to the Workspace tools, and run one baseline on the available model.
+2. SDD: drift check, then update in place, absorbing the decisions and design from
+   `docs/review/`. Then remove `docs/review/`.
+3. Write a README (what, features, privacy, quick start, providers, limitations,
+   development). Polish `docs/guide.md` and `docs/compatibility.md`.
+
+**R4 · Release**
+1. Version 1.0.0 in `package.json`, `CHANGELOG.md`, `LICENSE` (MIT), and release notes
+   with known limitations.
+2. Live smoke test against the gates below. Claude runs the LM Studio Chat and Workspace
+   checks; the user runs one real MCP tool and one WebLLM chat. Versions are recorded in
+   `docs/compatibility.md`.
+3. Final PR `wip/release` → `dev` (the user reviews and rebase-merges), then `dev` →
+   `main`, the `v1.0.0` tag, and a GitHub release.
+
 ## Release gates (revised 2026-11-23)
 
 Revised with the user after Chat/Workspace replaced the RAG-versus-agent comparison:
