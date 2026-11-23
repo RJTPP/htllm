@@ -1,5 +1,10 @@
 # htllm v1 — Chat, simple RAG, optional agents
 
+> **Status (2026-11-23):** this is the v1 plan and gate list. The "Agent toggle" became
+> the Chat/Workspace modes; the current plan and progress are in
+> [review/2026-11-23.md](review/2026-11-23.md). The release gates below still apply, with
+> "Agent" read as "Workspace".
+
 The delivery scope is a static browser application with IndexedDB persistence,
 one optional document library per conversation, and an Agent toggle that defaults
 off. HTTP models may use tools; WebLLM retains chat and RAG. Implementation status

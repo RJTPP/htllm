@@ -28,6 +28,12 @@ This makes 90 answer runs: three repetitions of ordinary RAG for all 25 language
 tasks, plus Agent mode for the five research tasks. Tool iterations can add model
 requests. It uses synthetic documents only, a 180-second per-answer timeout,
 and the normal eight-call agent limit. It does not invoke external MCP tools.
+
+Note (2026-11-23): the live harness still drives the v1 document tools
+(`list_documents`, `search_knowledge`, `read_document`) with the eight-call limit.
+The app's Workspace mode now uses the file tools and context-scaled limits instead, so
+re-measuring research quality for Workspace needs the harness moved to
+`workspaceTools`. The October 12/15 result was measured with the old tools.
 The fixture documents are short; this does not qualify an embedding model's
 maximum input length or long-document ingestion.
 It records answers, supplied citations, activity, latency, and usage in the
