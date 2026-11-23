@@ -6,7 +6,7 @@ import type { EmbeddingProvider } from '../providers/types';
 // Deterministic lexical vectors: a test fixture, not an embedding model.
 const vocab = ['alpha', 'beta', 'gamma', 'delta'];
 const vector = (text: string) => vocab.map((word) => (text.toLowerCase().match(new RegExp(`\\b${word}\\b`, 'g')) ?? []).length);
-const embedding: EmbeddingProvider = { id: 'fixture', embed: async ({ inputs }) => ({ modelId: 'lex', dim: vocab.length, vectors: inputs.map((t) => Float32Array.from(vector(t))) }), listEmbeddingModels: async () => [] } as unknown as EmbeddingProvider;
+const embedding: EmbeddingProvider = { id: 'fixture', embed: async ({ inputs }: { inputs: string[] }) => ({ modelId: 'lex', dim: vocab.length, vectors: inputs.map((t: string) => Float32Array.from(vector(t))) }), listEmbeddingModels: async () => [] } as unknown as EmbeddingProvider;
 let provider: EmbeddingProvider | undefined = embedding;
 vi.mock('../providers/registry', () => ({ getEmbeddingProvider: () => provider }));
 const { retrieve } = await import('./retrieval');
