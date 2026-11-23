@@ -17,6 +17,7 @@ import { MessageBody } from '../chat/MessageBody';
 import { useLibraries } from '../../hooks/useLibraries';
 import { LibraryPickerModal } from '../knowledge/LibraryPickerModal';
 import { Pencil, AlertTriangle } from 'lucide-react';
+import { appPath } from '../../lib/base-path';
 
 const THEME_PREVIEW_SAMPLE = [
   '```typescript',
@@ -294,8 +295,8 @@ export function SettingsModal({
 
   const doReset = async () => {
     await resetEverything();
-    // resetEverything() clears the first-run flag, so '/' shows the landing.
-    window.location.href = '/';
+    // resetEverything() clears the first-run flag, so the site root shows the landing.
+    window.location.href = appPath();
   };
 
   return (

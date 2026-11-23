@@ -12,7 +12,7 @@
 | RK-8 | **Upstream API drift** (web-llm worker protocol, MCP SDK, server metadata fields). | Medium | Medium | Exact version pins; detection treats unknown metadata as "unknown", not "no"; a browser suite on every change. | Maintainer |
 | RK-9 | **Large `App.tsx` and `useChat`** slow changes and invite regressions. | Medium | Medium | New logic goes into services and small hooks; browser scenarios cover the main flows. A refactor only with a concrete need. | Maintainer |
 | RK-10 | **Unverified backends and browsers** (Ollama, vLLM, cloud, Firefox, Safari) behave differently. | Medium | Medium | The release notes state they are expected to work but not verified; tracked after release. | Owner |
-| RK-11 | **Base path mistakes** on Pages break workers, wasm or links under `/htllm/`. | Medium | High at release | Roadmap R4.2 runs the build and browser suite under the base path before the first deploy. | Maintainer |
+| RK-11 | **Base path mistakes** on Pages break workers, wasm or links under `/htllm/`. | Low | High at release | The full browser suite runs under `/htllm/` locally and in the release workflow, and checks that requests stay under the base. The WebLLM worker is only checked for its URL, because the suite has no WebGPU. | Maintainer |
 
 ## 10. Summary
 
@@ -38,7 +38,7 @@ The design depends on a few load-bearing rules:
 
 **Open items before and after release:**
 - **Roadmap R4, before release:**
-  - the `/htllm/` base path and the Pages deploy and zip workflow;
+  - the first tagged run of the release workflow (Pages deploy and zip);
   - the live smoke tests from the Pages origin;
   - version 1.0.0, the changelog and release notes;
   - re-pointing this document's baseline after the rebase merge.

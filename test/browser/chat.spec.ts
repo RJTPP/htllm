@@ -287,7 +287,7 @@ async function seed(page: Page, agent = false) {
       : { choices: [{ delta: { content: 'Fixture answer with <img src=x onerror=alert(1)> safe text.' }, finish_reason: 'stop' }] };
     await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify(result)}\n\ndata: [DONE]\n\n` });
   });
-  await page.goto('/app');
+  await page.goto('app');
   await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).some((db) => db.name === 'htllm' && (db.version ?? 0) >= 10))).toBe(true);
   await page.evaluate(async (enableAgent) => {
     const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
@@ -301,6 +301,20 @@ async function seed(page: Page, agent = false) {
   await page.reload();
   await expect(page.getByPlaceholder('Type a message — / for commands & templates, Enter to send')).toBeVisible();
 }
+test('the landing page opens the app under the site base path, and every request stays under it', async ({ page, baseURL }) => {
+  const base = new URL(baseURL!);
+  const outside: string[] = [];
+  page.on('request', (request) => { const url = new URL(request.url()); if (url.origin === base.origin && !url.pathname.startsWith(base.pathname)) outside.push(url.pathname); });
+  await page.goto('./');
+  await page.getByRole('button', { name: 'start →' }).click();
+  await expect(page).toHaveURL(`${baseURL}app`);
+  await expect(page.getByRole('heading', { name: 'Chat, or work with files.' })).toBeVisible();
+  // A returning visitor goes straight from the landing page to the app.
+  await page.goto('./');
+  await expect(page).toHaveURL(`${baseURL}app`);
+  await expect(page.getByRole('heading', { name: 'Chat, or work with files.' })).toBeVisible();
+  expect(outside).toEqual([]);
+});
 test('HTTP chat works without WebGPU and sanitizes output under production CSP', async ({ page }) => {
   const violations: string[] = [];
   let dialogs = 0;
