@@ -12,7 +12,7 @@ import { stripThinking } from '../lib/thinking';
 import { retrieve } from '../services/retrieval';
 import { stripEchoedToolData, stubOldActivity, withActivityContext } from '../lib/message-context';
 import { executeChat } from '../services/agent';
-import { workspaceTools } from '../services/workspace-tools';
+import { workspaceSummary, workspaceTools } from '../services/workspace-tools';
 import { contextBand } from '../lib/workspace-text';
 import { externalTools } from '../services/mcp';
 import { approveTool } from '../services/approvals';
@@ -606,7 +606,7 @@ export function useChat(
           const external = await externalTools(rag?.enabledToolIds ?? [], controller.signal);
           closeTools = external.close;
           tools = [...workspaceTools({ threadId, libraryId: rag?.libraryId ?? null, band, messageId: assistantMsg.id, readVersions: new Map() }), ...external.tools];
-          sendMessages.unshift({ id: '__agent', threadId, role: 'system', createdAt: Date.now(), content: WORKSPACE_PROMPT });
+          sendMessages.unshift({ id: '__agent', threadId, role: 'system', createdAt: Date.now(), content: `${WORKSPACE_PROMPT}\n\n${await workspaceSummary({ threadId, libraryId: rag?.libraryId ?? null })}` });
         }
         await updateMessage(assistantMsg.id, { runStatus: 'running', citations, retrievalStatus });
         for await (const chunk of executeChat(provider, {

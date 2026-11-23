@@ -4,7 +4,7 @@ import type { ChatImage } from '../../lib/image';
 import { compressImage, compressFromDataTransfer } from '../../lib/image';
 import { shortenModelId } from '../../lib/format';
 import { COMPACT_TRIGGER_FRACTION } from '../../data/settings';
-import { Image, ArrowRight, Brain, Loader2 } from 'lucide-react';
+import { Image, ArrowRight, Brain, Loader2, Paperclip } from 'lucide-react';
 import { SlashMenu, type SlashCommand } from './SlashMenu';
 import { Tooltip } from '../ui/Tooltip';
 
@@ -83,6 +83,9 @@ export function Composer({
   onStop,
   onParams,
   toolControls,
+  onAttachFiles,
+  attachAccept,
+  notice,
 }: {
   modelReady: boolean;
   model: string | null;
@@ -104,8 +107,14 @@ export function Composer({
   onStop: () => void;
   onParams: () => void;
   toolControls?: ReactNode;
+  /** Workspace chats: add files to the chat's /uploads (D-5). */
+  onAttachFiles?: (files: File[]) => void;
+  attachAccept?: string;
+  /** One status line above the composer (e.g. upload results). */
+  notice?: ReactNode;
 }) {
   const [input, setInput] = useState('');
+  const attachRef = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<ChatImage[]>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -245,6 +254,7 @@ export function Composer({
               onHover={setHintIndex}
             />
           )}
+          {notice && <div role="status" className="mb-1.5 font-mono text-[11px]">{notice}</div>}
           <div className="flex items-end gap-2">
             <textarea
               ref={taRef}
@@ -290,6 +300,27 @@ export function Composer({
               className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute"
               style={{ maxHeight: '180px' }}
             />
+            {onAttachFiles && (
+              <>
+                <button
+                  onClick={() => attachRef.current?.click()}
+                  title="Attach files to this workspace"
+                  aria-label="Attach files to this workspace"
+                  className="px-2.5 py-2 border border-line text-mute hover:text-text hover:bg-surface2"
+                >
+                  <Paperclip size={16} />
+                </button>
+                <input
+                  ref={attachRef}
+                  type="file"
+                  accept={attachAccept}
+                  multiple
+                  aria-label="Workspace file upload"
+                  onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ''; if (files.length) onAttachFiles(files); }}
+                  className="hidden"
+                />
+              </>
+            )}
             {modelReady && (
               <>
                 <button
