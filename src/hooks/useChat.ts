@@ -10,7 +10,7 @@ import type { ChatImage } from '../lib/image';
 import { addMessage, getMessages, updateMessage, deleteMessage, deleteMessagesAfter } from '../data/messages';
 import { stripThinking } from '../lib/thinking';
 import { retrieve } from '../services/retrieval';
-import { stubOldActivity, withActivityContext } from '../lib/message-context';
+import { stripEchoedToolData, stubOldActivity, withActivityContext } from '../lib/message-context';
 import { executeChat } from '../services/agent';
 import { workspaceTools } from '../services/workspace-tools';
 import { contextBand } from '../lib/workspace-text';
@@ -304,9 +304,9 @@ export function useChat(
           if (result.reasoning) {
             result = { ...result, reasoning: undefined };
           }
-          // Strip in-content <think> tags.
+          // Strip in-content <think> tags, and any history block an earlier reply echoed.
           if (typeof result.content === 'string') {
-            const stripped = stripThinking(result.content);
+            const stripped = stripEchoedToolData(stripThinking(result.content));
             if (stripped !== result.content) {
               result = result === m ? { ...result, content: stripped } : { ...result, content: stripped };
             }
@@ -589,7 +589,7 @@ export function useChat(
             if (index < 0) return prev;
             copy[index] = {
               ...assistantMsg,
-              content: fullContent,
+              content: stripEchoedToolData(fullContent),
               reasoning: fullReasoning || undefined,
               usage: finalUsage,
               citations, activity, retrievalStatus, runStatus: 'running',
@@ -652,7 +652,7 @@ export function useChat(
         streamDone = true;
 
         await updateMessage(assistantMsg.id, {
-          content: fullContent,
+          content: stripEchoedToolData(fullContent),
           reasoning: fullReasoning || undefined,
           usage: finalUsage,
           citations, activity, retrievalStatus, runStatus: 'complete',
@@ -681,7 +681,7 @@ export function useChat(
         streamDone = true;
         if (controller.signal.aborted) {
           await updateMessage(assistantMsg.id, {
-            content: fullContent,
+            content: stripEchoedToolData(fullContent),
             reasoning: fullReasoning || undefined,
             usage: finalUsage,
             citations, activity, retrievalStatus, runStatus: 'stopped',

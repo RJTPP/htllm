@@ -44,3 +44,13 @@ export function stubOldActivity(messages: Message[], keepRecent = 2): Message[] 
   }
   return out;
 }
+
+/**
+ * Models sometimes imitate the history format and write a
+ * `<historical-tool-data>` block into their own answer. That block is
+ * app-internal: remove it from model output (an unclosed block runs to the end).
+ */
+export function stripEchoedToolData(text: string): string {
+  if (!text.includes('<historical-tool-data>')) return text;
+  return text.replace(/\s*<historical-tool-data>[\s\S]*?(?:<\/historical-tool-data>|$)/g, '').trimEnd();
+}
