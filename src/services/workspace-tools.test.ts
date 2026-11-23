@@ -201,3 +201,21 @@ describe('message attachments', () => {
     expect(inline.citations.map((c) => c.id)).toEqual([`${report.id}:L1-3`]);
   });
 });
+
+describe('run_js', () => {
+  it('runs a script over listed files and is offered only when enabled', async () => {
+    expect(workspaceTools(ctx).some((t) => t.name === 'run_js')).toBe(false);
+    const tool = workspaceTools(ctx, { js: true }).find((t) => t.name === 'run_js')!;
+    const out = await tool.execute({ code: "const t = read('/uploads/report.txt'); print(t.split('\\n').length); t.includes('Atlas')", files: ['/uploads/report.txt'] }, signal);
+    expect(out.text).toBe('Output:\n3\n\nResult: true');
+    const missing = await tool.execute({ code: "read('/notes/todo.md')" }, signal);
+    expect(missing.text).toMatch(/^Error: .*No readable file \/notes\/todo\.md/);
+    await expect(tool.execute({ code: '1', files: ['/uploads/nope.txt'] }, signal)).rejects.toThrow('No file at');
+  });
+  it('keeps the tool definitions within budget with every function enabled', () => {
+    const defs = workspaceTools(ctx, { csv: true, js: true }).map(({ name, description, parameters }) => ({ name, description, parameters }));
+    expect(defs.map((d) => d.name).slice(-3)).toEqual(['calculate', 'query_csv', 'run_js']);
+    // Offered only above the 8k band, where this is under a tenth of the context.
+    expect(JSON.stringify(defs).length).toBeLessThan(10000);
+  });
+});

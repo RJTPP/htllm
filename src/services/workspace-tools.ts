@@ -8,6 +8,7 @@ import { retrieve } from './retrieval';
 import { normalizeWorkspacePath } from '../lib/workspace-path';
 import { GREP_LINE_CAP, grepFiles, lexicalSearch, lineSpans, pageAt, readWindow, snippet, splitLines, type Band, type LineHit, type Pages } from '../lib/workspace-text';
 import { testRegex } from './regex-runner';
+import { runJs } from './js-runner';
 import { calculate, formatNumber } from '../lib/calc';
 import { queryCsv, type CsvQuery } from '../lib/csv-query';
 
@@ -100,6 +101,7 @@ export const WORKSPACE_TOOL_SUMMARY: readonly (readonly [string, string])[] = [
   ['present_file', 'Hand a finished file to you'],
   ['calculate', 'Exact arithmetic'],
   ['query_csv', 'Filter and total a CSV (when one is attached)'],
+  ['run_js', 'Run a short JavaScript program (models above 8k context)'],
 ];
 
 /** D-18: uploads and library documents are evidence; the model's notes are not. */
@@ -382,8 +384,14 @@ export function workspaceWriteTools(ctx: WorkspaceContext): ExecutableTool[] {
   ];
 }
 
-/** D-6 functions: arithmetic always; CSV queries when a CSV exists and the context allows. */
-export function workspaceFunctionTools(ctx: WorkspaceContext, opts: { csv: boolean }): ExecutableTool[] {
+/** Total characters of files one run_js call may read. */
+const MAX_JS_INPUT_CHARS = 2_000_000;
+
+/**
+ * D-6 functions: arithmetic always; CSV queries when a CSV exists; run_js when
+ * the context allows (both above the smallest band, to keep that tool list short).
+ */
+export function workspaceFunctionTools(ctx: WorkspaceContext, opts: { csv: boolean; js?: boolean }): ExecutableTool[] {
   const tools: ExecutableTool[] = [{
     name: 'calculate',
     description: 'Evaluate arithmetic exactly: + - * / % ^, parentheses, sqrt abs round(x,digits) min max floor ceil ln log exp, pi, e. Use instead of mental math.',
@@ -412,12 +420,40 @@ export function workspaceFunctionTools(ctx: WorkspaceContext, opts: { csv: boole
       return { text: text.length > cap ? `${text.slice(0, cap - 80)}\n(Table cut to fit; lower limit or select fewer columns.)` : text };
     },
   });
+  if (opts.js) tools.push({
+    name: 'run_js',
+    description: 'Run a short JavaScript program for calculations or data processing. List the files it needs in `files`; it reads them with read(path) and shows results with print(). No network, no file writing (save results with write_file). Stops after 3 s.',
+    parameters: object({
+      code: { type: 'string', minLength: 1, maxLength: 20000 },
+      files: { type: 'array', items: { type: 'string' }, maxItems: 20 },
+    }, ['code']),
+    execute: async (args, signal, maxChars) => {
+      const mountedFiles = await mounted(ctx);
+      const files: Record<string, string> = {};
+      let total = 0;
+      for (const path of Array.isArray(args.files) ? args.files : []) {
+        const file = findMounted(mountedFiles, String(path));
+        total += file.text.length;
+        if (total > MAX_JS_INPUT_CHARS) throw new Error(`The listed files are too large together (${MAX_JS_INPUT_CHARS.toLocaleString()} characters at most). Process fewer files per run.`);
+        files[file.path] = file.text;
+      }
+      const cap = Math.min(ctx.band.chars, maxChars ?? ctx.band.chars);
+      const run = await runJs({ code: String(args.code), files, maxOutputChars: Math.max(200, cap - 300) }, signal);
+      const parts = [
+        run.output ? `Output:\n${run.output}` : '',
+        run.result !== undefined ? `Result: ${run.result}` : '',
+        run.error ? `Error: ${run.error}` : '',
+      ].filter(Boolean);
+      const text = parts.join('\n\n') || 'The script finished with no output. Use print() to show results.';
+      return { text: text.length > cap ? `${text.slice(0, cap - 60)}\n(Result cut to fit.)` : text };
+    },
+  });
   return tools;
 }
 
 /** The built-in Workspace tools: eight file tools plus the D-6 functions. */
-export function workspaceTools(ctx: WorkspaceContext, opts: { csv?: boolean } = {}): ExecutableTool[] {
-  return [...workspaceReadTools(ctx), ...workspaceWriteTools(ctx), ...workspaceFunctionTools(ctx, { csv: !!opts.csv })];
+export function workspaceTools(ctx: WorkspaceContext, opts: { csv?: boolean; js?: boolean } = {}): ExecutableTool[] {
+  return [...workspaceReadTools(ctx), ...workspaceWriteTools(ctx), ...workspaceFunctionTools(ctx, { csv: !!opts.csv, js: !!opts.js })];
 }
 
 /** Short listing of the workspace for the system prompt, so the model knows what exists. */
