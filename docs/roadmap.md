@@ -63,7 +63,7 @@ The repo goes public at release, and everything is ready and verified before the
    come first.
 4. QuickJS `run_js`: design it with the user (sandbox limits, file access, dependency
    approval), then build it.
-5. Self-host the fonts (Geist, JetBrains Mono) instead of loading them from Google Fonts:
+5. Self-host the fonts (done; Geist, JetBrains Mono) instead of loading them from Google Fonts:
    no third-party request on load, and the offline zip works.
 6. Icons: list every placeholder (favicon, wordmark, unknown-brand square, assistant
    avatar), show two or three concepts, apply the one chosen.
