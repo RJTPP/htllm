@@ -7,7 +7,7 @@ vi.mock('../lib/pdf', () => ({
 }));
 const { uploadToWorkspace, UPLOAD_ACCEPT } = await import('./workspace-upload');
 
-beforeEach(async () => { const db = await getDb(); for (const name of db.objectStoreNames) await db.clear(name); });
+beforeEach(async () => { const db = await getDb(); for (const name of db.objectStoreNames) await db.clear(name); await db.put('threads', { id: 't', title: 't', providerId: 'p', modelId: 'm', createdAt: 1, updatedAt: 1, mode: 'workspace' }); });
 
 describe('uploadToWorkspace', () => {
   it('stores text files read-only under /uploads and de-duplicates names', async () => {

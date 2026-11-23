@@ -121,6 +121,13 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [generating, setGenerating] = useState(false);
+  /** A regenerate/edit that was refused before touching history, with the reason. */
+  const [blockedNotice, setBlockedNotice] = useState<string | null>(null);
+  useEffect(() => { setBlockedNotice(null); }, [threadId, modelId]);
+  /** Refuse up front what runGeneration would refuse after history is already changed. */
+  const workspaceBlocked = rag?.workspace && !rag.agentEnabled
+    ? 'Workspace needs a model that can use tools. Choose a tool-capable HTTP model before regenerating or editing; nothing was changed.'
+    : null;
   /** D-19: note changes made by replies that regenerate/edit removed. They stay; the user is told. */
   const [fileChangeNotice, setFileChangeNotice] = useState<{ path: string; version: number }[] | null>(null);
   useEffect(() => { setFileChangeNotice(null); }, [threadId]);
@@ -726,6 +733,7 @@ export function useChat(
     async (text: string, images?: ChatImage[]) => {
       if (!threadId || generating) return;
       setFileChangeNotice(null);
+      setBlockedNotice(null);
 
       const currentMessages = messagesRef.current;
       const isFirstMessage = currentMessages.length === 0;
@@ -766,6 +774,7 @@ export function useChat(
     const currentMessages = messagesRef.current;
     const last = currentMessages[currentMessages.length - 1];
     if (!last || last.role !== 'assistant') return;
+    if (workspaceBlocked) { setBlockedNotice(workspaceBlocked); return; }
 
     const changedFiles = await versionsByMessages(threadId, [last.id]);
     setFileChangeNotice(changedFiles.length ? changedFiles : null);
@@ -774,7 +783,7 @@ export function useChat(
     setMessages(trimmed);
 
     await runGeneration(trimmed, { skipCompaction: true });
-  }, [threadId, generating, runGeneration]);
+  }, [threadId, generating, runGeneration, workspaceBlocked]);
 
   /** Edit a user message and re-generate from that point (truncate-and-replace). */
   const editAndResend = useCallback(
@@ -788,6 +797,7 @@ export function useChat(
       if (idx === -1) return;
       const target = currentMessages[idx]!;
       if (target.role !== 'user') return;
+      if (workspaceBlocked) { setBlockedNotice(workspaceBlocked); return; }
 
       // Build updated content — preserve images if the original had them.
       let newContent: string | ContentPart[];
@@ -824,7 +834,7 @@ export function useChat(
       // re-rolls from this point and should reuse the existing summary.
       await runGeneration(kept, { skipCompaction: true });
     },
-    [threadId, generating, runGeneration],
+    [threadId, generating, runGeneration, workspaceBlocked],
   );
 
   const stop = useCallback(() => {
@@ -940,5 +950,6 @@ export function useChat(
     compactNow,
     fileChangeNotice,
     dismissFileChangeNotice: () => setFileChangeNotice(null),
+    blockedNotice,
   };
 }

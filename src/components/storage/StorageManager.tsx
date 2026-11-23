@@ -6,6 +6,7 @@ import {
   getCacheEntries,
   deleteCache,
   clearStore,
+  CLEAR_ALSO,
   type StoreStats,
   type CacheEntry,
 } from '../../data/storage-stats';
@@ -220,7 +221,7 @@ export function StorageManager({
     await clearStore(storeName as StoreName);
     // Knowledge-related stores feed the BM25 cache — drop it so the
     // next search rebuilds against the current state.
-    if (storeName === 'documents' || storeName === 'chunks' || storeName === 'embeddings') {
+    if (['documents', 'chunks', 'embeddings', 'libraries', 'parents'].includes(storeName)) {
       invalidateHybridSearchCache();
     }
     await refresh();
@@ -474,7 +475,9 @@ export function StorageManager({
                 {!PROTECTED_STORES.has(store.name) && store.count > 0 && (
                   <ConfirmButton
                     label="clear"
-                    confirmLabel="confirm clear?"
+                    confirmLabel={CLEAR_ALSO[store.name as StoreName]?.length
+                      ? `clear, with ${CLEAR_ALSO[store.name as StoreName]!.map((s) => (STORE_LABELS[s] ?? s).toLowerCase()).join(', ')}?`
+                      : 'confirm clear?'}
                     onConfirm={() => handleClearStore(store.name)}
                     tone="neutral"
                   />

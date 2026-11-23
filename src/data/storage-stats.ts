@@ -82,11 +82,28 @@ export async function deleteCache(cacheName: string): Promise<void> {
 }
 
 /** Clear a single IndexedDB object store. */
+/**
+ * Stores whose records depend on another store's records. Clearing a store
+ * clears its dependents too, so the data never holds references that backup
+ * import would reject (it validates exactly these links).
+ */
+export const CLEAR_ALSO: Partial<Record<StoreName, StoreName[]>> = {
+  threads: ['messages', 'summaries', 'workspaceFiles', 'workspaceVersions'],
+  libraries: ['documents', 'chunks', 'parents', 'embeddings'],
+  documents: ['chunks', 'parents', 'embeddings'],
+  workspaceFiles: ['workspaceVersions'],
+  // Versions back the delivery cards; without them, files would open empty.
+  workspaceVersions: ['workspaceFiles'],
+};
+
+/** Clear one store and its dependents in one transaction; returns what was cleared. */
 export async function clearStore(
   storeName: StoreName,
-): Promise<void> {
+): Promise<StoreName[]> {
   const db = await getDb();
-  const tx = db.transaction(storeName, 'readwrite');
-  await tx.store.clear();
+  const stores = [storeName, ...(CLEAR_ALSO[storeName] ?? [])];
+  const tx = db.transaction(stores, 'readwrite');
+  await Promise.all(stores.map((name) => tx.objectStore(name).clear()));
   await tx.done;
+  return stores;
 }

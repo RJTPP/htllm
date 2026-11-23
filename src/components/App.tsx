@@ -317,6 +317,7 @@ export default function App() {
     compactNow,
     fileChangeNotice,
     dismissFileChangeNotice,
+    blockedNotice,
   } = useChat(
     activeProvider,
     activeModelId,
@@ -865,6 +866,7 @@ export default function App() {
                   toolsCapable={toolSupport.support.supported}
                   onChangeMode={(mode) => void handleChangeMode(mode)}
                   fileChangeNotice={fileChangeNotice}
+                  blockedNotice={blockedNotice}
                   onDismissFileChangeNotice={dismissFileChangeNotice}
                   toolsUnavailableReason={toolSupport.support.source === 'provider' ? 'Tools need an HTTP model that supports tool calling.' : 'This model reports no tool support. You can override this in the model picker.'}
                   onChangeAgent={(patch) => { if (activeThreadId) void updateThread(activeThreadId, patch); }}
