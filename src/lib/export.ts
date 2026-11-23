@@ -144,6 +144,7 @@ export function validateImport(json: string): ExportData {
       if (store === 'threads') {
         if (row.automaticRagEnabled !== undefined && typeof row.automaticRagEnabled !== 'boolean') throw new Error('Invalid automatic RAG setting');
         if (row.agentEnabled !== undefined && typeof row.agentEnabled !== 'boolean') throw new Error('Invalid Tools setting');
+        // toolModelKey and ragEnabled are retired fields; older backups may still carry them.
         for (const key of ['systemPrompt', 'folderId', 'toolModelKey']) {
           if (row[key] !== undefined && typeof row[key] !== 'string') throw new Error(`Invalid thread ${key}`);
         }
