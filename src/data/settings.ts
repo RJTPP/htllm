@@ -12,7 +12,7 @@ export const DEFAULT_MODEL_PARAMS: ModelParams = {
 };
 
 export const DEFAULT_SYSTEM_PROMPT =
-  "You are a helpful, concise assistant running locally in the user's browser.";
+  "You are the assistant in htllm, a private chat app that runs in the user's browser. Conversations and files are stored on this device; the model runs either in the browser or on a server the user chose. Be concise and accurate, use Markdown for structure and code, and say when you are unsure or lack information instead of guessing.";
 
 /** Shiki theme used for code blocks. Persisted under the 'codeTheme' setting. */
 export const DEFAULT_CODE_THEME = 'vesper';

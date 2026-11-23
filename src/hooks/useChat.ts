@@ -15,6 +15,7 @@ import { stripEchoedToolData, stubOldActivity, withActivityContext } from '../li
 import { executeChat } from '../services/agent';
 import { attachedContents, attachmentLine, hasCsv, workspaceSummary, workspaceTools } from '../services/workspace-tools';
 import { contextBand } from '../lib/workspace-text';
+import { appContext } from '../lib/system-context';
 import { externalTools } from '../services/mcp';
 import { approveTool } from '../services/approvals';
 import {
@@ -211,7 +212,7 @@ export function useChat(
       ? formatSummaryBlock(historySummary.text)
       : '';
     const tailBlock = tailSummary ? formatTailBlock(tailSummary.text) : '';
-    const sysParts = [historyBlock, tailBlock, systemPrompt.trim()].filter(Boolean);
+    const sysParts = [historyBlock, tailBlock, systemPrompt.trim(), appContext({ now: new Date(), workspace: !!rag?.workspace })].filter(Boolean);
     const sysText = sysParts.join('\n\n');
     const sysTokens = sysText ? estimateStringTokens(sysText, calRatio) + 4 : 0;
     // Pre-send estimate for the meter — the full tail (no trim); the
@@ -360,7 +361,7 @@ export function useChat(
         const buildSysContent = () => {
           const historyBlock = historyText ? formatSummaryBlock(historyText) : '';
           const tailBlock = tailText ? formatTailBlock(tailText) : '';
-          return [ragBlock, historyBlock, tailBlock, systemPrompt.trim()]
+          return [ragBlock, historyBlock, tailBlock, systemPrompt.trim(), appContext({ now: new Date(), workspace: !!rag?.workspace })]
             .filter(Boolean)
             .join('\n\n');
         };

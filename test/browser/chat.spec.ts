@@ -502,6 +502,9 @@ for (const ragOn of [false, true]) test(`Chat with Automatic RAG=${ragOn} persis
   await composer.fill('When does Atlas launch?'); await composer.press('Enter');
   await expect(page.getByText('Matrix answer.', { exact: true })).toBeVisible();
   expect(seen.embeddings > 0).toBe(ragOn); expect(seen.request?.tools?.length ?? 0).toBe(0);
+  // App-owned context: today's date, and in Chat the no-tools note.
+  expect(JSON.stringify(seen.request?.messages)).toMatch(/Today is \w+day, \w+ \d{1,2}, \d{4}\./);
+  expect(JSON.stringify(seen.request?.messages)).toContain('This chat has no tools or file access.');
   expect(JSON.stringify(seen.request?.messages).includes('Atlas launches on November 12.')).toBe(ragOn);
   if (ragOn) expect(JSON.stringify(seen.request?.messages)).toContain('[[Source <exact supplied source ID>]]');
 });
@@ -526,6 +529,8 @@ test('Workspace sends tools and never retrieves automatically, even with a libra
   await composer.fill('When does Atlas launch?'); await composer.press('Enter');
   await expect(page.getByText('Matrix answer.', { exact: true })).toBeVisible();
   expect(seen.embeddings).toBe(0); expect(seen.request?.tools?.length ?? 0).toBeGreaterThan(0);
+  expect(JSON.stringify(seen.request?.messages)).toMatch(/Today is /);
+  expect(JSON.stringify(seen.request?.messages)).not.toContain('This chat has no tools');
   expect(JSON.stringify(seen.request?.messages)).not.toContain('Atlas launches on November 12.');
   expect(JSON.stringify(seen.request?.messages)).toContain('[[Source <exact supplied source ID>]]');
 });
