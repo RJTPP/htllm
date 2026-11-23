@@ -35,7 +35,7 @@ The execution model is event-driven and single-user. There are no background job
 | Embedding endpoint (`/v1/embeddings`) | Vectors for library chunks and queries. | The same provider abstraction. A library pins one embedding model. |
 | MCP servers (Streamable HTTP) | External tools in Workspace. | HTTPS, or HTTP on localhost only. No credentials, query or fragment in the URL; the bearer token is stored separately in the keys store. Every call needs approval. Results are treated as untrusted data. |
 | WebLLM weight host | Downloads model weights and wasm for in-browser models. | Chosen by web-llm's model list. Weights are cached in the Cache API. |
-| Static host (GitHub Pages, or any static server) | Serves `dist/`. | No server logic. Pages can't set response headers, which is why the CSP is in `<meta>` (§2.3). |
+| Static host (GitHub Pages at `htllm.rjtpp.com`, or any static server) | Serves `dist/`. | No server logic. Pages can't set response headers, which is why the CSP is in `<meta>` (§2.3). The site needs an origin of its own, because browser storage is per origin (AD-31). |
 
 No other third-party requests are made. Fonts and icons are self-hosted, and there are no
 analytics or remote logging.

@@ -67,14 +67,18 @@ flowchart LR
 ```
 
 **Hosting:**
-- **Base path:** set at build time by `HTLLM_BASE`. `pnpm build` uses `/`, and
-  `pnpm build:pages` uses `/htllm/`. Page links go through `lib/base-path.ts`, and asset,
-  worker and wasm URLs are prefixed by Vite. The browser suite runs under both bases and
-  checks that no same-origin request leaves the base.
-- **GitHub Pages:** the site lives at `https://rjtpp.github.io/htllm/`.
-- **Release zip:** the `/` build, zipped and attached to a draft release.
+- **GitHub Pages, on its own origin:** the site is served at `https://htllm.rjtpp.com/`.
+  That is a custom domain on this repository's Pages, with a DNS-only CNAME to
+  `rjtpp.github.io`. It is not served at `rjtpp.com/htllm/`, which would share an origin,
+  and with it IndexedDB, with the owner's other sites (AD-31).
+- **Release zip:** the same `/` build, zipped and attached to a draft release.
+- **Base path:** set at build time by `HTLLM_BASE` (default `/`). Page links go through
+  `lib/base-path.ts`, and asset, worker and wasm URLs are prefixed by Vite.
+  `pnpm build:subpath` builds with `/htllm/`. The browser suite runs under both bases and
+  checks that no same-origin request leaves the base, so hosting under a path keeps
+  working.
 - **Workflow:** `.github/workflows/release.yml` runs on each `v*` tag. It runs typecheck,
-  unit tests, both builds and both browser runs; deploys the `/htllm/` build to Pages;
+  unit tests, and both builds with their browser runs; deploys the `/` build to Pages;
   and attaches the zip.
 - Any static server that serves the files with the right MIME types works, including
   `astro preview`.

@@ -6,12 +6,12 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "build:pages": "HTLLM_BASE=/htllm/ astro build",
+    "build:subpath": "HTLLM_BASE=/htllm/ astro build",
     "preview": "astro preview",
     "typecheck": "astro check && tsc --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test",
-    "test:browser:pages": "HTLLM_BASE=/htllm/ playwright test",
+    "test:browser:subpath": "HTLLM_BASE=/htllm/ playwright test",
     "eval": "vitest run --config eval/vitest.config.ts",
     "test:watch": "vitest"
   },
