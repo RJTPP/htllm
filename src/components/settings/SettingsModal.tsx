@@ -662,8 +662,9 @@ export function SettingsModal({
             ht<span className="text-accent">&lt;llm&gt;</span>
           </div>
           <p>
-            A fully client-side WebGPU chat app. No server, no telemetry. Threads,
-            messages, settings and API keys live only in this browser's IndexedDB.
+            A chat app with no backend of its own: no account, no telemetry. Threads,
+            messages, files, settings and API keys live only in this browser's IndexedDB,
+            and messages go only to the model you choose.
           </p>
           <div className="font-mono text-[11px] border-t border-line pt-3 space-y-1">
             <div>

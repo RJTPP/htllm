@@ -9,7 +9,7 @@ interface Props {
 const { title } = Astro.props;
 // Base-aware asset paths: the Pages build serves the site under /htllm/.
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
-const description = 'Private AI chat that runs in your browser: in-browser or your own models, your files, no server.';
+const description = 'Private AI chat in your browser. Run a model in the browser or on your own server; your chats and files stay on this device.';
 const ogImage = Astro.site ? new URL(`${base}og-image.png`, Astro.site).href : `${base}og-image.png`;
 
 // Production CSP hashes Astro hydration scripts at build time. The Vite dev server
