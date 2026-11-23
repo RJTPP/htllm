@@ -243,6 +243,7 @@ export default function App() {
     agentEnabled: workspaceMode && toolSupport.support.supported,
     enabledToolIds: activeThread?.enabledToolIds,
     workspace: workspaceMode,
+    attachedLibraryIds: workspaceMode ? activeThread?.attachedLibraryIds : undefined,
   };
 
   // D8 Part B — factory for Contextual Retrieval. Knowledge page passes

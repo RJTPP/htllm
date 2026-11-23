@@ -693,6 +693,36 @@ test('end to end: the model reads an upload, writes a note, presents it, and the
   await page.getByRole('button', { name: 'Open summary.md v1' }).click();
   await expect(page.getByRole('complementary', { name: 'Workspace files' }).getByText('Launch on May 4, owned by Dana.')).toBeVisible();
 });
+test('a Workspace chat can attach several libraries, each mounted read-only', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction(['libraries', 'documents'], 'readwrite');
+    tx.objectStore('libraries').put({ id: 'second', name: 'Second library', embeddingModelId: '', createdAt: 2 });
+    tx.objectStore('documents').put({ id: 'b', libraryId: 'second', filename: 'b.txt', mimeType: 'text/plain', sizeBytes: 5, chunkCount: 0, createdAt: 1, extractedText: 'Bravo' });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  let system = '';
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    system = JSON.stringify(route.request().postDataJSON().messages.filter((m: { role: string }) => m.role === 'system'));
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: 'Ok.' }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  await page.getByRole('button', { name: /^Tools:/ }).click();
+  await page.getByRole('button', { name: 'attach another library' }).click();
+  await page.getByRole('dialog', { name: 'Attach another library' }).getByRole('button', { name: /Second library/ }).click();
+  const panel = page.getByRole('dialog', { name: 'Tools for this chat' });
+  await expect(panel.getByText('Second library', { exact: true })).toBeVisible();
+  await expect(panel.getByText(/and 1 more/)).toBeVisible();
+  await panel.getByRole('button', { name: 'esc', exact: true }).click();
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('What do you have?'); await composer.press('Enter');
+  await expect(page.getByText('Ok.', { exact: true })).toBeVisible();
+  expect(system).toContain('/library/Second library/b.txt (library, read-only');
+  await page.getByRole('button', { name: /^Tools:/ }).click();
+  await page.getByRole('button', { name: 'Detach Second library' }).click();
+  await expect(panel.getByText('Second library', { exact: true })).toHaveCount(0);
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';

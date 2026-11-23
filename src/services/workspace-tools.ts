@@ -12,7 +12,8 @@ import { queryCsv, type CsvQuery } from '../lib/csv-query';
 
 export interface WorkspaceContext {
   threadId: string;
-  libraryId: string | null;
+  /** Attached Knowledge libraries, mounted read-only under /library (first = the chat's primary). */
+  libraryIds: string[];
   band: Band;
   /** Assistant message of this turn; recorded on note versions it creates. */
   messageId?: string;
@@ -31,27 +32,33 @@ export interface Mounted {
   version: number;
   /** Library documents imported before exact text was kept. */
   legacy?: boolean;
+  /** For library files: the library they belong to. */
+  libraryId?: string;
   file?: WorkspaceFile;
 }
 
 const segment = (name: string) => name.replace(/[\\/\u0000-\u001f\u007f]/g, '-').trim() || 'untitled';
 
-/** Mount the chat's files and the attached library (read-only) as one tree. */
-export async function mountWorkspace(ctx: Pick<WorkspaceContext, 'threadId' | 'libraryId'>): Promise<Mounted[]> {
+/** Mount the chat's files and the attached libraries (read-only) as one tree. */
+export async function mountWorkspace(ctx: Pick<WorkspaceContext, 'threadId' | 'libraryIds'>): Promise<Mounted[]> {
   const files: Mounted[] = (await listWorkspaceFiles(ctx.threadId)).map((file) => ({
     path: file.path, kind: file.kind, id: file.id, text: file.text, pages: file.pages, version: file.version, file,
   }));
-  if (ctx.libraryId) {
-    const library = await getLibrary(ctx.libraryId);
-    const root = `/library/${segment(library?.name ?? 'library')}`;
+  const roots = new Set<string>();
+  for (const libraryId of [...new Set(ctx.libraryIds)]) {
+    const library = await getLibrary(libraryId);
+    if (!library) continue;
+    let root = `/library/${segment(library.name)}`;
+    for (let n = 2; roots.has(root); n++) root = `/library/${segment(library.name)} (${n})`;
+    roots.add(root);
     const taken = new Set<string>();
-    for (const doc of await listDocumentsByLibrary(ctx.libraryId)) {
+    for (const doc of await listDocumentsByLibrary(libraryId)) {
       let path = `${root}/${segment(doc.filename)}`;
       for (let n = 2; taken.has(path); n++) path = `${root}/${segment(doc.filename)} (${n})`;
       taken.add(path);
       const legacy = typeof doc.extractedText !== 'string';
       const text = doc.extractedText ?? (await getChunksForDocument(doc.id)).map((c) => c.text).join('\n\n');
-      files.push({ path, kind: 'library', id: doc.id, text, pages: legacy ? undefined : doc.pages, version: 1, legacy });
+      files.push({ path, kind: 'library', id: doc.id, text, pages: legacy ? undefined : doc.pages, version: 1, legacy, libraryId });
     }
   }
   return files.sort((a, b) => a.path.localeCompare(b.path));
@@ -144,14 +151,15 @@ export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
         const prefix = typeof args.path === 'string' && args.path.trim() ? normalizeWorkspacePath(args.path) : '';
         const inScope = (p: string) => !prefix || p === prefix || p.startsWith(`${prefix}/`);
         const lines: string[] = []; const citations: SourceCitation[] = [];
-        let semantic = false;
         // Indexed libraries: the same hybrid engine as Automatic RAG (D-15).
-        if (ctx.libraryId && files.some((f) => f.kind === 'library' && inScope(f.path))) {
+        const semantic = new Set<string>();
+        for (const libraryId of ctx.libraryIds) {
+          if (!files.some((f) => f.libraryId === libraryId && inScope(f.path))) continue;
           try {
-            const result = await retrieve(ctx.libraryId, String(args.query), signal, Math.min(4000, ctx.band.chars));
-            semantic = true;
+            const result = await retrieve(libraryId, String(args.query), signal, Math.min(4000, ctx.band.chars));
+            semantic.add(libraryId);
             for (const hit of result.citations) {
-              const file = files.find((f) => f.kind === 'library' && f.id === hit.documentId);
+              const file = files.find((f) => f.libraryId === libraryId && f.id === hit.documentId);
               if (!file || !inScope(file.path)) continue;
               const at = file.text.indexOf(hit.excerpt.slice(0, 120));
               const startLine = at < 0 ? 1 : lineAt(file.text, at);
@@ -162,7 +170,7 @@ export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
             }
           } catch { /* not indexed or no embedding provider: keyword search covers it below */ }
         }
-        const keywordFiles = files.filter((f) => inScope(f.path) && !(semantic && f.kind === 'library'));
+        const keywordFiles = files.filter((f) => inScope(f.path) && !(f.libraryId && semantic.has(f.libraryId)));
         for (const hit of lexicalSearch(keywordFiles, String(args.query), 10)) {
           const file = keywordFiles.find((f) => f.path === hit.path)!;
           if (citable(file)) {
@@ -383,7 +391,7 @@ export function workspaceTools(ctx: WorkspaceContext, opts: { csv?: boolean } = 
 }
 
 /** Short listing of the workspace for the system prompt, so the model knows what exists. */
-export async function workspaceSummary(ctx: Pick<WorkspaceContext, 'threadId' | 'libraryId'>, max = 30): Promise<string> {
+export async function workspaceSummary(ctx: Pick<WorkspaceContext, 'threadId' | 'libraryIds'>, max = 30): Promise<string> {
   const files = await mountWorkspace(ctx);
   if (!files.length) return 'Files right now: none. The user can attach files; you can write notes under /notes.';
   const shown = files.slice(0, max).map((f) => `- ${f.path} (${f.kind === 'note' ? `note v${f.version}` : `${f.kind}, read-only`}, ${fmtSize(f.text.length)})`);
@@ -391,6 +399,6 @@ export async function workspaceSummary(ctx: Pick<WorkspaceContext, 'threadId' | 
 }
 
 /** Whether the workspace holds a CSV/TSV, so query_csv is worth offering. */
-export async function hasCsv(threadId: string, libraryId: string | null): Promise<boolean> {
-  return (await mountWorkspace({ threadId, libraryId })).some((f) => /\.(csv|tsv)$/i.test(f.path));
+export async function hasCsv(threadId: string, libraryIds: string[]): Promise<boolean> {
+  return (await mountWorkspace({ threadId, libraryIds })).some((f) => /\.(csv|tsv)$/i.test(f.path));
 }

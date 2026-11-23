@@ -166,6 +166,7 @@ export function validateImport(json: string): ExportData {
       }
       if (store === 'threads') {
         if (row.mode !== undefined && !['chat', 'workspace'].includes(row.mode)) throw new Error('Invalid chat mode');
+        if (row.attachedLibraryIds !== undefined && (!Array.isArray(row.attachedLibraryIds) || !row.attachedLibraryIds.every((id: unknown) => typeof id === 'string'))) throw new Error('Invalid attached libraries');
         if (row.automaticRagEnabled !== undefined && typeof row.automaticRagEnabled !== 'boolean') throw new Error('Invalid automatic RAG setting');
         if (row.agentEnabled !== undefined && typeof row.agentEnabled !== 'boolean') throw new Error('Invalid Tools setting');
         // toolModelKey and ragEnabled are retired fields; older backups may still carry them.
