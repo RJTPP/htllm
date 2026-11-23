@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rjtpp.github.io/htllm/">Open the app</a> ·
+  <a href="https://htllm.rjtpp.com/">Open the app</a> ·
   <a href="https://github.com/RJTPP/htllm/releases">Download for offline use</a> ·
   <a href="docs/guide.md">Guide</a> ·
   <a href="docs/sdd/index.md">Design</a>
@@ -40,7 +40,7 @@
 
 ## Quick start
 
-1. Open **[rjtpp.github.io/htllm](https://rjtpp.github.io/htllm/)** in Chrome or Edge.
+1. Open **[htllm.rjtpp.com](https://htllm.rjtpp.com/)** in Chrome or Edge.
 2. Pick a model:
    - **In the browser:** choose a WebLLM model and wait for the one-time download. This
      needs WebGPU and enough GPU memory for the model.
@@ -120,7 +120,9 @@ pnpm build      # static site in dist/
 pnpm preview    # serve it locally
 ```
 
-Serve it over HTTP(S), not from `file://`.
+Serve it over HTTP(S), not from `file://`. Give it an origin of its own, such as its own
+subdomain or port: browser storage is shared by everything on the same origin, so another
+app there could read your chats and keys.
 
 ## Development
 
@@ -129,7 +131,7 @@ pnpm dev           # dev server on port 4321
 pnpm typecheck     # astro check + tsc
 pnpm test          # unit tests (Vitest)
 pnpm build && pnpm test:browser   # Playwright against the production build (Chrome)
-pnpm build:pages && pnpm test:browser:pages   # the same under the Pages base path /htllm/
+pnpm build:subpath && pnpm test:browser:subpath   # the same with the site under /htllm/
 pnpm eval          # deterministic evaluation; see eval/README.md for live runs
 ```
 

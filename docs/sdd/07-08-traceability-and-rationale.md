@@ -5,7 +5,7 @@
 | Concern | Decisions | Sections | Components | Verified by |
 | --- | --- | --- | --- | --- |
 | C-1 Data stays on device | AD-1, AD-4, AD-22 | 2.2, 5.6 | E-8, E-13 | Browser: no third-party requests on load. Unit: keys excluded from export, credentials refused on import. |
-| C-2 Static hosting | AD-1, AD-23 | 2.3, 4.2 | Pages, `BaseLayout` | `pnpm build` and `pnpm build:pages`; the browser suite under `/` and `/htllm/`, including a check that every same-origin request stays under the base. |
+| C-2 Static hosting | AD-1, AD-23 | 2.3, 4.2 | Pages, `BaseLayout` | `pnpm build` and `pnpm build:subpath`; the browser suite under `/` and `/htllm/`, including a check that every same-origin request stays under the base. |
 | C-3 No code execution from model output | AD-20, AD-24 | 5.2, 5.8 | E-11, E-12 | Browser: output sanitized under the production CSP; `run_js` under CSP. Unit: sandbox has no host globals. |
 | C-4 Approval, no retry on unknown | D-14, D-22, AD-25 | 5.7, 5.8 | E-2, E-10 | Eval safety scenarios S01–S05; browser: MCP writes require approval. |
 | C-5 Citations only from supplied evidence | D-18 | 5.7 | E-12 | Unit: citation resolver; browser: citations survive reload and source deletion. |
@@ -114,6 +114,7 @@ AD-19 carry over from v0.2.0 where they still hold, and AD-20 onward are new.
 | AD-25 | MCP over Streamable HTTP only, with per-call approval, session trust only for read-only tools, and no automatic retry after an unknown outcome. | Browsers can't launch stdio servers; external side effects need a human. | Users run HTTP MCP servers or bridges themselves. |
 | AD-26 | Old tool results are replaced by stubs after two turns, and reasoning is stripped from history. | Replaying full results exhausts small contexts. | The model re-reads files when it needs them again. |
 | AD-30 | Within one answer's tool loop, reasoning is sent back under the field it arrived in (`reasoning_content` or `reasoning`). | Servers disagree: Ollama reads only `reasoning`; llama.cpp, and LM Studio with Gemma, use `reasoning_content`; DeepSeek-style endpoints reject tool-call turns without it. Replaying under one fixed name silently drops reasoning on some servers. | The field is stored per message. Live checks covered LM Studio only (§7.2). |
+| AD-31 | The hosted copy has its own origin, the subdomain `htllm.rjtpp.com`, rather than a path under `rjtpp.com`. Its DNS record is DNS-only, not proxied. | IndexedDB, and with it keys, chats and files, is shared by everything on one origin. The owner's other Pages sites live under `rjtpp.com/…`. A proxy could also change pages or inject scripts, and it gets in the way of GitHub's certificate. | One DNS record and a Pages setting. A copy hosted elsewhere should also get its own origin. |
 | AD-27 | Thread delete is one transaction covering messages, summaries, workspace files and versions. | No orphans after a partial failure. | Larger transactions. |
 | AD-28 | Below 768 px the chat list becomes a drawer and status chips hide. | Phones and narrow windows. | Two layouts to test (there is a browser scenario). |
 | AD-29 | Fonts (Geist, JetBrains Mono) are self-hosted as woff2 and never inlined as `data:` URLs. | No third-party request; works offline from the zip; `font-src 'self'` holds. | About 11 font files in `dist/`. |
@@ -137,6 +138,7 @@ AD-7, AD-8 and AD-12 from v0.2.0 are folded into others or are conventions recor
 | Native OpenAI and Anthropic providers | Direct API clients | Their APIs refuse browser CORS; the OpenAI-compatible provider covers CORS-enabled gateways. |
 | Search by meaning over uploads | Per-chat embeddings for uploads | It needs a second chunk and embedding pipeline per chat. "Add to library" reuses the existing one and keeps PDF pages. |
 | Hosting | A server-backed app, or a desktop wrapper | Contradicts "no backend". Pages plus a zip covers online and offline use. |
+| Hosted origin (AD-31) | `rjtpp.com/htllm/`, the default for a project site under the owner's domain | It shares browser storage with every other site on that origin. |
 
 ### 8.3 Tradeoff Analysis
 

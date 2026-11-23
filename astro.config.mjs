@@ -4,9 +4,10 @@ import tailwind from '@astrojs/tailwind';
 import staticCspHashes from './scripts/csp.mjs';
 
 export default defineConfig({
-  // Pages origin, for absolute link-preview URLs.
-  site: 'https://rjtpp.github.io',
-  // `/` for local and zip builds; `pnpm build:pages` sets `/htllm/` for GitHub Pages.
+  // The hosted copy, on its own origin (a dedicated subdomain, not a path on rjtpp.com).
+  site: 'https://htllm.rjtpp.com',
+  // `/` for the hosted site and the offline zip. `pnpm build:subpath` sets `/htllm/` to
+  // check that the app also works when hosted under a path.
   base: process.env.HTLLM_BASE || '/',
   output: 'static',
   integrations: [
