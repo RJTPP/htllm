@@ -53,7 +53,7 @@ The repo goes public at release, and everything is ready and verified before the
 3. Update `CLAUDE.md`: doc pointers, and drop the prototype rule.
 
 **R2 · Product work**
-1. System prompt:
+1. System prompt (done):
    - an accurate editable default;
    - an always-added line with today's date;
    - in Chat mode, the note that the chat has no tools or file access.
