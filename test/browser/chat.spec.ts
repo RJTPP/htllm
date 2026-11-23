@@ -39,7 +39,7 @@ test('saved citations render inline, activity follows the model, and code retain
 
 test('composer tools open a separate keyboard-accessible dialog and global settings', async ({ page }) => {
   await seed(page, true);
-  const tools = page.getByRole('button', { name: /^Tools: .*\(4 available\)/ });
+  const tools = page.getByRole('button', { name: /^Tools: .*\(8 available\)/ });
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   expect((await tools.boundingBox())!.y).toBeGreaterThan((await composer.boundingBox())!.y);
   await expect(page.getByLabel('MCP endpoint')).toHaveCount(0);
@@ -57,7 +57,7 @@ test('composer tools open a separate keyboard-accessible dialog and global setti
   await expect(panel.getByRole('switch', { name: 'Automatic RAG', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Tools: on (4 available)', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tools: on (8 available)', exact: true })).toBeVisible();
   await tools.click(); await page.getByRole('tab', { name: 'External tools', exact: true }).click(); await page.getByRole('button', { name: 'Manage connections' }).click();
   await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByLabel('MCP endpoint')).toBeVisible();
@@ -84,7 +84,7 @@ test('workspace tools work without a switch, capability confirmation or a select
   });
   await page.reload();
   // A legacy agentEnabled:false does not matter in a Workspace chat (D-14).
-  await page.getByRole('button', { name: 'Tools: on (4 available)', exact: true }).click();
+  await page.getByRole('button', { name: 'Tools: on (8 available)', exact: true }).click();
   await expect(page.getByText('This model supports function/tool calling')).toHaveCount(0);
   await expect(page.getByText('No library attached', { exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Tools for this chat' }).getByRole('button', { name: 'esc', exact: true }).click();
@@ -95,7 +95,7 @@ test('workspace tools work without a switch, capability confirmation or a select
   await page.getByText('list_files · complete', { exact: true }).click();
   await expect(page.getByText('The workspace is empty. The user can attach files; you can write notes under /notes.', { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Tools: on (4 available)', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tools: on (8 available)', exact: true })).toBeVisible();
 });
 
 test('workspace reads follow continue hints through a whole library file without skipping text', async ({ page }) => {
@@ -402,7 +402,7 @@ test('MCP discovery and external writes require approval under production CSP', 
     }
     return route.fulfill({ json: { jsonrpc: '2.0', id: request.id, result } });
   });
-  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
+  await page.getByRole('button', { name: /^Tools: .*\(8 available\)/ }).click();
   await page.getByRole('tab', { name: 'External tools', exact: true }).click();
   await page.getByRole('button', { name: 'Manage connections' }).click();
   await page.getByLabel('MCP name').fill('Fixture service');
@@ -410,7 +410,7 @@ test('MCP discovery and external writes require approval under production CSP', 
   await page.getByRole('button', { name: 'Test & add MCP' }).click();
   await expect(page.getByText('connection tested', { exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
-  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
+  await page.getByRole('button', { name: /^Tools: .*\(8 available\)/ }).click();
   await expect(page.getByLabel('write_note')).toBeVisible();
   await page.getByLabel('write_note').click();
   await expect(page.getByLabel('write_note')).toBeChecked();
@@ -440,15 +440,15 @@ test('MCP discovery and external writes require approval under production CSP', 
   await expect(page.getByRole('dialog', { name: 'Approve external tool' })).toHaveCount(0);
   await expect(page.getByText('Tool activity · stopped')).toBeVisible();
   expect(calls).toBe(1);
-  await page.getByRole('button', { name: /^Tools: .*\(5 available\)/ }).click();
+  await page.getByRole('button', { name: /^Tools: .*\(9 available\)/ }).click();
   await page.getByRole('tab', { name: 'External tools', exact: true }).click();
   await expect(page.getByLabel('write_note')).toBeChecked();
   await page.getByRole('button', { name: 'Manage connections' }).click();
   await page.getByRole('button', { name: 'Refresh tools', exact: true }).click();
   await expect(page.getByText('connection tested', { exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Tools: on (4 available)', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
+  await expect(page.getByRole('button', { name: 'Tools: on (8 available)', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^Tools: .*\(8 available\)/ }).click();
   await expect(page.getByLabel('write_note')).not.toBeChecked();
   await page.getByRole('button', { name: 'Manage connections' }).click();
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();

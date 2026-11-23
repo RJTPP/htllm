@@ -10,7 +10,7 @@ export interface ExecutableTool extends ToolDefinition {
   server?: string;
   readOnlyHint?: boolean;
   fingerprint?: string;
-  execute: (args: Record<string, unknown>, signal: AbortSignal, maxChars?: number) => Promise<{ text: string; citations?: SourceCitation[] }>;
+  execute: (args: Record<string, unknown>, signal: AbortSignal, maxChars?: number) => Promise<{ text: string; citations?: SourceCitation[]; presented?: import('../providers/types').PresentedFile }>;
 }
 export const schemaValidator = new CfWorkerJsonSchemaValidator();
 /** Parse and validate tool arguments. Errors are written for the model, so it
