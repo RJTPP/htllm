@@ -330,7 +330,7 @@ export function ChatPage({
         </button>
       )}
       <Composer
-        toolControls={thread && <AgentControls thread={thread} libraryId={ragLibraryId} libraries={libraries} onSelectLibrary={onChangeRagLibrary} onNewLibrary={onNewLibrary} capable={toolsCapable} unavailableReason={toolsUnavailableReason} busy={generating} onChange={onChangeAgent} onManageConnections={onManageConnections} />}
+        toolControls={thread && <AgentControls mode={thread.mode ?? 'chat'} thread={thread} libraryId={ragLibraryId} libraries={libraries} onSelectLibrary={onChangeRagLibrary} onNewLibrary={onNewLibrary} capable={toolsCapable} unavailableReason={toolsUnavailableReason} busy={generating} onChange={onChangeAgent} onManageConnections={onManageConnections} />}
         modelReady={modelReady}
         model={loadedModelId}
         visionOk={visionOk}
