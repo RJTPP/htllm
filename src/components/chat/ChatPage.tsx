@@ -16,6 +16,7 @@ import { WorkspacePanel, type PanelView } from '../workspace/WorkspacePanel';
 import { WorkspaceUIContext, type WorkspaceUI } from '../workspace/WorkspaceContext';
 import { uploadToWorkspace, UPLOAD_ACCEPT } from '../../services/workspace-upload';
 import { countWorkspaceFiles } from '../../data/workspace';
+import { AttachmentChips } from '../workspace/AttachmentChips';
 import { AgentControls } from './AgentControls';
 
 const BOTTOM_SCROLL_THRESHOLD = 48;
@@ -105,7 +106,7 @@ export function ChatPage({
   visionOk: boolean;
   reasoningCapability?: ReasoningCapability;
   onReasoningChange: (effort: ReasoningEffort) => void;
-  onSend: (text: string, images?: ChatImage[]) => void;
+  onSend: (text: string, images?: ChatImage[], attachments?: import('../../providers/types').MessageAttachment[]) => void;
   onStop: () => void;
   onRegenerate: () => void;
   onEditAndResend: (messageId: string, newText: string) => void;
@@ -188,6 +189,9 @@ export function ChatPage({
   const [uploads, setUploads] = useState(0);
   const [uploadNotice, setUploadNotice] = useState<{ ok: string[]; errors: string[] } | null>(null);
   const [hasFiles, setHasFiles] = useState(false);
+  /** Uploads waiting to go with the next message. */
+  const [pendingAttachments, setPendingAttachments] = useState<import('../../providers/types').MessageAttachment[]>([]);
+  useEffect(() => { setPendingAttachments([]); }, [thread?.id]);
   // The status line is about the latest attach; clear it when the chat moves on.
   useEffect(() => { setUploadNotice(null); }, [thread?.id, messages.length]);
   useEffect(() => {
@@ -199,11 +203,17 @@ export function ChatPage({
     if (!thread) return;
     const ok: string[] = []; const errors: string[] = [];
     setUploadNotice({ ok: [`Adding ${files.length} file${files.length === 1 ? '' : 's'}…`], errors: [] });
+    const added: import('../../providers/types').MessageAttachment[] = [];
     for (const file of files) {
-      try { const saved = await uploadToWorkspace(thread.id, file); ok.push(`${saved.path}${saved.pages?.length ? ` (${saved.pages.length} pages)` : ''}`); }
-      catch (error) { errors.push(error instanceof Error ? error.message : `${file.name} could not be added.`); }
+      try {
+        const saved = await uploadToWorkspace(thread.id, file);
+        ok.push(saved.path);
+        added.push({ fileId: saved.id, path: saved.path, chars: saved.text.length, ...(saved.pages?.length ? { pages: saved.pages.length } : {}) });
+      } catch (error) { errors.push(error instanceof Error ? error.message : `${file.name} could not be added.`); }
     }
-    setUploadNotice({ ok: ok.length ? [`Added ${ok.join(', ')}`] : [], errors });
+    // Successful uploads wait as chips and go with the next message; the notice keeps errors.
+    setPendingAttachments((prev) => [...prev, ...added]);
+    setUploadNotice({ ok: [], errors });
     setUploads((n) => n + 1);
   }, [thread]);
   const workspaceUI = useMemo<WorkspaceUI>(() => ({
@@ -399,18 +409,19 @@ export function ChatPage({
         reasoningCapability={reasoningCapability}
         reasoningEffort={params.reasoningEffort}
         onReasoningChange={onReasoningChange}
-        onSend={onSend}
+        onSend={(text, images) => { onSend(text, images, pendingAttachments.length ? pendingAttachments : undefined); setPendingAttachments([]); }}
         onStop={onStop}
         onParams={onParams}
         onAttachFiles={workspace ? (files) => void attachFiles(files) : undefined}
         attachAccept={UPLOAD_ACCEPT}
-        notice={(uploadNotice && (uploadNotice.ok.length || uploadNotice.errors.length)) || fileChangeNotice?.length || blockedNotice ? <>
+        notice={(uploadNotice && (uploadNotice.ok.length || uploadNotice.errors.length)) || fileChangeNotice?.length || blockedNotice || pendingAttachments.length ? <>
           {blockedNotice && <div className="text-err">{blockedNotice}</div>}
           {fileChangeNotice?.length ? <div className="text-warn flex items-start gap-2">
             <span className="flex-1">File changes from the removed reply remain: {fileChangeNotice.map((f) => `${f.path} (v${f.version})`).join(', ')}. Open files to review or keep editing.</span>
             {workspace && <button onClick={() => setPanel({ tab: 'files' })} className="underline hover:text-text">files</button>}
             <button onClick={onDismissFileChangeNotice} aria-label="Dismiss file change notice" className="hover:text-text">✕</button>
           </div> : null}
+          {pendingAttachments.length > 0 && <div className="flex items-center gap-2"><span className="text-mute shrink-0">Attaching:</span><AttachmentChips attachments={pendingAttachments} onRemove={(id) => setPendingAttachments((prev) => prev.filter((a) => a.fileId !== id))} /></div>}
           {uploadNotice?.ok.map((line) => <div key={line} className="text-ok">{line}</div>)}
           {uploadNotice?.errors.map((line) => <div key={line} className="text-err">{line}</div>)}
         </> : undefined}

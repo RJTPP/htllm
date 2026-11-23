@@ -6,7 +6,7 @@ vi.mock('./retrieval', () => ({ retrieve: retrieveMock }));
 import { getDb } from '../data/db';
 import { addUpload, writeNote } from '../data/workspace';
 import { contextBand } from '../lib/workspace-text';
-import { locateEdit, mountWorkspace, workspaceReadTools, workspaceSummary, workspaceTools, type WorkspaceContext } from './workspace-tools';
+import { attachedContents, attachmentLine, locateEdit, mountWorkspace, workspaceReadTools, workspaceSummary, workspaceTools, type WorkspaceContext } from './workspace-tools';
 
 const signal = new AbortController().signal;
 let ctx: WorkspaceContext;
@@ -181,5 +181,23 @@ describe('scoped search', () => {
     const out = await workspaceReadTools(ctx).find((t) => t.name === 'search')!.execute({ query: 'Atlas launches', path: '/library/Team-Docs/plan.txt' }, signal);
     expect(out.text).toContain('/library/Team-Docs/plan.txt:1');
     expect(out.text).not.toContain('other.txt');
+  });
+});
+
+describe('message attachments', () => {
+  it('announces attachments and includes small files whole, with a citable Source ID', async () => {
+    const files = await mountWorkspace(ctx);
+    const report = files.find((f) => f.path === '/uploads/report.txt')!;
+    const big = await addUpload({ threadId: 't', path: '/uploads/big.txt', text: 'x\n'.repeat(5000), mimeType: 'text/plain' });
+    const attachments = [
+      { fileId: report.id, path: report.path, chars: report.text.length },
+      { fileId: big.id, path: big.path, chars: big.text.length },
+      { fileId: 'gone', path: '/uploads/gone.pdf', chars: 10, pages: 1 },
+    ];
+    expect(attachmentLine(attachments)).toBe('[Attached with this message: /uploads/report.txt (31 B), /uploads/big.txt (9.8 KB), /uploads/gone.pdf (1 page)]');
+    const inline = await attachedContents(attachments, ctx.band);
+    expect(inline.text).toContain(`Source ID: ${report.id}:L1-3\n<\/uploads/report.txt>\n1: Intro`);
+    expect(inline.text).toContain('(/uploads/big.txt is too long to include here; read it with read_file.)');
+    expect(inline.citations.map((c) => c.id)).toEqual([`${report.id}:L1-3`]);
   });
 });
