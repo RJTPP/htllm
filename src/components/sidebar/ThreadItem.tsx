@@ -1,0 +1,203 @@
+import { useState, useEffect, memo } from 'react';
+import type { Thread, Folder } from '../../providers/types';
+import { Pencil, Trash2, FolderInput, FolderOpen } from 'lucide-react';
+import { shortenModelId, fmtRelativeTime } from '../../lib/format';
+import { countWorkspaceFiles } from '../../data/workspace';
+
+export const ThreadItem = memo(function ThreadItem({
+  thread,
+  folders,
+  active,
+  onSelect,
+  onDelete,
+  onRename,
+  onMove,
+}: {
+  thread: Thread;
+  folders: Folder[];
+  active: boolean;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+  onRename: (id: string, title: string) => void;
+  onMove: (id: string, folderId: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(thread.title);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+
+  const title = thread.title || 'New thread';
+
+  const commit = () => {
+    onRename(thread.id, draft.trim() || thread.title);
+    setEditing(false);
+  };
+
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
+
+  // D-20: deleting a Workspace chat deletes its files; say how many.
+  const [fileCount, setFileCount] = useState(0);
+  useEffect(() => {
+    let live = true;
+    if (confirmDelete && thread.mode === 'workspace') void countWorkspaceFiles(thread.id).then((n) => { if (live) setFileCount(n); });
+    else setFileCount(0);
+    return () => { live = false; };
+  }, [confirmDelete, thread.id, thread.mode]);
+
+  // Anchor the move-to-folder menu to the button. Fixed positioning keeps it
+  // out of the sidebar's overflow-clipped scroll container.
+  const openMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenuPos({ x: r.right, y: r.bottom + 2 });
+  };
+
+  return (
+    <div
+      onClick={() => onSelect(thread.id)}
+      className={`group px-2.5 py-2 cursor-pointer border-l-2 transition-colors ${
+        active ? 'border-accent bg-accent/5' : 'border-transparent hover:bg-surface2'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commit();
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full bg-bg border border-accent/50 px-1.5 py-0.5 text-[12.5px] text-text focus:outline-none"
+            />
+          ) : (
+            <div
+              className="text-[12.5px] truncate text-text/90"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setDraft(thread.title);
+                setEditing(true);
+              }}
+              title="Double-click to rename"
+            >
+              {title}
+            </div>
+          )}
+          <div className="font-mono text-[10px] text-mute mt-0.5 truncate">
+            {thread.mode === 'workspace' && (
+              <span title="Workspace chat" aria-label="Workspace chat" className="inline-flex items-center gap-0.5 text-accent mr-1 align-[-1px]">
+                <FolderOpen size={10} />
+              </span>
+            )}
+            {thread.modelId ? shortenModelId(thread.modelId) : 'no model'} ·{' '}
+            {fmtRelativeTime(thread.updatedAt)}
+          </div>
+        </div>
+        {!editing && (
+          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={openMenu}
+              className="p-1 text-mute hover:text-text"
+              title="Move to folder"
+            >
+              <FolderInput size={13} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDraft(thread.title);
+                setEditing(true);
+              }}
+              className="p-1 text-mute hover:text-text"
+              title="Rename"
+            >
+              <Pencil size={13} />
+            </button>
+            {confirmDelete ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(thread.id);
+                }}
+                className="font-mono text-[10px] px-1.5 py-0.5 border border-err/60 text-err hover:bg-err/10"
+                title={fileCount ? `Also deletes ${fileCount} workspace file${fileCount === 1 ? '' : 's'}` : undefined}
+                aria-label={fileCount ? `Delete chat and its ${fileCount} workspace file${fileCount === 1 ? '' : 's'}` : 'Confirm delete'}
+              >
+                {fileCount ? `confirm · ${fileCount} file${fileCount === 1 ? '' : 's'}` : 'confirm'}
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmDelete(true);
+                }}
+                className="p-1 text-mute hover:text-err"
+                title="Delete thread"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {menuPos && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuPos(null);
+            }}
+          />
+          <div
+            className="fixed z-50 min-w-[160px] bg-surface border border-line py-1 shadow-lg"
+            style={{ left: menuPos.x, top: menuPos.y, transform: 'translateX(-100%)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-2.5 py-1 font-mono text-[9px] uppercase tracking-widest text-mute/60">
+              move to folder
+            </div>
+            {thread.folderId && (
+              <button
+                onClick={() => {
+                  onMove(thread.id, null);
+                  setMenuPos(null);
+                }}
+                className="w-full text-left px-2.5 py-1 text-[12px] text-mute hover:text-text hover:bg-surface2"
+              >
+                Ungrouped
+              </button>
+            )}
+            {folders.map((f) => (
+              <button
+                key={f.id}
+                disabled={f.id === thread.folderId}
+                onClick={() => {
+                  onMove(thread.id, f.id);
+                  setMenuPos(null);
+                }}
+                className="w-full text-left px-2.5 py-1 text-[12px] truncate hover:bg-surface2 disabled:text-accent disabled:cursor-default"
+              >
+                {f.name}
+              </button>
+            ))}
+            {folders.length === 0 && (
+              <div className="px-2.5 py-1 text-[11px] text-mute/60">
+                No folders — create one in the sidebar
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+});

@@ -1,0 +1,1032 @@
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Menu } from 'lucide-react';
+import type {
+  ModelInfo,
+  LoadProgress,
+  EngineStatus,
+  PromptTemplate,
+  ModelParams,
+  ChatProvider,
+  ReasoningEffort,
+  Library,
+} from '../providers/types';
+import { getProvider, getWebLLMProvider, getHttpProviders } from '../providers/registry';
+import { useSystem } from '../hooks/useSystem';
+import { useThreads } from '../hooks/useThreads';
+import { useFolders } from '../hooks/useFolders';
+import { useChat, type RagConfig } from '../hooks/useChat';
+import { useModelParams } from '../hooks/useModelParams';
+import { useToolSupport } from '../hooks/useToolSupport';
+import { useServerContext } from '../hooks/useServerContext';
+import { getLastMode, getModeDefaults, setLastMode, setModeDefault } from '../data/mode-defaults';
+import { countWorkspaceFiles } from '../data/workspace';
+import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
+import {
+  getSetting,
+  setSetting,
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_CODE_THEME,
+  DEFAULT_TITLE_MODE,
+  DEFAULT_ACCENT_COLOR,
+  DEFAULT_COMPRESSION_MODE,
+  COMPRESSION_MODE_KEY,
+  MIN_AUTO_COMPACT_CONTEXT_TOKENS,
+  ACCENT_PRESETS,
+  type TitleMode,
+  type AccentColor,
+  type CompressionMode,
+} from '../data/settings';
+import { setCodeTheme } from '../lib/highlight';
+import { generateTitle } from '../lib/title';
+import { createContextualizer, type Contextualizer } from '../lib/contextualizer';
+import { loadCalibration } from '../lib/token-calibration';
+import { detectReasoning, defaultEffort } from '../lib/reasoning';
+import { NavRail, type NavPage } from './nav/NavRail';
+import { SystemStats } from './system/SystemStats';
+import { ModelSlot } from './system/ModelSlot';
+import { useLibraries } from '../hooks/useLibraries';
+import { WebGPUBlock } from './system/WebGPUBlock';
+import { Sidebar } from './sidebar/Sidebar';
+import { ChatPage } from './chat/ChatPage';
+import type { SlashCommand } from './chat/SlashMenu';
+import { KnowledgePage } from './knowledge/KnowledgePage';
+import { StorageManager } from './storage/StorageManager';
+import { ModelPicker } from './providers/ModelPicker';
+import { SettingsModal, type SettingsTab } from './settings/SettingsModal';
+import { ThreadParams } from './providers/ThreadParams';
+import { CommandPalette, type Command } from './command/CommandPalette';
+import { searchMessages } from '../data/messages';
+
+const webllmProvider = getWebLLMProvider();
+
+type ModalId = 'picker' | 'settings' | 'params' | 'palette' | null;
+
+export default function App() {
+  const system = useSystem();
+  const {
+    threads,
+    activeThreadId,
+    threadsLoaded,
+    createThread,
+    selectThread,
+    deleteThread,
+    updateThreadTitle,
+    updateThreadTimestamp,
+    updateThread,
+  } = useThreads();
+  const { folders, createFolder, renameFolder, deleteFolder } = useFolders();
+
+  const activeThread = useMemo(
+    () => threads.find((t) => t.id === activeThreadId) ?? null,
+    [threads, activeThreadId],
+  );
+
+  const { params: rawParams, globalDefaults, setGlobalDefaults } = useModelParams(activeThread);
+
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [engineStatus, setEngineStatus] = useState<EngineStatus>('idle');
+  const [loadProgress, setLoadProgress] = useState<LoadProgress>({
+    progress: 0,
+    text: '',
+    timeElapsed: 0,
+  });
+  const [loadedModelId, setLoadedModelId] = useState<string | null>(null);
+  // The "global model" — provider + id of the last model selected
+  // anywhere. When per-session memory is off, every chat resolves to
+  // this; selecting a model updates it.
+  const [lastModelId, setLastModelId] = useState<string | null>(null);
+  const [lastProviderId, setLastProviderId] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [page, setPage] = useState<NavPage>('chat');
+  const [modal, setModal] = useState<ModalId>(null);
+  // Below 768 px the chat list is a slide-out drawer instead of a fixed column.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setDrawerOpen(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [drawerOpen]);
+  const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
+  const [defaultLibraryId, setDefaultLibraryIdState] = useState<string | null>(null);
+  const [rememberLastLibrary, setRememberLastLibraryState] = useState(false);
+  // Off by default: all chats share one global model (selecting a model
+  // anywhere applies everywhere). On: each chat remembers its own model.
+  const [rememberPerSessionModel, setRememberPerSessionModelState] = useState(false);
+  const [compressionMode, setCompressionModeState] =
+    useState<CompressionMode>(DEFAULT_COMPRESSION_MODE);
+  const [codeTheme, setCodeThemeState] = useState(DEFAULT_CODE_THEME);
+  const [titleMode, setTitleModeState] = useState<TitleMode>(DEFAULT_TITLE_MODE);
+  const [accentColor, setAccentColorState] = useState<AccentColor>(DEFAULT_ACCENT_COLOR);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('templates');
+
+  useEffect(() => {
+    webllmProvider.listModels().then(setModels);
+    getHttpProviders().forEach((p) => p.loadConfig());
+    void loadCalibration();
+    seedBuiltInTemplates()
+      .then(() => listTemplates())
+      .then(setTemplates);
+    getSetting<string>('defaultSystemPrompt').then((v) => {
+      if (v != null) setDefaultSystemPromptState(v);
+    });
+    getSetting<string>('lastModelId').then((v) => {
+      if (v != null) setLastModelId(v);
+    });
+    getSetting<string>('lastProviderId').then((v) => {
+      if (v != null) setLastProviderId(v);
+    });
+    getSetting<string>('codeTheme').then((v) => {
+      if (v != null) {
+        setCodeThemeState(v);
+        setCodeTheme(v);
+      }
+    });
+    getSetting<string>('titleMode').then((v) => {
+      if (v === 'trim' || v === 'generate') setTitleModeState(v);
+    });
+    getSetting<AccentColor>('accentColor').then((v) => {
+      if (v != null && ACCENT_PRESETS[v]) {
+        setAccentColorState(v);
+        document.documentElement.style.setProperty('--accent', ACCENT_PRESETS[v].rgb);
+      }
+    });
+    getSetting<string | null>('defaultLibraryId').then((v) => {
+      // The setting can be a library id, null (explicit "no default"),
+      // or undefined (never set — same as null at runtime).
+      if (typeof v === 'string' || v === null) setDefaultLibraryIdState(v);
+    });
+    getSetting<boolean>('rememberLastLibrary').then((v) => {
+      if (typeof v === 'boolean') setRememberLastLibraryState(v);
+    });
+    getSetting<boolean>('rememberPerSessionModel').then((v) => {
+      if (typeof v === 'boolean') setRememberPerSessionModelState(v);
+    });
+    getSetting<CompressionMode>(COMPRESSION_MODE_KEY).then((v) => {
+      if (v === 'auto' || v === 'drop' || v === 'off') {
+        setCompressionModeState(v);
+      }
+    });
+  }, []);
+
+  const setDefaultSystemPrompt = useCallback(async (value: string) => {
+    setDefaultSystemPromptState(value);
+    await setSetting('defaultSystemPrompt', value);
+  }, []);
+
+  const handleSetCodeTheme = useCallback(async (value: string) => {
+    setCodeThemeState(value);
+    setCodeTheme(value);
+    await setSetting('codeTheme', value);
+  }, []);
+
+  const setTitleMode = useCallback(async (value: TitleMode) => {
+    setTitleModeState(value);
+    await setSetting('titleMode', value);
+  }, []);
+
+  const setCompressionMode = useCallback(async (value: CompressionMode) => {
+    setCompressionModeState(value);
+    await setSetting(COMPRESSION_MODE_KEY, value);
+    // In 'auto' the context window can't go below the compaction floor.
+    // The slider min only blocks *new* lowering, so bump a previously-set
+    // sub-floor default up to the floor when auto is selected.
+    if (
+      value === 'auto' &&
+      globalDefaults.contextWindow < MIN_AUTO_COMPACT_CONTEXT_TOKENS
+    ) {
+      setGlobalDefaults({ contextWindow: MIN_AUTO_COMPACT_CONTEXT_TOKENS });
+    }
+  }, [globalDefaults.contextWindow, setGlobalDefaults]);
+
+  const handleSetAccentColor = useCallback(async (value: AccentColor) => {
+    setAccentColorState(value);
+    document.documentElement.style.setProperty('--accent', ACCENT_PRESETS[value].rgb);
+    await setSetting('accentColor', value);
+  }, []);
+
+  const systemPrompt = activeThread?.systemPrompt ?? defaultSystemPrompt;
+
+  // RAG binding: per-thread libraryId. Three-way resolution so the
+  // composer's "None" choice sticks:
+  //   - undefined on thread → inherit from defaultLibraryId
+  //   - null      on thread → explicit OFF, ignore the default
+  //   - string    on thread → bound to that library
+  // useChat takes the resolved id (or null) and handles the rest.
+  const ragLibraryId =
+    activeThread?.libraryId === undefined
+      ? defaultLibraryId ?? null
+      : activeThread.libraryId;
+
+  // Shared library list — the composer KnowledgeChip uses it for its
+  // popover; the same store is updated from the Knowledge page so any
+  // create / delete / rebind there reflects here without a refresh.
+  const { libraries } = useLibraries();
+
+  // Model resolution. Per-session ON → use the chat's own bound model;
+  // OFF → the global model (lastProviderId/lastModelId) overrides every
+  // chat. WebLLM needs the model loaded into its engine; an HTTP provider
+  // is ready as soon as it has a modelId — so the lifecycle branch is a
+  // provider capability, not an id check.
+  const wantedProviderId = rememberPerSessionModel
+    ? activeThread?.providerId ?? lastProviderId ?? ''
+    : lastProviderId ?? activeThread?.providerId ?? '';
+  const wantedModelId = rememberPerSessionModel
+    ? activeThread?.modelId ?? lastModelId ?? ''
+    : lastModelId ?? activeThread?.modelId ?? '';
+  const activeProvider: ChatProvider =
+    getProvider(wantedProviderId) ?? webllmProvider;
+  const activeProviderId = activeProvider.id;
+  const isApiThread = !activeProvider.needsModelLoad;
+  // WebLLM's active model is whatever's actually loaded (one at a time);
+  // API threads use the resolved wanted model directly.
+  const activeModelId = isApiThread ? wantedModelId : (loadedModelId ?? '');
+  const toolSupport = useToolSupport(activeProvider, activeModelId);
+  // D-10/D-14/D-15: Chat has no tools and keeps Automatic RAG (on by default
+  // when a library is attached); Workspace always runs tools and never
+  // retrieves automatically. Tools also need a model that may use them.
+  const workspaceMode = (activeThread?.mode ?? 'chat') === 'workspace';
+  const ragConfig: RagConfig = {
+    libraryId: ragLibraryId,
+    automaticRagEnabled: workspaceMode ? false : activeThread?.automaticRagEnabled ?? true,
+    agentEnabled: workspaceMode && toolSupport.support.supported,
+    enabledToolIds: activeThread?.enabledToolIds,
+    workspace: workspaceMode,
+    attachedLibraryIds: workspaceMode ? activeThread?.attachedLibraryIds : undefined,
+  };
+
+  // D8 Part B — factory for Contextual Retrieval. Knowledge page passes
+  // this into useKnowledge; when a library has opted in, the embed pipeline
+  // invokes the returned contextualizer per chunk. Falls back to null
+  // (vanilla embedding) when no chat model is currently ready, so the
+  // user can still embed — just without the retrieval-quality lift.
+  const getContextualizer = useCallback(
+    (_lib: Library): Contextualizer | null => {
+      if (!activeModelId) return null;
+      // WebLLM needs the model actually loaded; HTTP providers are ready
+      // as soon as they have an id. Mirrors the title-generation guard.
+      if (activeProvider.needsModelLoad && !loadedModelId) return null;
+      return createContextualizer(activeProvider, activeModelId);
+    },
+    [activeProvider, activeModelId, loadedModelId],
+  );
+
+  // New threads get a title from the first message: a trimmed slice always
+  // (instant), then optionally upgraded to a model-generated title. If
+  // generation times out or fails, the trimmed title stays.
+  const handleAutoTitle = useCallback(
+    async (threadId: string, firstMessage: string) => {
+      const trimmed =
+        firstMessage.slice(0, 60) + (firstMessage.length > 60 ? '…' : '');
+      await updateThreadTitle(threadId, trimmed);
+      if (titleMode === 'generate') {
+        console.debug('[title] generating via', activeProvider.id, activeModelId);
+        const generated = await generateTitle(
+          activeProvider,
+          activeModelId,
+          firstMessage,
+        );
+        if (generated) {
+          console.debug('[title] generated:', generated);
+          await updateThreadTitle(threadId, generated);
+        }
+      }
+    },
+    [titleMode, activeProvider, activeModelId, updateThreadTitle],
+  );
+
+  const activeReasoningCapability = useMemo(
+    () => (activeModelId ? detectReasoning(activeModelId) : undefined),
+    [activeModelId],
+  );
+
+  // When a thread hasn't been customized, the reasoning effort default
+  // depends on model capability: 'low' for effort models, 'off' for toggle
+  // models. Customized threads keep their explicit stored value.
+  // A server that reports the context it accepts caps the setting: a request
+  // larger than the loaded context would fail anyway.
+  const serverContext = useServerContext(activeProvider, activeModelId);
+  const params = useMemo<ModelParams>(() => {
+    const base = activeThread?.modelParams ? rawParams : { ...rawParams, reasoningEffort: defaultEffort(activeReasoningCapability) };
+    return serverContext && base.contextWindow > serverContext ? { ...base, contextWindow: serverContext } : base;
+  }, [rawParams, activeThread?.modelParams, activeReasoningCapability, serverContext]);
+
+  const {
+    messages,
+    generating,
+    budget,
+    historySummary,
+    tailSummary,
+    summaries,
+    compacting,
+    send,
+    regenerate,
+    editAndResend,
+    stop,
+    compactNow,
+    fileChangeNotice,
+    dismissFileChangeNotice,
+    blockedNotice,
+  } = useChat(
+    activeProvider,
+    activeModelId,
+    activeThreadId,
+    params,
+    systemPrompt,
+    updateThreadTimestamp,
+    handleAutoTitle,
+    ragConfig,
+    compressionMode,
+  );
+
+  const modelReady = isApiThread
+    ? !!activeThread?.modelId
+    : engineStatus === 'ready';
+
+  // Vision capability: API providers support image_url parts natively, so use
+  // the provider capability. WebLLM models vary — look up the loaded model.
+  const visionOk = isApiThread
+    ? activeProvider.capabilities.vision
+    : !!models.find((m) => m.id === activeModelId)?.vision;
+
+  // D-21: move a chat to the model last used in its mode, when there is one. An
+  // in-browser model is reused only if it is already loaded.
+  const applyModeModel = useCallback(
+    async (threadId: string, mode: import('../providers/types').ThreadMode) => {
+      const preferred = (await getModeDefaults())[mode];
+      if (!preferred) return;
+      if (preferred.providerId === webllmProvider.id && loadedModelId !== preferred.modelId) return;
+      setLastProviderId(preferred.providerId); setLastModelId(preferred.modelId);
+      void setSetting('lastProviderId', preferred.providerId); void setSetting('lastModelId', preferred.modelId);
+      await updateThread(threadId, { providerId: preferred.providerId, modelId: preferred.modelId });
+    },
+    [updateThread, loadedModelId],
+  );
+
+  // Ensure there is always an active thread to type into — created on first
+  // run (and after the last thread is deleted), independent of model state.
+  const pendingRef = useRef<{ text: string; images?: import('../lib/image').ChatImage[] } | null>(null);
+  const autoThreadRef = useRef(false);
+  useEffect(() => {
+    if (threadsLoaded && activeThreadId === null && !autoThreadRef.current) {
+      autoThreadRef.current = true;
+      void (async () => {
+        const mode = await getLastMode();
+        const thread = await createThread(webllmProvider.id, loadedModelId ?? '', undefined, mode);
+        if (mode !== 'chat') await applyModeModel(thread.id, mode);
+      })().finally(() => {
+        autoThreadRef.current = false;
+      });
+    }
+  }, [threadsLoaded, activeThreadId, loadedModelId, createThread, applyModeModel]);
+
+  useEffect(() => {
+    if (!modelReady || !pendingRef.current) return;
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    send(pending.text, pending.images);
+  }, [modelReady, send]);
+
+  const handleLoad = useCallback(
+    async (modelId: string) => {
+      setEngineStatus('loading');
+      setLoadProgress({ progress: 0, text: 'Initializing engine…', timeElapsed: 0 });
+      try {
+        await webllmProvider.loadModel(
+          modelId,
+          (report) => setLoadProgress(report),
+          globalDefaults.contextWindow,
+        );
+        setLoadedModelId(modelId);
+        setEngineStatus('ready');
+        setModels((prev) =>
+          prev.map((m) => (m.id === modelId ? { ...m, cached: true } : m)),
+        );
+        setModal(null);
+        // Update the global model (provider + id) so per-session-off
+        // chats follow this load.
+        setLastModelId(modelId);
+        setLastProviderId(webllmProvider.id);
+        await setSetting('lastModelId', modelId);
+        await setSetting('lastProviderId', webllmProvider.id);
+        // Loading a WebLLM model binds the active thread to WebLLM — handles the
+        // case where the thread was previously pointed at an API provider.
+        if (activeThreadId) {
+          updateThread(activeThreadId, { providerId: webllmProvider.id, modelId });
+        }
+        void setModeDefault('chat', webllmProvider.id, modelId);
+      } catch (err) {
+        setEngineStatus('error');
+        setLoadProgress({
+          progress: 0,
+          text: err instanceof Error ? err.message : String(err),
+          timeElapsed: 0,
+        });
+      }
+    },
+    [globalDefaults.contextWindow, activeThreadId, updateThread],
+  );
+
+  const handleUnload = useCallback(async () => {
+    await webllmProvider.unload();
+    setLoadedModelId(null);
+    setEngineStatus('idle');
+    setLoadProgress({ progress: 0, text: '', timeElapsed: 0 });
+  }, []);
+
+  const handleEvict = useCallback(
+    async (modelId: string) => {
+      if (modelId === loadedModelId) {
+        await handleUnload();
+      }
+      await webllmProvider.evictModel(modelId);
+      setModels((prev) =>
+        prev.map((m) => (m.id === modelId ? { ...m, cached: false } : m)),
+      );
+    },
+    [loadedModelId, handleUnload],
+  );
+
+  const handleCreateThread = useCallback(async () => {
+    // Thread switching is locked during generation so the stream can't
+    // bleed into another thread.
+    if (generating) return;
+    // Reuse the current chat only while it is a true draft: no messages and
+    // no attached files (files lock its mode, like a message does).
+    if (activeThreadId && messages.length === 0 && (await countWorkspaceFiles(activeThreadId)) === 0) {
+      setPage('chat');
+      return;
+    }
+    // Open in the mode the user last picked. Carry the current provider + model
+    // when the mode is the same, so "new chat" continues with whatever the user
+    // was just using; otherwise use that mode's own default model (D-21). Keep it
+    // in the same folder as the current thread.
+    const mode = await getLastMode();
+    const thread = await createThread(activeProviderId, activeModelId, activeThread?.folderId, mode);
+    if (mode !== (activeThread?.mode ?? 'chat')) await applyModeModel(thread.id, mode);
+    setPage('chat');
+  }, [
+    createThread,
+    activeProviderId,
+    activeModelId,
+    activeThread,
+    activeThreadId,
+    messages.length,
+    generating,
+    applyModeModel,
+  ]);
+
+  // Global shortcuts: Cmd/Ctrl+K opens the command palette, Cmd/Ctrl+Shift+O
+  // starts a new chat.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === 'KeyK') {
+        e.preventDefault();
+        setModal((m) => (m === 'palette' ? null : 'palette'));
+      } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyO') {
+        e.preventDefault();
+        handleCreateThread();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleCreateThread]);
+
+  const commands: Command[] = useMemo(() => {
+    // Only build the full command list when the palette is open.
+    if (modal !== 'palette') return [];
+    const cmds: Command[] = [];
+    // New chat is omitted mid-generation — thread switching is locked.
+    if (!generating) {
+      cmds.push({
+        id: 'new-chat',
+        label: 'New chat',
+        group: 'Actions',
+        hint: '⇧⌘O',
+        run: () => void handleCreateThread(),
+      });
+    }
+    cmds.push(
+      {
+        id: 'change-model',
+        label: 'Change model',
+        group: 'Actions',
+        run: () => setModal('picker'),
+      },
+      {
+        id: 'thread-params',
+        label: 'Thread parameters',
+        group: 'Actions',
+        run: () => setModal('params'),
+      },
+      {
+        id: 'settings',
+        label: 'Open settings',
+        group: 'Actions',
+        run: () => setModal('settings'),
+      },
+      {
+        id: 'nav-chat',
+        label: 'Go to Chat',
+        group: 'Navigation',
+        run: () => setPage('chat'),
+      },
+      {
+        id: 'nav-knowledge',
+        label: 'Go to Knowledge',
+        group: 'Navigation',
+        run: () => setPage('knowledge'),
+      },
+      {
+        id: 'nav-storage',
+        label: 'Go to Storage',
+        group: 'Navigation',
+        run: () => setPage('storage'),
+      },
+    );
+    // Deleting the current thread and switching threads both move
+    // activeThreadId — omitted while a generation is in progress.
+    if (!generating) {
+      if (activeThreadId) {
+        cmds.push({
+          id: 'delete-thread',
+          label: 'Delete current thread',
+          group: 'Actions',
+          // D-20: say so before deleting a Workspace chat's files.
+          run: () => void (async () => {
+            const files = await countWorkspaceFiles(activeThreadId);
+            if (files && !window.confirm(`Delete this chat and its ${files} workspace file${files === 1 ? '' : 's'}? This cannot be undone.`)) return;
+            await deleteThread(activeThreadId);
+          })(),
+        });
+      }
+      for (const t of threads) {
+        if (t.id === activeThreadId) continue;
+        cmds.push({
+          id: `thread-${t.id}`,
+          label: t.title || 'Untitled thread',
+          group: 'Switch to thread',
+          run: () => {
+            selectThread(t.id);
+            setPage('chat');
+          },
+        });
+      }
+    }
+    return cmds;
+  }, [
+    modal,
+    handleCreateThread,
+    activeThreadId,
+    deleteThread,
+    threads,
+    selectThread,
+    generating,
+  ]);
+
+  // Q1 — curated slash commands for the composer's `/` menu. A focused,
+  // chat-relevant subset of the Cmd/K palette (no navigation or message
+  // search — those belong in the global palette). Each runs an action
+  // and clears the composer input.
+  const slashCommands: SlashCommand[] = useMemo(() => {
+    const cmds: SlashCommand[] = [
+      {
+        id: 'new',
+        label: 'new',
+        description: 'Start a new chat',
+        run: () => void handleCreateThread(),
+      },
+      {
+        id: 'model',
+        label: 'model',
+        description: 'Change the model',
+        run: () => setModal('picker'),
+      },
+      {
+        id: 'params',
+        label: 'params',
+        description: 'Thread parameters',
+        run: () => setModal('params'),
+      },
+      {
+        id: 'settings',
+        label: 'settings',
+        description: 'Open settings',
+        run: () => setModal('settings'),
+      },
+    ];
+    // Manual compaction only makes sense with an active thread.
+    if (activeThreadId) {
+      cmds.push({
+        id: 'compact',
+        label: 'compact',
+        description: 'Summarize older turns now',
+        run: () => void compactNow(),
+      });
+    }
+    return cmds;
+  }, [handleCreateThread, activeThreadId, compactNow]);
+
+  // Full-text message search for the command palette — resolves matches into
+  // commands that jump to the containing thread.
+  const searchMessagesAsync = useCallback(
+    async (query: string): Promise<Command[]> => {
+      const hits = await searchMessages(query, 25);
+      return hits.map((hit) => {
+        const thread = threads.find((t) => t.id === hit.threadId);
+        return {
+          id: `msg-${hit.messageId}`,
+          label: hit.snippet,
+          sublabel: `${hit.role} · ${thread?.title || 'Untitled thread'}`,
+          group: 'Messages',
+          run: () => {
+            selectThread(hit.threadId);
+            setPage('chat');
+          },
+        };
+      });
+    },
+    [threads, selectThread],
+  );
+
+  // Wrap regenerate with the same model-readiness guard as handleSend —
+  // if no model is loaded, open the picker instead of calling provider.chat().
+  const handleRegenerate = useCallback(() => {
+    if (modelReady) {
+      regenerate();
+      return;
+    }
+    // Auto-load only an ALREADY-CACHED model (no surprise multi-GB
+    // download); otherwise open the picker.
+    if (!isApiThread && wantedModelId && engineStatus === 'idle') {
+      const cached = models.find((m) => m.id === wantedModelId)?.cached;
+      if (cached) {
+        handleLoad(wantedModelId);
+        return;
+      }
+    }
+    setModal('picker');
+  }, [modelReady, isApiThread, wantedModelId, engineStatus, models, regenerate, handleLoad]);
+
+  const handleSend = useCallback(
+    (text: string, images?: import('../lib/image').ChatImage[], attachments?: import('../providers/types').MessageAttachment[]) => {
+      if (modelReady) {
+        send(text, images, attachments);
+        return;
+      }
+      // Deferred auto-load of an already-cached WebLLM model (no surprise
+      // download); API threads have no load step.
+      if (!isApiThread && wantedModelId && engineStatus === 'idle') {
+        const cached = models.find((m) => m.id === wantedModelId)?.cached;
+        if (cached) {
+          pendingRef.current = { text, images };
+          handleLoad(wantedModelId);
+          return;
+        }
+      }
+      setModal('picker');
+    },
+    [modelReady, isApiThread, wantedModelId, engineStatus, models, send, handleLoad],
+  );
+
+  // Selecting a model from an HTTP provider binds the active thread to that
+  // provider — no download step, so the thread is immediately ready to chat.
+  const handleSelectApiModel = useCallback(
+    (providerId: string, modelId: string, mode?: import('../providers/types').ThreadMode) => {
+      // Update the global model (so per-session-off chats follow) AND the
+      // current chat (its own binding when per-session is on, kept in
+      // sync otherwise).
+      setLastProviderId(providerId);
+      setLastModelId(modelId);
+      void setSetting('lastProviderId', providerId);
+      void setSetting('lastModelId', modelId);
+      if (activeThreadId) {
+        updateThread(activeThreadId, { providerId, modelId });
+      }
+      // A mode switch passes its new mode: the thread state here may still be the old one.
+      void setModeDefault(mode ?? activeThread?.mode ?? 'chat', providerId, modelId);
+      setModal(null);
+    },
+    [activeThreadId, activeThread?.mode, updateThread],
+  );
+
+  // D-3/D-21: the mode can change only while the chat is empty, and switching
+  // it moves to the model last used in that mode when one is available.
+  const handleChangeMode = useCallback(
+    async (mode: import('../providers/types').ThreadMode) => {
+      if (!activeThreadId || messages.length > 0 || (activeThread?.mode ?? 'chat') === mode) return;
+      // Attached files lock the mode too: they belong to a Workspace chat.
+      if (await countWorkspaceFiles(activeThreadId) > 0) return;
+      await updateThread(activeThreadId, { mode });
+      void setLastMode(mode);
+      await applyModeModel(activeThreadId, mode);
+    },
+    [activeThreadId, activeThread?.mode, messages.length, updateThread, applyModeModel],
+  );
+
+  // Jump from an unconfigured provider in the model picker straight to its
+  // settings — closes the picker and opens Settings on the Providers tab.
+  const handleConfigureProvider = useCallback(() => {
+    setSettingsTab('providers');
+    setModal('settings');
+  }, []);
+
+  const handleChangeSystemPrompt = useCallback(
+    (value: string) => {
+      if (activeThreadId) updateThread(activeThreadId, { systemPrompt: value });
+    },
+    [activeThreadId, updateThread],
+  );
+
+  // Composer KnowledgeChip → updates this thread's library binding.
+  // Passing null clears the binding (RAG off); a library id binds.
+  // Library writes propagate through useLibraries' shared store so the
+  // chip stays in sync after Knowledge-page mutations.
+  //
+  // When the "remember last library" setting is on, every non-null
+  // selection also updates defaultLibraryId so new chats inherit the
+  // most recent choice. Clearing to None doesn't change the default —
+  // the preference is "which library to prefer", not "is RAG on".
+  const handleChangeRagLibrary = useCallback(
+    (id: string | null) => {
+      if (!activeThreadId) return;
+      // Write null directly when the user clears — undefined would let
+      // the defaultLibraryId fallback re-bind silently on next render.
+      // The resolution path treats null as explicit OFF.
+      updateThread(activeThreadId, { libraryId: id });
+      if (rememberLastLibrary && id !== null && id !== defaultLibraryId) {
+        setDefaultLibraryIdState(id);
+        setSetting('defaultLibraryId', id).catch(() => {
+          // Persistence failure shouldn't break the chat — the in-
+          // memory state is the truth for this session.
+        });
+      }
+    },
+    [activeThreadId, updateThread, rememberLastLibrary, defaultLibraryId],
+  );
+
+  const handleNewLibraryRequest = useCallback(() => {
+    // Pop the user over to the Knowledge page where library creation
+    // lives. They can pick the newly-created library on the chat side
+    // once back. Cheaper than embedding the full NewLibraryModal here.
+    setPage('knowledge');
+  }, []);
+
+  const handleSetDefaultLibraryId = useCallback(
+    async (id: string | null) => {
+      setDefaultLibraryIdState(id);
+      await setSetting('defaultLibraryId', id);
+    },
+    [],
+  );
+
+  const handleSetRememberLastLibrary = useCallback(async (value: boolean) => {
+    setRememberLastLibraryState(value);
+    await setSetting('rememberLastLibrary', value);
+  }, []);
+
+  const handleSetRememberPerSessionModel = useCallback(async (value: boolean) => {
+    setRememberPerSessionModelState(value);
+    await setSetting('rememberPerSessionModel', value);
+  }, []);
+
+  const handleThreadParamsApply = useCallback(
+    (next: ModelParams) => {
+      if (activeThreadId) updateThread(activeThreadId, { modelParams: next });
+    },
+    [activeThreadId, updateThread],
+  );
+
+  const handleThreadParamsReset = useCallback(() => {
+    if (activeThreadId) updateThread(activeThreadId, { modelParams: undefined });
+  }, [activeThreadId, updateThread]);
+
+  const openPicker = useCallback(() => setModal('picker'), []);
+  const openParams = useCallback(() => setModal('params'), []);
+
+  const handleReasoningChange = useCallback(
+    (effort: ReasoningEffort) => {
+      if (activeThreadId) {
+        updateThread(activeThreadId, {
+          modelParams: { ...params, reasoningEffort: effort },
+        });
+      }
+    },
+    [activeThreadId, params, updateThread],
+  );
+
+  const handleMoveThread = useCallback(
+    (threadId: string, folderId: string | null) => {
+      updateThread(threadId, { folderId: folderId ?? undefined });
+    },
+    [updateThread],
+  );
+
+  // Deleting a folder un-assigns its threads (they become ungrouped) rather
+  // than deleting them, then removes the folder itself.
+  const handleDeleteFolder = useCallback(
+    async (folderId: string) => {
+      const inFolder = threads.filter((t) => t.folderId === folderId);
+      for (const t of inFolder) {
+        await updateThread(t.id, { folderId: undefined });
+      }
+      await deleteFolder(folderId);
+    },
+    [threads, updateThread, deleteFolder],
+  );
+
+  return (
+    <div className="h-screen flex overflow-hidden bg-bg text-text font-sans">
+      <NavRail page={page} setPage={setPage} onOpenSettings={() => setModal('settings')} />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="reveal reveal-1 border-b border-line bg-bg px-3 md:px-4 py-2 flex items-center gap-3 md:gap-4">
+          {page === 'chat' && (
+            <button
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open chat list"
+              aria-expanded={drawerOpen}
+              className="md:hidden p-1.5 border border-line text-mute hover:text-text"
+            >
+              <Menu size={16} />
+            </button>
+          )}
+          {system && <div className="hidden md:flex"><SystemStats system={system} compact /></div>}
+          <div className="ml-auto flex items-center gap-2">
+            {/* EmbeddingSlot was removed in 3f.8 — each library now owns
+                its embedding model, so a global "active embed model"
+                indicator was misleading. The composer KnowledgeChip
+                tells the truth per chat. */}
+            <ModelSlot
+              model={
+                isApiThread
+                  ? activeModelId || null
+                  : loadedModelId ?? wantedModelId ?? null
+              }
+              models={models}
+              state={
+                isApiThread
+                  ? activeThread?.modelId
+                    ? 'ready'
+                    : 'idle'
+                  : engineStatus
+              }
+              progress={loadProgress}
+              onClick={() => setModal('picker')}
+            />
+          </div>
+        </header>
+
+        {page === 'chat' && !isApiThread && system && !system.webgpu ? (
+          <WebGPUBlock onOpenPicker={() => setModal('picker')} />
+        ) : (
+          <div className="flex-1 flex min-h-0">
+            {page === 'chat' && (
+              <>
+                <div className={`${drawerOpen ? 'fixed inset-0 z-40 flex' : 'hidden'} md:static md:z-auto md:flex`}>
+                <Sidebar
+                  threads={threads}
+                  folders={folders}
+                  activeId={activeThreadId}
+                  onSelect={(id) => { selectThread(id); setDrawerOpen(false); }}
+                  onNew={() => { setDrawerOpen(false); void handleCreateThread(); }}
+                  onDelete={deleteThread}
+                  onRename={updateThreadTitle}
+                  onMoveThread={handleMoveThread}
+                  onCreateFolder={createFolder}
+                  onRenameFolder={renameFolder}
+                  onDeleteFolder={handleDeleteFolder}
+                  locked={generating}
+                />
+                {drawerOpen && <button aria-label="Close chat list" onClick={() => setDrawerOpen(false)} className="flex-1 bg-black/60 md:hidden" />}
+                </div>
+                <ChatPage
+                  onManageConnections={() => { setSettingsTab('tools'); setModal('settings'); }}
+                  toolsCapable={toolSupport.support.supported}
+                  onChangeMode={(mode) => void handleChangeMode(mode)}
+                  fileChangeNotice={fileChangeNotice}
+                  blockedNotice={blockedNotice}
+                  onDismissFileChangeNotice={dismissFileChangeNotice}
+                  toolsUnavailableReason={toolSupport.support.source === 'provider' ? 'Tools need an HTTP model that supports tool calling.' : 'This model reports no tool support. You can override this in the model picker.'}
+                  onChangeAgent={(patch) => { if (activeThreadId) void updateThread(activeThreadId, patch); }}
+                  thread={activeThread}
+                  messages={messages}
+                  budget={budget}
+                  models={models}
+                  loadedModelId={activeModelId || null}
+                  modelReady={modelReady}
+                  generating={generating}
+                  templates={templates}
+                  defaultSystemPrompt={defaultSystemPrompt}
+                  params={params}
+                  visionOk={visionOk}
+                  reasoningCapability={activeReasoningCapability}
+                  onReasoningChange={handleReasoningChange}
+                  onSend={handleSend}
+                  onStop={stop}
+                  onRegenerate={handleRegenerate}
+                  onEditAndResend={editAndResend}
+                  onOpenPicker={openPicker}
+                  onParams={openParams}
+                  onChangeSystemPrompt={handleChangeSystemPrompt}
+                  libraries={libraries}
+                  ragLibraryId={ragLibraryId}
+                  onChangeRagLibrary={handleChangeRagLibrary}
+                  onNewLibrary={handleNewLibraryRequest}
+                  historySummary={historySummary}
+                  tailSummary={tailSummary}
+                  summaries={summaries}
+                  compacting={compacting}
+                  slashCommands={slashCommands}
+                />
+              </>
+            )}
+            {page === 'knowledge' && (
+              <KnowledgePage getContextualizer={getContextualizer} />
+            )}
+            {page === 'storage' && (
+                  <StorageManager
+                    models={models}
+                    loadedModelId={loadedModelId}
+                    onEvict={handleEvict}
+                    onOpenSettings={() => {
+                      setSettingsTab('about');
+                      setModal('settings');
+                    }}
+                  />
+                )}
+          </div>
+        )}
+      </div>
+
+      <ModelPicker
+        open={modal === 'picker'}
+        onClose={() => setModal(null)}
+        models={models}
+        loadedModelId={loadedModelId}
+        system={system}
+        globalDefaults={globalDefaults}
+        engineStatus={engineStatus}
+        loadProgress={loadProgress}
+        onLoad={handleLoad}
+        onUnload={handleUnload}
+        onEvict={handleEvict}
+        onParamsChange={setGlobalDefaults}
+        defaultProviderId={activeProviderId}
+        toolOverrides={toolSupport.overrides}
+        onToolOverride={(providerId, modelId, value) => void toolSupport.setOverride(providerId, modelId, value)}
+        apiModelId={isApiThread ? activeThread?.modelId ?? null : null}
+        onSelectApiModel={handleSelectApiModel}
+        onConfigureProvider={handleConfigureProvider}
+        contextMin={compressionMode === 'auto' ? MIN_AUTO_COMPACT_CONTEXT_TOKENS : undefined}
+      />
+
+      <SettingsModal
+        toolsBusy={generating}
+        open={modal === 'settings'}
+        onClose={() => setModal(null)}
+        templates={templates}
+        setTemplates={setTemplates}
+        globalDefaults={globalDefaults}
+        setGlobalDefaults={setGlobalDefaults}
+        defaultSystemPrompt={defaultSystemPrompt}
+        setDefaultSystemPrompt={setDefaultSystemPrompt}
+        codeTheme={codeTheme}
+        setCodeTheme={handleSetCodeTheme}
+        titleMode={titleMode}
+        setTitleMode={setTitleMode}
+        accentColor={accentColor}
+        setAccentColor={handleSetAccentColor}
+        defaultLibraryId={defaultLibraryId}
+        setDefaultLibraryId={handleSetDefaultLibraryId}
+        rememberLastLibrary={rememberLastLibrary}
+        setRememberLastLibrary={handleSetRememberLastLibrary}
+        compressionMode={compressionMode}
+        setCompressionMode={setCompressionMode}
+        rememberPerSessionModel={rememberPerSessionModel}
+        setRememberPerSessionModel={handleSetRememberPerSessionModel}
+        tab={settingsTab}
+        onTabChange={setSettingsTab}
+      />
+
+      <ThreadParams
+        open={modal === 'params'}
+        onClose={() => setModal(null)}
+        params={params}
+        defaults={globalDefaults}
+        reasoningCapability={activeReasoningCapability}
+        contextMin={compressionMode === 'auto' ? MIN_AUTO_COMPACT_CONTEXT_TOKENS : undefined}
+        serverContext={serverContext}
+        onApply={handleThreadParamsApply}
+        onReset={handleThreadParamsReset}
+      />
+
+      <CommandPalette
+        open={modal === 'palette'}
+        onClose={() => setModal(null)}
+        commands={commands}
+        asyncCommands={searchMessagesAsync}
+      />
+    </div>
+  );
+}

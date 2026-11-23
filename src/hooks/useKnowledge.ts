@@ -1,0 +1,494 @@
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { Document, EmbeddingProvider, Library } from '../providers/types';
+import { listDocumentsByLibrary, deleteDocument } from '../data/documents';
+import { countEmbeddingsForModel, getEmbedding } from '../data/embeddings';
+import { getChunksForDocument } from '../data/chunks';
+import {
+  createLibrary as createLibraryRecord,
+  deleteLibrary as deleteLibraryRecord,
+  ensureDefaultLibrary,
+  getLibrary,
+  updateLibrary,
+  DEFAULT_LIBRARY_ID,
+} from '../data/libraries';
+import { ingestFile } from '../lib/ingest';
+import { embedDocument, type EmbedProgress } from '../lib/embed-pipeline';
+import { invalidateHybridSearchCache } from '../lib/hybrid-search';
+import { refreshLibrariesShared } from './useLibraries';
+import { getEmbeddingProvider } from '../providers/registry';
+import type { Contextualizer } from '../lib/contextualizer';
+
+/**
+ * D8 Part B — caller supplies a contextualizer factory. Given a library
+ * that has opted into Contextual Retrieval, the factory returns a
+ * Contextualizer closed over an available chat provider/model, or null
+ * if no chat model is currently available (in which case the embed
+ * pipeline falls back to vanilla embedding for that library and logs
+ * a warning).
+ *
+ * Pushing the factory through props (rather than importing a chat
+ * provider directly inside this hook) keeps useKnowledge unaware of
+ * chat-side state and lets App.tsx wire whatever provider it considers
+ * "active" right now.
+ */
+export type ContextualizerFactory = (lib: Library) => Contextualizer | null;
+
+/**
+ * Per-document embedding status under the active library's pinned model.
+ */
+export type DocStatus = 'none' | 'partial' | 'full' | 'pending' | 'error';
+
+export interface DocWithStatus {
+  doc: Document;
+  status: DocStatus;
+  embeddedChunks: number;
+  errorMessage?: string;
+}
+
+export interface LibraryWithStats {
+  lib: Library;
+  docCount: number;
+  chunkCount: number;
+}
+
+export function useKnowledge(opts: { getContextualizer?: ContextualizerFactory } = {}) {
+  const { getContextualizer } = opts;
+  const [libraries, setLibraries] = useState<LibraryWithStats[]>([]);
+  const [activeLibraryId, setActiveLibraryId] = useState<string>(DEFAULT_LIBRARY_ID);
+  const [docs, setDocs] = useState<DocWithStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyDocIds, setBusyDocIds] = useState<Set<string>>(new Set());
+  /** Which library is currently running an embed-all / upload-and-embed
+   *  pass. Lets the LibraryList show a spinner on the right row. */
+  const [busyLibraryId, setBusyLibraryId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<EmbedProgress | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const uploadController = useRef<AbortController | null>(null);
+  const [ingestProgress, setIngestProgress] = useState<string | null>(null);
+  useEffect(() => () => uploadController.current?.abort(), []);
+
+  const activeLibrary = useMemo(
+    () => libraries.find((l) => l.lib.id === activeLibraryId)?.lib ?? null,
+    [libraries, activeLibraryId],
+  );
+
+  /** Reload the library list with counts. Delegates to the shared
+   *  store so the KnowledgeChip, Settings picker, and Knowledge page
+   *  all see the same data and stay in sync after mutations. */
+  const refreshLibraries = useCallback(async (): Promise<LibraryWithStats[]> => {
+    await ensureDefaultLibrary();
+    const withStats = await refreshLibrariesShared();
+    setLibraries(withStats);
+    return withStats;
+  }, []);
+
+  /** Reload docs for the active library, computing per-doc embedding
+   *  status against the library's pinned model. */
+  const refreshDocs = useCallback(async (): Promise<void> => {
+    if (!activeLibrary) {
+      setDocs([]);
+      return;
+    }
+    const list = await listDocumentsByLibrary(activeLibrary.id);
+    const modelId = activeLibrary.embeddingModelId;
+    if (!modelId) {
+      // Library has no model pinned yet — every doc is unembeddable until
+      // one is chosen. Show status='none' across the board.
+      setDocs(list.map((doc) => ({ doc, status: 'none' as const, embeddedChunks: 0 })));
+      return;
+    }
+    const withStatus = await Promise.all(
+      list.map(async (doc): Promise<DocWithStatus> => {
+        const chunks = await getChunksForDocument(doc.id);
+        let embeddedChunks = 0;
+        for (const chunk of chunks) {
+          const rec = await getEmbedding(chunk.id, modelId);
+          if (rec) embeddedChunks++;
+        }
+        let status: DocStatus = 'none';
+        if (embeddedChunks === 0) status = 'none';
+        else if (embeddedChunks === chunks.length) status = 'full';
+        else status = 'partial';
+        return { doc, status, embeddedChunks };
+      }),
+    );
+    setDocs(withStatus);
+  }, [activeLibrary]);
+
+  const refresh = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    await refreshLibraries();
+    setLoading(false);
+  }, [refreshLibraries]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // Re-load docs whenever the active library changes or its stats refresh.
+  useEffect(() => {
+    refreshDocs();
+  }, [refreshDocs, libraries]);
+
+  /** Create a new library. Sets it as active on success. */
+  const createLibrary = useCallback(
+    async (input: {
+      name: string;
+      embeddingProviderId?: string;
+      embeddingModelId?: string;
+      useContextualRetrieval?: boolean;
+    }) => {
+      const lib = await createLibraryRecord(input);
+      await refreshLibraries();
+      setActiveLibraryId(lib.id);
+      return lib;
+    },
+    [refreshLibraries],
+  );
+
+  /** Rename or rebind a library to a new embedding model. Caller is
+   *  responsible for re-embedding docs when the model changes. */
+  const editLibrary = useCallback(
+    async (id: string, patch: Partial<Library>) => {
+      await updateLibrary(id, patch);
+      await refreshLibraries();
+    },
+    [refreshLibraries],
+  );
+
+  /** Delete a library and all its documents (cascading). The Default
+   *  library can't be deleted. */
+  const removeLibrary = useCallback(
+    async (id: string) => {
+      const targetDocs = await listDocumentsByLibrary(id);
+      for (const d of targetDocs) {
+        await deleteDocument(d.id);
+      }
+      await deleteLibraryRecord(id);
+      invalidateHybridSearchCache();
+      if (activeLibraryId === id) {
+        setActiveLibraryId(DEFAULT_LIBRARY_ID);
+      }
+      await refreshLibraries();
+    },
+    [activeLibraryId, refreshLibraries],
+  );
+
+  /** Ingest files into a library. Defaults to the active one so simple
+   *  callers (drop zone) don't have to pass an id; the AddDocumentsModal
+   *  passes an explicit target since it has its own library picker.
+   *
+   *  Auto-embeds each ingested document when the target library has a
+   *  model pinned — uploading then becomes a single action instead of a
+   *  two-step "upload, click embed" flow. Libraries without a pinned
+   *  model still ingest cleanly; the user pins later, then embed-all
+   *  catches them up. */
+  const uploadFiles = useCallback(
+    async (files: File[], libraryId?: string): Promise<void> => {
+      if (uploadController.current) return;
+      const controller = new AbortController();
+      uploadController.current = controller;
+      const targetId = libraryId ?? activeLibraryId;
+      setError(null);
+      try {
+      const failures: string[] = [];
+
+      // Resolve the target library's model up-front so we can decide
+      // whether to chain embed() per file. We can't read it from
+      // `libraries` state — that's stale during this call — so we fetch
+      // it fresh.
+      const targetLib = await getLibrary(targetId);
+      if (!targetLib) throw new Error('The selected library no longer exists.');
+      const lib = targetLib ?? null;
+      const libProvider =
+        lib && lib.embeddingProviderId ? getEmbeddingProvider(lib.embeddingProviderId) : null;
+      const canAutoEmbed = Boolean(lib && lib.embeddingModelId && libProvider);
+
+      // Single progress bar that spans both ingestion and embedding.
+      // `cumulativeEmbedded` is the running embedded count across all
+      // files processed so far in this batch. `plannedTotal` is the
+      // running denominator — it only grows as each file is ingested
+      // (we don't know chunk counts until ingest finishes). Per-file
+      // total = plannedTotal directly; never add `chunks.length - p.embedded`
+      // on top, that double-counts the current doc and makes the bar
+      // shrink as it fills.
+      let cumulativeEmbedded = 0;
+      let plannedTotal = 0;
+      setBusyLibraryId(targetId);
+
+      // Resolve the contextualizer once per upload (it's the same
+      // library + same chat provider for the whole batch).
+      const contextualizer =
+        lib && lib.useContextualRetrieval && getContextualizer
+          ? getContextualizer(lib)
+          : null;
+      if (lib?.useContextualRetrieval && !contextualizer) {
+        console.warn(
+          `[useKnowledge] library "${lib.name}" opts into contextual retrieval ` +
+            'but no chat model is available — embedding vanilla.',
+        );
+      }
+
+      for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        if (controller.signal.aborted) break;
+        const file = files[fileIndex]!;
+        setIngestProgress(`Reading ${file.name}…`);
+        try {
+          const { document, chunks } = await ingestFile(file, targetId, {
+            signal: controller.signal,
+            onProgress: (page, total) => setIngestProgress(`${file.name}: page ${page}/${total}`),
+          });
+          setIngestProgress(`Indexing ${file.name}…`);
+          if (canAutoEmbed && lib && libProvider) {
+            plannedTotal += chunks.length;
+            await embedDocument(
+              document.id,
+              libProvider,
+              lib.embeddingModelId,
+              (p) => {
+                setProgress({
+                  embedded: cumulativeEmbedded + p.embedded,
+                  total: plannedTotal,
+                  documentId: document.id,
+                  fileIndex,
+                  fileTotal: files.length,
+                  fileChunks: chunks.length,
+                  fileEmbedded: p.embedded,
+                  ...(p.contextualized !== undefined
+                    ? { contextualized: p.contextualized }
+                    : {}),
+                });
+              },
+              { contextualizer, signal: controller.signal },
+            );
+            cumulativeEmbedded += chunks.length;
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          failures.push(`${file.name}: ${msg}`);
+        }
+      }
+      controller.signal.throwIfAborted();
+      if (failures.length) throw new Error(failures.join('\n'));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        throw err;
+      } finally {
+      setProgress(null);
+      setIngestProgress(null);
+      uploadController.current = null;
+      setBusyLibraryId(null);
+      invalidateHybridSearchCache();
+      await refreshLibraries();
+      }
+    },
+    [activeLibraryId, refreshLibraries, getContextualizer],
+  );
+
+  /** Resolve the active library's embedding provider. Returns null if
+   *  the library has no model pinned or the provider isn't registered. */
+  const activeEmbeddingProvider = useMemo((): EmbeddingProvider | null => {
+    if (!activeLibrary) return null;
+    if (!activeLibrary.embeddingProviderId || !activeLibrary.embeddingModelId) {
+      return null;
+    }
+    return getEmbeddingProvider(activeLibrary.embeddingProviderId) ?? null;
+  }, [activeLibrary]);
+
+  /** Embed one document under the library's pinned model. */
+  const embedOne = useCallback(
+    async (docId: string): Promise<void> => {
+      if (!activeLibrary || !activeEmbeddingProvider || !activeLibrary.embeddingModelId) {
+        setError('Pin an embedding model to this library before embedding.');
+        return;
+      }
+      const contextualizer =
+        activeLibrary.useContextualRetrieval && getContextualizer
+          ? getContextualizer(activeLibrary)
+          : null;
+      setBusyDocIds((s) => new Set(s).add(docId));
+      setError(null);
+      try {
+        await embedDocument(
+          docId,
+          activeEmbeddingProvider,
+          activeLibrary.embeddingModelId,
+          (p) => setProgress(p),
+          contextualizer ? { contextualizer } : {},
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusyDocIds((s) => {
+          const next = new Set(s);
+          next.delete(docId);
+          return next;
+        });
+        setProgress(null);
+        await refreshDocs();
+      }
+    },
+    [activeLibrary, activeEmbeddingProvider, refreshDocs, getContextualizer],
+  );
+
+  /** Embed every doc in a specific library under its pinned model.
+   *  Idempotent — chunks already covered have their record re-put with
+   *  the same vector (cheap). Called from LibraryList rows. */
+  const embedAllForLibrary = useCallback(
+    async (libraryId: string): Promise<void> => {
+      const lib = await getLibrary(libraryId);
+      if (!lib || !lib.embeddingModelId || !lib.embeddingProviderId) {
+        setError('Pin an embedding model to this library first.');
+        return;
+      }
+      const libProvider = getEmbeddingProvider(lib.embeddingProviderId);
+      if (!libProvider) {
+        setError(`Provider "${lib.embeddingProviderId}" is no longer registered.`);
+        return;
+      }
+      const contextualizer =
+        lib.useContextualRetrieval && getContextualizer
+          ? getContextualizer(lib)
+          : null;
+      setError(null);
+      setBusyLibraryId(lib.id);
+      try {
+        const list = await listDocumentsByLibrary(lib.id);
+        const totalChunks = list.reduce((sum, d) => sum + d.chunkCount, 0);
+        let done = 0;
+        for (let i = 0; i < list.length; i++) {
+          const d = list[i]!;
+          await embedDocument(
+            d.id,
+            libProvider,
+            lib.embeddingModelId,
+            (p) =>
+              setProgress({
+                embedded: done + p.embedded,
+                total: totalChunks,
+                documentId: d.id,
+                fileIndex: i,
+                fileTotal: list.length,
+                fileChunks: d.chunkCount,
+                fileEmbedded: p.embedded,
+                ...(p.contextualized !== undefined
+                  ? { contextualized: p.contextualized }
+                  : {}),
+              }),
+            contextualizer ? { contextualizer } : {},
+          );
+          done += d.chunkCount;
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setProgress(null);
+        setBusyLibraryId(null);
+        await refreshLibraries();
+      }
+    },
+    [refreshLibraries, getContextualizer],
+  );
+
+  /** Embed every doc in the active library that isn't fully covered. */
+  const embedAll = useCallback(async (): Promise<void> => {
+    if (!activeLibrary || !activeEmbeddingProvider || !activeLibrary.embeddingModelId) {
+      setError('Pin an embedding model to this library before embedding.');
+      return;
+    }
+    const contextualizer =
+      activeLibrary.useContextualRetrieval && getContextualizer
+        ? getContextualizer(activeLibrary)
+        : null;
+    setError(null);
+    setBusyLibraryId(activeLibrary.id);
+    try {
+      // embedAllDocuments embeds the whole DB; we want only the active
+      // library's docs, so iterate them explicitly.
+      const list = await listDocumentsByLibrary(activeLibrary.id);
+      const totalChunks = list.reduce((sum, d) => sum + d.chunkCount, 0);
+      let done = 0;
+      for (let i = 0; i < list.length; i++) {
+        const d = list[i]!;
+        await embedDocument(
+          d.id,
+          activeEmbeddingProvider,
+          activeLibrary.embeddingModelId,
+          (p) =>
+            setProgress({
+              embedded: done + p.embedded,
+              total: totalChunks,
+              documentId: d.id,
+              fileIndex: i,
+              fileTotal: list.length,
+              fileChunks: d.chunkCount,
+              fileEmbedded: p.embedded,
+              ...(p.contextualized !== undefined
+                ? { contextualized: p.contextualized }
+                : {}),
+            }),
+          contextualizer ? { contextualizer } : {},
+        );
+        done += d.chunkCount;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProgress(null);
+      setBusyLibraryId(null);
+      await refreshDocs();
+    }
+  }, [activeLibrary, activeEmbeddingProvider, refreshDocs, getContextualizer]);
+
+  const removeDoc = useCallback(
+    async (docId: string): Promise<void> => {
+      await deleteDocument(docId);
+      invalidateHybridSearchCache();
+      await refreshLibraries();
+    },
+    [refreshLibraries],
+  );
+
+  return {
+    ingestProgress,
+    cancelUpload: () => uploadController.current?.abort(),
+    libraries,
+    activeLibraryId,
+    setActiveLibraryId,
+    activeLibrary,
+    docs,
+    loading,
+    busyDocIds,
+    busyLibraryId,
+    progress,
+    error,
+    refresh,
+    createLibrary,
+    editLibrary,
+    removeLibrary,
+    uploadFiles,
+    embedOne,
+    embedAll,
+    embedAllForLibrary,
+    removeDoc,
+  };
+}
+
+/** Total embedding count for the given model — used as a "ready to search" signal. */
+export function useEmbeddingCount(modelId: string | null): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!modelId) {
+      setCount(0);
+      return;
+    }
+    let cancelled = false;
+    countEmbeddingsForModel(modelId).then((n) => {
+      if (!cancelled) setCount(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [modelId]);
+  return count;
+}

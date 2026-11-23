@@ -1,0 +1,208 @@
+import { useState, useEffect, useMemo, useRef } from 'react'; // useRef used in CopyButton
+import { Marked, type Tokens } from 'marked';
+import { highlightToHtml, subscribeHighlight } from '../../lib/highlight';
+import { Check, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { sanitizeHtml, sanitizeHighlight } from '../../lib/sanitize';
+import { renderCitationHtml } from '../../lib/citations';
+import type { SourceCitation } from '../../providers/types';
+import { SourceDialog } from './SourceDialog';
+
+/** Code blocks longer than this collapse to a capped height with a
+ *  "show more" toggle, so a single long paste doesn't dominate the
+ *  transcript. ~the same number of lines the capped height shows. */
+const CODE_COLLAPSE_LINES = 16;
+
+// ── Marked instance with custom code-block renderer ─────────────────
+// We render code blocks ourselves (with a copy button), so we emit a
+// placeholder that we split on later. Inline markdown (bold, italic,
+// inline code, links, lists, tables, headings, hr) is handled by marked's
+// default HTML output.
+
+const CODE_DELIM = '<!--shiki-code-->';
+
+function buildMarked(): Marked {
+  const m = new Marked();
+  m.use({
+    renderer: {
+      link(token: Tokens.Link): string {
+        return `<a href="${token.href}" target="_blank" rel="noopener noreferrer">${token.text}</a>`;
+      },
+      code(token: Tokens.Code): string {
+        const lang = (token.lang ?? '').trim();
+        const html = highlightToHtml(token.text, lang || undefined);
+        // Encode for safe splitting: base64 the inner HTML.
+        const payload = btoa(
+          encodeURIComponent(
+            JSON.stringify({ lang, html, raw: token.text }),
+          ),
+        );
+        return `${CODE_DELIM}${payload}${CODE_DELIM}`;
+      },
+    },
+  });
+  return m;
+}
+
+let markedInstance: Marked | null = null;
+function getMarked(): Marked {
+  if (!markedInstance) markedInstance = buildMarked();
+  return markedInstance;
+}
+
+// ── Code block component ────────────────────────────────────────────
+
+function CodeBlock({ lang, html, raw }: { lang: string; html: string; raw: string }) {
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const copy = () => {
+    try {
+      navigator.clipboard.writeText(raw);
+    } catch {
+      // clipboard unavailable
+    }
+    setCopied(true);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 1200);
+  };
+
+  // If html came from shiki it's a full <pre><code>…</code></pre> block.
+  // If it's a plain-text fallback it's just escaped text.
+  const isShikiHtml = html.startsWith('<pre');
+
+  const lineCount = raw.split('\n').length;
+  const collapsible = lineCount > CODE_COLLAPSE_LINES;
+  const collapsed = collapsible && !expanded;
+
+  return (
+    <div className="my-2 border border-line overflow-hidden bg-[#0d0d0d]">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-line bg-surface">
+        <span className="font-mono text-[10px] text-mute uppercase tracking-wider">
+          {lang || 'code'}
+          {collapsible && (
+            <span className="text-mute/60 normal-case"> · {lineCount} lines</span>
+          )}
+        </span>
+        <button
+          onClick={copy}
+          className="flex items-center gap-1 font-mono text-[10px] text-mute hover:text-text"
+        >
+          {copied ? (
+            <>
+              <Check size={11} /> copied
+            </>
+          ) : (
+            <>
+              <Copy size={11} /> copy
+            </>
+          )}
+        </button>
+      </div>
+      {/* Content area — capped + faded while collapsed. */}
+      <div className="relative">
+        <div className={collapsed ? 'max-h-[20rem] overflow-hidden' : ''}>
+          {isShikiHtml ? (
+            <div
+              className="shiki-container px-3 py-2.5 overflow-x-auto [&_pre]:!bg-transparent [&_pre]:!m-0 [&_pre]:!p-0 [&_code]:font-mono [&_code]:text-[12.5px] [&_code]:leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: sanitizeHighlight(highlightToHtml(raw, lang || undefined)) }}
+            />
+          ) : (
+            <pre className="px-3 py-2.5 overflow-x-auto">
+              <code className="font-mono text-[12.5px] text-text/90 leading-relaxed">
+                {raw}
+              </code>
+            </pre>
+          )}
+        </div>
+        {collapsed && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0d0d0d] to-transparent" />
+        )}
+      </div>
+      {collapsible && (
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full flex items-center justify-center gap-1 border-t border-line py-1.5 font-mono text-[10px] text-mute hover:text-accent hover:bg-surface/60 transition-colors"
+        >
+          {expanded ? (
+            <>
+              <ChevronUp size={11} /> show less
+            </>
+          ) : (
+            <>
+              <ChevronDown size={11} /> show {lineCount - CODE_COLLAPSE_LINES} more lines
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ──────────────────────────────────────────────────
+
+export function MessageBody({ content, citations }: { content: string; citations?: SourceCitation[] }) {
+  const [source, setSource] = useState<SourceCitation | null>(null);
+  const [highlighterVersion, setHighlighterVersion] = useState(0);
+
+  // Re-render when the highlighter finishes loading or an on-demand grammar
+  // becomes available, so code blocks upgrade from plain text to highlighted.
+  useEffect(() => {
+    return subscribeHighlight(() => {
+      // Rebuild the marked instance so the renderer picks up the new state.
+      markedInstance = null;
+      setHighlighterVersion((n) => n + 1);
+    });
+  }, []);
+
+  const segments = useMemo(() => {
+    const marked = getMarked();
+    const rawHtml = marked.parse(content, { async: false }) as string;
+
+    // Split on our code-block placeholders.
+    const parts = rawHtml.split(CODE_DELIM);
+    return parts.map((part, i) => {
+      if (i % 2 === 1) {
+        // This is a code block payload.
+        try {
+          const decoded = JSON.parse(decodeURIComponent(atob(part))) as {
+            lang: string;
+            html: string;
+            raw: string;
+          };
+          if (typeof decoded.lang !== 'string' || typeof decoded.raw !== 'string' || typeof decoded.html !== 'string') throw new Error('Invalid code payload');
+          return { kind: 'code' as const, ...decoded };
+        } catch {
+          return { kind: 'html' as const, html: part };
+        }
+      }
+      return { kind: 'html' as const, html: part };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- highlighterVersion forces reparse when shiki loads
+  }, [content, highlighterVersion]);
+
+  return (
+    <div className="text-[13.5px] text-text leading-relaxed prose-custom" onClick={(event) => {
+      const link = (event.target as HTMLElement).closest('a[data-source-index]');
+      if (!link || !event.currentTarget.contains(link)) return;
+      const selected = citations?.[Number(link.getAttribute('data-source-index'))];
+      if (selected) { event.preventDefault(); setSource(selected); }
+    }}>
+      {segments.map((seg, i) => {
+        if (seg.kind === 'code') {
+          return <CodeBlock key={i} lang={seg.lang} html={seg.html} raw={seg.raw} />;
+        }
+        if (!seg.html.trim()) return null;
+        return (
+          <div
+            key={i}
+            className="markdown-body"
+            dangerouslySetInnerHTML={{ __html: citations ? renderCitationHtml(seg.html, citations) : sanitizeHtml(seg.html) }}
+          />
+        );
+      })}
+      <SourceDialog source={source} onClose={() => setSource(null)} />
+    </div>
+  );
+}

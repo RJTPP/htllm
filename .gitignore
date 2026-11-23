@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.astro/
+.DS_Store
+*.local
+.env
+.env.*
+/.claude
+test-results/
+playwright-report/
+.pnpm-store/
+eval/results/live*.json
+
+# Local SDD review artifacts (drift and gap reports)
+.agent-doc-skills/
