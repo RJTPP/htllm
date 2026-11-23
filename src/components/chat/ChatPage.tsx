@@ -435,6 +435,7 @@ export function ChatPage({
         view={panel}
         onView={setPanel}
         onClose={() => setPanel(null)}
+        onNewLibrary={onNewLibrary}
       />
     )}
     </div>

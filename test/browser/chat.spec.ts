@@ -840,6 +840,28 @@ test('the viewer renders a generated CSV note as a table and shows each version\
   await panel.getByRole('button', { name: 'Previous version' }).click();
   await expect(panel.getByText('copied from /uploads/a.txt, lines 1–2')).toBeVisible();
 });
+test('a workspace upload can be added to a Knowledge library with its pages', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('workspaceFiles', 'readwrite');
+    tx.objectStore('workspaceFiles').put({ id: 'pdf', threadId: 'fixture-thread', path: '/uploads/report.pdf', kind: 'upload', text: 'Page one.\n\nPage two.', pages: [{ page: 1, start: 0, end: 9 }, { page: 2, start: 11, end: 20 }], mimeType: 'application/pdf', version: 1, createdAt: 1, updatedAt: 1 });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Workspace files' }).click();
+  const panel = page.getByRole('complementary', { name: 'Workspace files' });
+  await panel.getByRole('button', { name: /report\.pdf/ }).click();
+  await panel.getByRole('button', { name: 'Add report.pdf to a Knowledge library' }).click();
+  await page.getByRole('dialog', { name: 'Add to a Knowledge library' }).getByRole('button', { name: /Fixture library/ }).click();
+  await expect(panel.getByText(/Added to Fixture library\. Index it from the Knowledge page/)).toBeVisible();
+  const doc = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const docs = await new Promise<{ filename: string; libraryId: string; pages?: unknown[] }[]>((resolve) => { const req = db.transaction('documents').objectStore('documents').getAll(); req.onsuccess = () => resolve(req.result); });
+    db.close(); return docs.find((d) => d.filename === 'report.pdf');
+  });
+  expect(doc).toMatchObject({ libraryId: 'fixture-library', pages: [{ page: 1, start: 0, end: 9 }, { page: 2, start: 11, end: 20 }] });
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
