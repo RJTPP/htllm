@@ -80,3 +80,11 @@ it('gives threads from older backups a mode by the D-11 rule', async () => {
   Object.assign(data.threads[0]!, { mode: 'agent' });
   expect(() => validateImport(JSON.stringify(data))).toThrow('mode');
 });
+it('validates presented files on messages', () => {
+  const ok = backup(); Object.assign(ok.messages[0]!, { presentedFiles: [{ fileId: 'f', path: '/notes/a.md', version: 2, caption: 'Plan' }] });
+  expect(validateImport(JSON.stringify(ok)).version).toBe(1);
+  for (const bad of [[{ fileId: 'f', path: 'notes/a.md', version: 1 }], [{ fileId: 'f', path: '/notes/a.md', version: 0 }], [{ path: '/notes/a.md', version: 1 }], 'x']) {
+    const data = backup(); Object.assign(data.messages[0]!, { presentedFiles: bad });
+    expect(() => validateImport(JSON.stringify(data))).toThrow('presented');
+  }
+});

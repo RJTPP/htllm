@@ -126,7 +126,17 @@ export interface ImagePart {
 
 export type ContentPart = TextPart | ImagePart;
 
+/** D-25…D-28: a file the model handed to the user in this message, at a fixed version. */
+export interface PresentedFile {
+  fileId: string;
+  path: string;
+  version: number;
+  caption?: string;
+}
+
 export interface Message {
+  /** Files presented with present_file during this turn (D-25). */
+  presentedFiles?: PresentedFile[];
   citations?: SourceCitation[];
   retrievalStatus?: 'grounded' | 'no-matches' | 'unavailable' | 'skipped';
   activity?: AgentEvent[];
