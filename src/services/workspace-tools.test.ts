@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../data/db';
 import { addUpload, writeNote } from '../data/workspace';
 import { contextBand } from '../lib/workspace-text';
-import { locateEdit, mountWorkspace, workspaceReadTools, workspaceTools, type WorkspaceContext } from './workspace-tools';
+import { locateEdit, mountWorkspace, workspaceReadTools, workspaceSummary, workspaceTools, type WorkspaceContext } from './workspace-tools';
 
 const signal = new AbortController().signal;
 let ctx: WorkspaceContext;
@@ -116,5 +116,15 @@ describe('locateEdit', () => {
   it('refuses a whitespace-tolerant match much larger than the request', () => {
     expect(locateEdit('a\n\n\n\nb', 'a\nb').count).toBe(0);
     expect(locateEdit('  x = 1\n  y = 2', 'x = 1\ny = 2')).toMatchObject({ count: 1, fuzzy: true, start: 0 });
+  });
+});
+
+describe('workspaceSummary', () => {
+  it('lists files for the prompt, capped', async () => {
+    const summary = await workspaceSummary(ctx);
+    expect(summary).toContain('- /uploads/report.txt (upload, read-only');
+    expect(summary).toContain('- /notes/todo.md (note v1');
+    expect(summary).toContain('/library/Team-Docs/plan.txt (library, read-only');
+    expect(await workspaceSummary(ctx, 1)).toContain('…and 2 more');
   });
 });

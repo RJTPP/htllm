@@ -344,3 +344,11 @@ export function workspaceWriteTools(ctx: WorkspaceContext): ExecutableTool[] {
 export function workspaceTools(ctx: WorkspaceContext): ExecutableTool[] {
   return [...workspaceReadTools(ctx), ...workspaceWriteTools(ctx)];
 }
+
+/** Short listing of the workspace for the system prompt, so the model knows what exists. */
+export async function workspaceSummary(ctx: Pick<WorkspaceContext, 'threadId' | 'libraryId'>, max = 30): Promise<string> {
+  const files = await mountWorkspace(ctx);
+  if (!files.length) return 'Files right now: none. The user can attach files; you can write notes under /notes.';
+  const shown = files.slice(0, max).map((f) => `- ${f.path} (${f.kind === 'note' ? `note v${f.version}` : `${f.kind}, read-only`}, ${fmtSize(f.text.length)})`);
+  return ['Files right now:', ...shown, ...(files.length > max ? [`- …and ${files.length - max} more (use list_files).`] : [])].join('\n');
+}
