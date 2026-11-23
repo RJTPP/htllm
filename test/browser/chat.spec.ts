@@ -872,6 +872,26 @@ test('fonts are self-hosted: no third-party requests on load, and Geist renders'
   expect(loaded).toContain('Geist');
   expect(external.filter((host) => /google|gstatic/.test(host))).toEqual([]);
 });
+test('on a phone-sized window the chat list is a drawer and the chat keeps the width', async ({ page }) => {
+  await seed(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const composer = page.getByPlaceholder('Message…');
+  await expect(composer).toBeVisible();
+  expect((await composer.boundingBox())!.width).toBeGreaterThan(150);
+  const newChat = page.getByRole('button', { name: 'new chat' });
+  await expect(newChat).toBeHidden();
+  await page.getByRole('button', { name: 'Open chat list' }).click();
+  await expect(newChat).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(newChat).toBeHidden();
+  await page.getByRole('button', { name: 'Open chat list' }).click();
+  await page.getByText('Fixture chat').first().click();
+  await expect(newChat).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.getByRole('button', { name: 'Open chat list' })).toBeHidden();
+  await expect(newChat).toBeVisible();
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';

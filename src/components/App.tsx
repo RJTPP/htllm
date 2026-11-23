@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Menu } from 'lucide-react';
 import type {
   ModelInfo,
   LoadProgress,
@@ -98,6 +99,14 @@ export default function App() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [page, setPage] = useState<NavPage>('chat');
   const [modal, setModal] = useState<ModalId>(null);
+  // Below 768 px the chat list is a slide-out drawer instead of a fixed column.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setDrawerOpen(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [drawerOpen]);
   const [defaultSystemPrompt, setDefaultSystemPromptState] = useState(DEFAULT_SYSTEM_PROMPT);
   const [defaultLibraryId, setDefaultLibraryIdState] = useState<string | null>(null);
   const [rememberLastLibrary, setRememberLastLibraryState] = useState(false);
@@ -817,8 +826,18 @@ export default function App() {
       <NavRail page={page} setPage={setPage} onOpenSettings={() => setModal('settings')} />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="reveal reveal-1 border-b border-line bg-bg px-4 py-2 flex items-center gap-4">
-          {system && <SystemStats system={system} compact />}
+        <header className="reveal reveal-1 border-b border-line bg-bg px-3 md:px-4 py-2 flex items-center gap-3 md:gap-4">
+          {page === 'chat' && (
+            <button
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Open chat list"
+              aria-expanded={drawerOpen}
+              className="md:hidden p-1.5 border border-line text-mute hover:text-text"
+            >
+              <Menu size={16} />
+            </button>
+          )}
+          {system && <div className="hidden md:flex"><SystemStats system={system} compact /></div>}
           <div className="ml-auto flex items-center gap-2">
             {/* EmbeddingSlot was removed in 3f.8 — each library now owns
                 its embedding model, so a global "active embed model"
@@ -850,12 +869,13 @@ export default function App() {
           <div className="flex-1 flex min-h-0">
             {page === 'chat' && (
               <>
+                <div className={`${drawerOpen ? 'fixed inset-0 z-40 flex' : 'hidden'} md:static md:z-auto md:flex`}>
                 <Sidebar
                   threads={threads}
                   folders={folders}
                   activeId={activeThreadId}
-                  onSelect={selectThread}
-                  onNew={handleCreateThread}
+                  onSelect={(id) => { selectThread(id); setDrawerOpen(false); }}
+                  onNew={() => { setDrawerOpen(false); void handleCreateThread(); }}
                   onDelete={deleteThread}
                   onRename={updateThreadTitle}
                   onMoveThread={handleMoveThread}
@@ -864,6 +884,8 @@ export default function App() {
                   onDeleteFolder={handleDeleteFolder}
                   locked={generating}
                 />
+                {drawerOpen && <button aria-label="Close chat list" onClick={() => setDrawerOpen(false)} className="flex-1 bg-black/60 md:hidden" />}
+                </div>
                 <ChatPage
                   onManageConnections={() => { setSettingsTab('tools'); setModal('settings'); }}
                   toolsCapable={toolSupport.support.supported}
