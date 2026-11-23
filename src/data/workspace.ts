@@ -21,7 +21,19 @@ export async function getWorkspaceFileById(id: string): Promise<WorkspaceFile | 
 export async function addUpload(input: Pick<WorkspaceFile, 'threadId' | 'path' | 'text' | 'mimeType' | 'pages'>): Promise<WorkspaceFile> {
   const now = Date.now();
   const file: WorkspaceFile = { ...input, id: uuid(), kind: 'upload', version: 1, createdAt: now, updatedAt: now };
-  await (await getDb()).add('workspaceFiles', file);
+  // The chat may have been deleted while the file was being read: check in the
+  // same transaction, so an upload can never outlive its chat.
+  const tx = (await getDb()).transaction(['threads', 'workspaceFiles'], 'readwrite');
+  // Nothing is written yet, so let the transaction finish before refusing.
+  if (!(await tx.objectStore('threads').get(input.threadId))) { await tx.done; throw new Error('This chat no longer exists.'); }
+  try {
+    await tx.objectStore('workspaceFiles').add(file);
+    await tx.done;
+  } catch (error) {
+    // A taken path aborts the transaction; settle it before reporting.
+    await tx.done.catch(() => {});
+    throw error;
+  }
   return file;
 }
 
@@ -43,7 +55,9 @@ export interface NoteWrite {
  */
 export async function writeNote(input: NoteWrite): Promise<WorkspaceFile> {
   const db = await getDb();
-  const tx = db.transaction(['workspaceFiles', 'workspaceVersions'], 'readwrite');
+  const tx = db.transaction(['threads', 'workspaceFiles', 'workspaceVersions'], 'readwrite');
+  // Nothing is written yet, so let the transaction finish before refusing.
+  if (!(await tx.objectStore('threads').get(input.threadId))) { await tx.done; throw new Error('This chat no longer exists.'); }
   const files = tx.objectStore('workspaceFiles');
   const existing = await files.index('byThreadPath').get([input.threadId, input.path]);
   if (existing?.kind === 'upload') throw new Error(`${input.path} is an uploaded file and is read-only.`);

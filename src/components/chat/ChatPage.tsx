@@ -60,6 +60,7 @@ export function ChatPage({
   onChangeMode,
   fileChangeNotice,
   onDismissFileChangeNotice,
+  blockedNotice,
   onManageConnections,
 }: {
   onChangeAgent: (patch: Partial<Thread>) => void;
@@ -67,6 +68,7 @@ export function ChatPage({
   toolsUnavailableReason?: string;
   onChangeMode: (mode: import('../../providers/types').ThreadMode) => void;
   fileChangeNotice?: { path: string; version: number }[] | null;
+  blockedNotice?: string | null;
   onDismissFileChangeNotice?: () => void;
   onManageConnections: () => void;
   thread: Thread | null;
@@ -402,7 +404,8 @@ export function ChatPage({
         onParams={onParams}
         onAttachFiles={workspace ? (files) => void attachFiles(files) : undefined}
         attachAccept={UPLOAD_ACCEPT}
-        notice={(uploadNotice && (uploadNotice.ok.length || uploadNotice.errors.length)) || fileChangeNotice?.length ? <>
+        notice={(uploadNotice && (uploadNotice.ok.length || uploadNotice.errors.length)) || fileChangeNotice?.length || blockedNotice ? <>
+          {blockedNotice && <div className="text-err">{blockedNotice}</div>}
           {fileChangeNotice?.length ? <div className="text-warn flex items-start gap-2">
             <span className="flex-1">File changes from the removed reply remain: {fileChangeNotice.map((f) => `${f.path} (v${f.version})`).join(', ')}. Open files to review or keep editing.</span>
             {workspace && <button onClick={() => setPanel({ tab: 'files' })} className="underline hover:text-text">files</button>}

@@ -752,6 +752,23 @@ test('a runaway grep pattern is stopped by its worker deadline and the page stay
   expect(toolResult).toContain('was stopped');
   expect(Date.now() - started).toBeLessThan(12000);
 });
+test('regenerating a Workspace reply with a no-tools model is refused before any reply is removed', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction(['messages', 'settings'], 'readwrite');
+    tx.objectStore('messages').put({ id: 'u1', threadId: 'fixture-thread', role: 'user', createdAt: 1, content: 'Question' });
+    tx.objectStore('messages').put({ id: 'a1', threadId: 'fixture-thread', role: 'assistant', createdAt: 2, content: 'Keep this answer.', runStatus: 'complete' });
+    tx.objectStore('settings').put({ key: 'modelToolOverrides', value: { 'openai-compat:fixture-model': false } });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'regenerate' }).click();
+  await expect(page.getByText(/nothing was changed/)).toBeVisible();
+  await expect(page.getByText('Keep this answer.', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Keep this answer.', { exact: true })).toBeVisible();
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
