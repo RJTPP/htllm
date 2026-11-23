@@ -1,5 +1,10 @@
 # Phase 3 Part 2 — Design Memo
 
+> **Status (2026-11-23):** partly implemented. Chunking (D8), compaction (D10) and a
+> simplified PDF import (D9) shipped. Persistent memory (D11), query rewriting and the
+> utility-model slot did not, and remain deferred. The current plan is
+> [review/2026-11-23.md](review/2026-11-23.md).
+
 Status: **planning** · Branch target: `phase-3-part-2` (off `phase-3-rag` once
 merged to `dev`).
 
