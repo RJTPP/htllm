@@ -2,6 +2,7 @@ import { useState, useEffect, memo } from 'react';
 import type { Thread, Folder } from '../../providers/types';
 import { Pencil, Trash2, FolderInput, FolderOpen } from 'lucide-react';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
+import { countWorkspaceFiles } from '../../data/workspace';
 
 export const ThreadItem = memo(function ThreadItem({
   thread,
@@ -37,6 +38,15 @@ export const ThreadItem = memo(function ThreadItem({
     const t = setTimeout(() => setConfirmDelete(false), 3000);
     return () => clearTimeout(t);
   }, [confirmDelete]);
+
+  // D-20: deleting a Workspace chat deletes its files; say how many.
+  const [fileCount, setFileCount] = useState(0);
+  useEffect(() => {
+    let live = true;
+    if (confirmDelete && thread.mode === 'workspace') void countWorkspaceFiles(thread.id).then((n) => { if (live) setFileCount(n); });
+    else setFileCount(0);
+    return () => { live = false; };
+  }, [confirmDelete, thread.id, thread.mode]);
 
   // Anchor the move-to-folder menu to the button. Fixed positioning keeps it
   // out of the sidebar's overflow-clipped scroll container.
@@ -118,8 +128,10 @@ export const ThreadItem = memo(function ThreadItem({
                   onDelete(thread.id);
                 }}
                 className="font-mono text-[10px] px-1.5 py-0.5 border border-err/60 text-err hover:bg-err/10"
+                title={fileCount ? `Also deletes ${fileCount} workspace file${fileCount === 1 ? '' : 's'}` : undefined}
+                aria-label={fileCount ? `Delete chat and its ${fileCount} workspace file${fileCount === 1 ? '' : 's'}` : 'Confirm delete'}
               >
-                confirm
+                {fileCount ? `confirm · ${fileCount} file${fileCount === 1 ? '' : 's'}` : 'confirm'}
               </button>
             ) : (
               <button

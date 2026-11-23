@@ -310,6 +310,8 @@ export default function App() {
     editAndResend,
     stop,
     compactNow,
+    fileChangeNotice,
+    dismissFileChangeNotice,
   } = useChat(
     activeProvider,
     activeModelId,
@@ -852,6 +854,8 @@ export default function App() {
                   onManageConnections={() => { setSettingsTab('tools'); setModal('settings'); }}
                   toolsCapable={toolSupport.support.supported}
                   onChangeMode={(mode) => void handleChangeMode(mode)}
+                  fileChangeNotice={fileChangeNotice}
+                  onDismissFileChangeNotice={dismissFileChangeNotice}
                   toolsUnavailableReason={toolSupport.support.source === 'provider' ? 'Tools need an HTTP model that supports tool calling.' : 'This model reports no tool support. You can override this in the model picker.'}
                   onChangeAgent={(patch) => { if (activeThreadId) void updateThread(activeThreadId, patch); }}
                   thread={activeThread}

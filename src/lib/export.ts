@@ -192,6 +192,7 @@ export function validateImport(json: string): ExportData {
           (event.result === undefined || typeof event.result === 'string')
         ))) throw new Error('Invalid tool activity');
         if (row.runStatus !== undefined && !['running', 'complete', 'stopped', 'error'].includes(row.runStatus)) throw new Error('Invalid run status');
+        if (row.toolBudgetReached !== undefined && typeof row.toolBudgetReached !== 'boolean') throw new Error('Invalid tool budget flag');
         if (row.presentedFiles !== undefined && (!Array.isArray(row.presentedFiles) || !row.presentedFiles.every((p: Record<string, unknown>) =>
           p && typeof p.fileId === 'string' && isWorkspacePath(p.path) && Number.isSafeInteger(p.version) && (p.version as number) >= 1 && (p.caption === undefined || typeof p.caption === 'string')))) throw new Error('Invalid presented files');
       }

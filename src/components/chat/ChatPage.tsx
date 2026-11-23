@@ -58,12 +58,16 @@ export function ChatPage({
   toolsCapable,
   toolsUnavailableReason,
   onChangeMode,
+  fileChangeNotice,
+  onDismissFileChangeNotice,
   onManageConnections,
 }: {
   onChangeAgent: (patch: Partial<Thread>) => void;
   toolsCapable: boolean;
   toolsUnavailableReason?: string;
   onChangeMode: (mode: import('../../providers/types').ThreadMode) => void;
+  fileChangeNotice?: { path: string; version: number }[] | null;
+  onDismissFileChangeNotice?: () => void;
   onManageConnections: () => void;
   thread: Thread | null;
   messages: Message[];
@@ -171,6 +175,8 @@ export function ChatPage({
     }
     onRegenerate();
   }, [modelReady, onOpenPicker, onRegenerate]);
+
+  const handleContinue = useCallback(() => onSend('Continue where you left off.'), [onSend]);
 
   // Workspace side panel (D-26): the Files list or a file viewer.
   const workspace = thread?.mode === 'workspace';
@@ -345,6 +351,7 @@ export function ChatPage({
                         generating={generating}
                         onRegenerate={handleRegenerate}
                         onEditAndResend={onEditAndResend}
+                        onContinue={handleContinue}
                         locked={allCovered?.has(m.id) ?? false}
                       />
                     )}
@@ -395,9 +402,14 @@ export function ChatPage({
         onParams={onParams}
         onAttachFiles={workspace ? (files) => void attachFiles(files) : undefined}
         attachAccept={UPLOAD_ACCEPT}
-        notice={uploadNotice && (uploadNotice.ok.length || uploadNotice.errors.length) ? <>
-          {uploadNotice.ok.map((line) => <div key={line} className="text-ok">{line}</div>)}
-          {uploadNotice.errors.map((line) => <div key={line} className="text-err">{line}</div>)}
+        notice={(uploadNotice && (uploadNotice.ok.length || uploadNotice.errors.length)) || fileChangeNotice?.length ? <>
+          {fileChangeNotice?.length ? <div className="text-warn flex items-start gap-2">
+            <span className="flex-1">File changes from the removed reply remain: {fileChangeNotice.map((f) => `${f.path} (v${f.version})`).join(', ')}. Open files to review or keep editing.</span>
+            {workspace && <button onClick={() => setPanel({ tab: 'files' })} className="underline hover:text-text">files</button>}
+            <button onClick={onDismissFileChangeNotice} aria-label="Dismiss file change notice" className="hover:text-text">✕</button>
+          </div> : null}
+          {uploadNotice?.ok.map((line) => <div key={line} className="text-ok">{line}</div>)}
+          {uploadNotice?.errors.map((line) => <div key={line} className="text-err">{line}</div>)}
         </> : undefined}
       />
     </div>

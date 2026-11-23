@@ -137,6 +137,8 @@ export interface PresentedFile {
 export interface Message {
   /** Files presented with present_file during this turn (D-25). */
   presentedFiles?: PresentedFile[];
+  /** The tool-call cap was reached in this turn; the UI offers "continue" (D-24). */
+  toolBudgetReached?: boolean;
   citations?: SourceCitation[];
   retrievalStatus?: 'grounded' | 'no-matches' | 'unavailable' | 'skipped';
   activity?: AgentEvent[];

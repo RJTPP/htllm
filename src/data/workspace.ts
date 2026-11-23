@@ -76,3 +76,19 @@ export async function listWorkspaceVersions(fileId: string): Promise<WorkspaceVe
 export async function countWorkspaceFiles(threadId: string): Promise<number> {
   return (await getDb()).countFromIndex('workspaceFiles', 'byThread', threadId);
 }
+
+/** Note versions made during the given assistant messages (for the D-19 notice). */
+export async function versionsByMessages(threadId: string, messageIds: string[]): Promise<{ path: string; version: number }[]> {
+  if (!messageIds.length) return [];
+  const db = await getDb();
+  const ids = new Set(messageIds);
+  const versions = (await db.getAllFromIndex('workspaceVersions', 'byThread', threadId)).filter((v) => v.messageId && ids.has(v.messageId));
+  const latest = new Map<string, number>();
+  for (const v of versions) latest.set(v.fileId, Math.max(latest.get(v.fileId) ?? 0, v.version));
+  const out: { path: string; version: number }[] = [];
+  for (const [fileId, version] of latest) {
+    const file = await db.get('workspaceFiles', fileId);
+    if (file) out.push({ path: file.path, version });
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}

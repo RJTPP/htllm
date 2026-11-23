@@ -83,6 +83,11 @@ describe('agent execution boundary', () => {
     const t = tool(); const result = await run([call()], [t], { maxCalls: 1 });
     expect(result.requests[1]!.tools).toBeUndefined(); expect(t.execute).toHaveBeenCalledOnce();
   });
+  it('reports reaching the call cap once', async () => {
+    const onBudgetReached = vi.fn();
+    await run([call(undefined, 'a')], [tool()], { maxCalls: 1, onBudgetReached });
+    expect(onBudgetReached).toHaveBeenCalledOnce();
+  });
   it('stops offering tools after an ambiguous external failure', async () => {
     const execute = vi.fn(async () => { throw new Error('lost connection'); });
     const result = await run([call()], [{ ...tool(execute), server: 'external' }]);
