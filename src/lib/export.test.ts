@@ -88,3 +88,7 @@ it('validates presented files on messages', () => {
     expect(() => validateImport(JSON.stringify(data))).toThrow('presented');
   }
 });
+it('validates the tool budget flag on messages', () => {
+  const data = backup(); Object.assign(data.messages[0]!, { toolBudgetReached: 'yes' });
+  expect(() => validateImport(JSON.stringify(data))).toThrow('tool budget');
+});

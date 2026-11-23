@@ -625,6 +625,46 @@ test('workspace uploads go to /uploads, lock the mode, and are listed for the mo
   await page.getByRole('complementary', { name: 'Workspace files' }).getByRole('button', { name: /brief\.md/ }).click();
   await expect(page.getByRole('complementary', { name: 'Workspace files' }).getByText('Ship on Friday.')).toBeVisible();
 });
+test('a reply stopped at the tool-call cap offers continue', async ({ page }) => {
+  await seed(page, true);
+  const sent: string[] = [];
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    const request = route.request().postDataJSON();
+    const lastUser = [...request.messages].reverse().find((m: { role: string }) => m.role === 'user');
+    sent.push(String(lastUser?.content));
+    const n = request.messages.filter((m: { role: string }) => m.role === 'tool').length;
+    const delta = request.tools ? { tool_calls: [{ index: 0, id: `c${n}`, function: { name: 'grep', arguments: JSON.stringify({ pattern: `p${n}` }) } }] } : { content: 'Partial answer.' };
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta, finish_reason: request.tools ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Search everything'); await composer.press('Enter');
+  await expect(page.getByText('Partial answer.', { exact: true })).toBeVisible();
+  await expect(page.getByText("Stopped at this chat's tool-call limit.")).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'continue →' }).click();
+  await expect.poll(() => sent.at(-1)).toBe('Continue where you left off.');
+});
+test('regenerate warns that file changes from the removed reply remain, and delete counts files', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction(['workspaceFiles', 'workspaceVersions', 'messages'], 'readwrite');
+    tx.objectStore('messages').put({ id: 'u1', threadId: 'fixture-thread', role: 'user', createdAt: 1, content: 'Write it' });
+    tx.objectStore('messages').put({ id: 'a1', threadId: 'fixture-thread', role: 'assistant', createdAt: 2, content: 'Wrote it.', runStatus: 'complete' });
+    tx.objectStore('workspaceFiles').put({ id: 'n1', threadId: 'fixture-thread', path: '/notes/out.md', kind: 'note', text: 'v1', mimeType: 'text/markdown', version: 1, createdAt: 2, updatedAt: 2 });
+    tx.objectStore('workspaceVersions').put({ fileId: 'n1', threadId: 'fixture-thread', version: 1, text: 'v1', change: 'create', messageId: 'a1', createdAt: 2 });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'regenerate' }).click();
+  await expect(page.getByText('File changes from the removed reply remain: /notes/out.md (v1).', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Dismiss file change notice' }).click();
+  await expect(page.getByText(/File changes from the removed reply remain/)).toHaveCount(0);
+  const row = page.getByText('Fixture chat').first();
+  await row.hover();
+  await page.getByTitle('Delete thread').first().click();
+  await expect(page.getByRole('button', { name: 'Delete chat and its 1 workspace file' })).toBeVisible();
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
