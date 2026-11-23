@@ -97,7 +97,7 @@ Pages → Components → Hooks → Services → Providers → Data + Workers
 
 ## Design System
 
-Dark-by-default. Colors: bg #0a0a0a, surface #141414, line #262626, text #e5e5e5, mute #737373, accent #f59e0b. Fonts: Geist (sans) + JetBrains Mono. Sharp corners, 1px borders.
+Dark-by-default. Colors: bg #0a0a0a, surface #141414, line #262626, text #e5e5e5, mute #737373, accent #f59e0b. Fonts: Geist (sans) + JetBrains Mono, self-hosted from `src/assets/fonts/` (OFL, never a font CDN). Sharp corners, 1px borders.
 
 ## SDD
 

@@ -14,5 +14,9 @@ export default defineConfig({
     worker: {
       format: 'es',
     },
+    build: {
+      // Never inline fonts as data: URLs; the CSP allows fonts from 'self' only.
+      assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
+    },
   },
 });
