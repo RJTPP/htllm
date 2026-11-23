@@ -10,7 +10,7 @@ import type { ChatImage } from '../lib/image';
 import { addMessage, getMessages, updateMessage, deleteMessage, deleteMessagesAfter } from '../data/messages';
 import { stripThinking } from '../lib/thinking';
 import { retrieve } from '../services/retrieval';
-import { withActivityContext } from '../lib/message-context';
+import { stubOldActivity, withActivityContext } from '../lib/message-context';
 import { executeChat } from '../services/agent';
 import { documentTools } from '../services/tools';
 import { externalTools } from '../services/mcp';
@@ -278,7 +278,8 @@ export function useChat(
         // doesn't see its own chain-of-thought. Handles both:
         // - In-content <think>...</think> tags (Qwen3, DeepSeek-R1 local)
         // - Structured `reasoning` field (API providers)
-        const cleaned = trimmed.map((m) => {
+        // Only the two most recent assistant turns keep full tool results.
+        const cleaned = stubOldActivity(trimmed).map((m) => {
           if (m.role !== 'assistant') return m;
           let result = m;
           // Remove structured reasoning field.
