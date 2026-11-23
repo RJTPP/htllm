@@ -141,7 +141,48 @@ export interface Message {
   reasoning?: string;
 }
 
+/** D-2/D-3: chosen on the empty chat, locked at the first message. Undefined = 'chat'. */
+export type ThreadMode = 'chat' | 'workspace';
+
+/**
+ * A file in a chat's workspace (D-5). `upload` files are read-only inputs the
+ * user attached; `note` files belong to the model (D-17). Paths are absolute
+ * and normalized, e.g. `/uploads/report.pdf` or `/notes/summary.md`.
+ * Library documents are not stored here; they are mounted under `/library/`.
+ */
+export interface WorkspaceFile {
+  id: string;
+  threadId: string;
+  path: string;
+  kind: 'upload' | 'note';
+  /** Current text (the latest version for notes). */
+  text: string;
+  /** Page offsets into `text` for uploaded PDFs, same shape as Document.pages. */
+  pages?: { page: number; start: number; end: number }[];
+  mimeType: string;
+  /** Latest version number; uploads stay at 1. */
+  version: number;
+  /** D-31: where a copied note came from. */
+  copiedFrom?: { path: string; startLine: number; endLine: number; pageStart?: number; pageEnd?: number };
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** One saved version of a note (D-19/D-28). Never pruned while a message presents it. */
+export interface WorkspaceVersion {
+  fileId: string;
+  threadId: string;
+  version: number;
+  text: string;
+  /** Assistant message whose turn made this version; undefined for user edits. */
+  messageId?: string;
+  change: 'create' | 'write' | 'edit' | 'copy' | 'user';
+  createdAt: number;
+}
+
 export interface Thread {
+  /** Chat vs Workspace (D-2). Undefined means 'chat'. */
+  mode?: ThreadMode;
   /** Undefined preserves legacy behavior: automatic RAG only when tools are off. */
   automaticRagEnabled?: boolean;
   agentEnabled?: boolean;

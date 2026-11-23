@@ -48,6 +48,8 @@ const STORE_LABELS: Record<string, string> = {
   embeddings: 'Embeddings',
   summaries: 'Summaries',
   mcpConnections: 'MCP connections',
+  workspaceFiles: 'Workspace files',
+  workspaceVersions: 'Workspace file versions',
 };
 
 /** Stores the user should never accidentally clear. */

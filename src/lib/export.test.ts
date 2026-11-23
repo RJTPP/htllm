@@ -58,3 +58,25 @@ it('type-checks optional thread fields and model parameters', () => {
     expect(() => validateImport(JSON.stringify(data))).toThrow();
   }
 });
+it('round-trips workspace files and versions and checks their references', async () => {
+  const data = { ...backup(),
+    workspaceFiles: [{ id: 'f', threadId: 't', path: '/notes/a.md', kind: 'note', text: 'two', mimeType: 'text/markdown', version: 2, createdAt: 1, updatedAt: 2 }],
+    workspaceVersions: [{ fileId: 'f', threadId: 't', version: 1, text: 'one', change: 'create', createdAt: 1 }, { fileId: 'f', threadId: 't', version: 2, text: 'two', change: 'edit', createdAt: 2 }] };
+  await importAllData(JSON.stringify(data));
+  const exported = JSON.parse(await exportAllData());
+  expect(exported.workspaceFiles).toHaveLength(1); expect(exported.workspaceVersions).toHaveLength(2);
+  for (const bad of [
+    { workspaceFiles: [{ ...data.workspaceFiles[0], threadId: 'missing' }], workspaceVersions: [] },
+    { workspaceFiles: [{ ...data.workspaceFiles[0], path: '/notes/../x' }], workspaceVersions: [] },
+    { workspaceFiles: data.workspaceFiles, workspaceVersions: [{ ...data.workspaceVersions[0], fileId: 'other' }] },
+    { workspaceFiles: data.workspaceFiles, workspaceVersions: [data.workspaceVersions[0], data.workspaceVersions[0]] },
+  ]) expect(() => validateImport(JSON.stringify({ ...backup(), ...bad }))).toThrow();
+});
+it('gives threads from older backups a mode by the D-11 rule', async () => {
+  const data = backup(); data.threads.push({ ...data.threads[0]!, id: 't2' }); Object.assign(data.threads[1]!, { agentEnabled: true });
+  await importAllData(JSON.stringify(data));
+  const threads = JSON.parse(await exportAllData()).threads as { id: string; mode: string }[];
+  expect(Object.fromEntries(threads.map((t) => [t.id, t.mode]))).toEqual({ t: 'chat', t2: 'workspace' });
+  Object.assign(data.threads[0]!, { mode: 'agent' });
+  expect(() => validateImport(JSON.stringify(data))).toThrow('mode');
+});

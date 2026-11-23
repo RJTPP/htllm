@@ -1,6 +1,7 @@
 import { getDb, DEFAULT_LIBRARY_ID } from '../data/db';
 import { clearToolTrust } from '../services/approvals';
 import { invalidateHybridSearchCache } from './hybrid-search';
+import { isWorkspacePath } from './workspace-path';
 
 interface ExportData {
   version: 1;
@@ -22,13 +23,16 @@ interface ExportData {
   parents?: unknown[];
   summaries?: unknown[];
   mcpConnections?: unknown[];
+  /** v10 — per-chat workspace files and note versions. */
+  workspaceFiles?: unknown[];
+  workspaceVersions?: unknown[];
 }
 
 export async function exportAllData(): Promise<string> {
   const db = await getDb();
   // One consistent snapshot: a concurrent chat/ingestion transaction cannot
   // leave the backup with children from a different state than their parents.
-  const tx = db.transaction(['threads', 'messages', 'settings', 'promptTemplates', 'folders', 'libraries', 'documents', 'chunks', 'parents', 'summaries', 'mcpConnections'], 'readonly');
+  const tx = db.transaction(['threads', 'messages', 'settings', 'promptTemplates', 'folders', 'libraries', 'documents', 'chunks', 'parents', 'summaries', 'mcpConnections', 'workspaceFiles', 'workspaceVersions'], 'readonly');
   const data: ExportData = {
     version: 1,
     exportedAt: Date.now(),
@@ -43,6 +47,8 @@ export async function exportAllData(): Promise<string> {
     parents: await tx.objectStore('parents').getAll(),
     summaries: await tx.objectStore('summaries').getAll(),
     mcpConnections: await tx.objectStore('mcpConnections').getAll(),
+    workspaceFiles: await tx.objectStore('workspaceFiles').getAll(),
+    workspaceVersions: await tx.objectStore('workspaceVersions').getAll(),
   };
   await tx.done;
   return JSON.stringify(data, null, 2);
@@ -71,6 +77,8 @@ export async function importAllData(json: string): Promise<void> {
     'embeddings',
     'summaries',
     'mcpConnections',
+    'workspaceFiles',
+    'workspaceVersions',
     'keys',
   ] as const;
   const tx = db.transaction([...stores], 'readwrite');
@@ -83,6 +91,8 @@ export async function importAllData(json: string): Promise<void> {
       for (const item of items) {
         const row = item as Record<string, unknown>;
         if (storeName === 'messages' && row.runStatus === 'running') row.runStatus = 'stopped';
+        // D-11 for backups made before modes existed.
+        if (storeName === 'threads' && row.mode === undefined) row.mode = row.agentEnabled ? 'workspace' : 'chat';
         if (storeName === 'messages' && Array.isArray(row.activity)) {
           row.activity = row.activity.map((event) => ['approval', 'running'].includes(event.status)
             ? { ...event, status: event.server && event.status === 'running' ? 'unknown' : 'stopped' } : event);
@@ -121,6 +131,8 @@ export function validateImport(json: string): ExportData {
     libraries: ['id', 'name', 'embeddingModelId'], documents: ['id', 'libraryId', 'filename'],
     chunks: ['id', 'documentId', 'text'], parents: ['id', 'documentId', 'text'],
     summaries: ['id', 'threadId', 'text'], mcpConnections: ['id', 'name', 'url'],
+    workspaceFiles: ['id', 'threadId', 'path', 'kind', 'text', 'mimeType'],
+    workspaceVersions: ['fileId', 'threadId', 'text', 'change'],
   };
   for (const [store, required] of Object.entries(fields)) {
     const rows = root[store];
@@ -131,7 +143,7 @@ export function validateImport(json: string): ExportData {
       if (!row || typeof row !== 'object' || required.some((k) => typeof row[k] !== 'string')) {
         throw new Error(`Invalid ${store} record`);
       }
-      const key = row[required[0]!];
+      const key = store === 'workspaceVersions' ? `${row.fileId}:${row.version}` : row[required[0]!];
       if (ids.has(key)) throw new Error(`Duplicate ${store} identifier`);
       ids.add(key);
       for (const field of ['createdAt', 'updatedAt', 'sizeBytes', 'chunkCount', 'index', 'startOffset', 'pageStart', 'pageEnd']) {
@@ -141,7 +153,19 @@ export function validateImport(json: string): ExportData {
         if (row.extractedText !== undefined && typeof row.extractedText !== 'string') throw new Error('Invalid extracted document text');
         if (row.pages !== undefined && (!Array.isArray(row.pages) || !row.pages.every((p: Record<string, unknown>) => p && ['page', 'start', 'end'].every((key) => Number.isSafeInteger(p[key]) && (p[key] as number) >= 0) && (p.end as number) >= (p.start as number)))) throw new Error('Invalid document page provenance');
       }
+      if (store === 'workspaceFiles') {
+        if (!['upload', 'note'].includes(row.kind)) throw new Error('Invalid workspace file kind');
+        if (!isWorkspacePath(row.path)) throw new Error('Invalid workspace file path');
+        if (!Number.isSafeInteger(row.version) || row.version < 1) throw new Error('Invalid workspace file version');
+        if (row.pages !== undefined && (!Array.isArray(row.pages) || !row.pages.every((p: Record<string, unknown>) => p && ['page', 'start', 'end'].every((key) => Number.isSafeInteger(p[key]) && (p[key] as number) >= 0)))) throw new Error('Invalid workspace file pages');
+      }
+      if (store === 'workspaceVersions') {
+        if (!Number.isSafeInteger(row.version) || row.version < 1) throw new Error('Invalid workspace version');
+        if (!['create', 'write', 'edit', 'copy', 'user'].includes(row.change)) throw new Error('Invalid workspace version change');
+        if (row.messageId !== undefined && typeof row.messageId !== 'string') throw new Error('Invalid workspace version message');
+      }
       if (store === 'threads') {
+        if (row.mode !== undefined && !['chat', 'workspace'].includes(row.mode)) throw new Error('Invalid chat mode');
         if (row.automaticRagEnabled !== undefined && typeof row.automaticRagEnabled !== 'boolean') throw new Error('Invalid automatic RAG setting');
         if (row.agentEnabled !== undefined && typeof row.agentEnabled !== 'boolean') throw new Error('Invalid Tools setting');
         // toolModelKey and ragEnabled are retired fields; older backups may still carry them.
@@ -190,6 +214,9 @@ export function validateImport(json: string): ExportData {
   for (const row of (root.summaries ?? []) as {threadId: string}[]) if (!threads.has(row.threadId)) throw new Error('Orphan summary');
   for (const row of (root.documents ?? []) as {libraryId: string}[]) if (!libraries.has(row.libraryId)) throw new Error('Orphan document');
   for (const store of ['chunks', 'parents']) for (const row of (root[store] ?? []) as {documentId: string}[]) if (!documents.has(row.documentId)) throw new Error('Orphan chunk');
+  const files = new Map(((root.workspaceFiles ?? []) as {id: string; threadId: string}[]).map((f) => [f.id, f.threadId]));
+  for (const threadId of files.values()) if (!threads.has(threadId)) throw new Error('Orphan workspace file');
+  for (const row of (root.workspaceVersions ?? []) as {fileId: string; threadId: string}[]) if (files.get(row.fileId) !== row.threadId) throw new Error('Orphan workspace version');
   return data as ExportData;
 }
 
