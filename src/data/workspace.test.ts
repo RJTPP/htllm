@@ -61,3 +61,19 @@ describe('chat existence', () => {
     expect(await db.getAll('workspaceVersions')).toEqual([]);
   });
 });
+
+describe('note metadata', () => {
+  it('stores a MIME type matching the extension and keeps copy provenance per version', async () => {
+    const t = await thread();
+    expect((await writeNote({ threadId: t.id, path: '/notes/data.json', text: '{}', change: 'write' })).mimeType).toBe('application/json');
+    const a = { path: '/uploads/a.txt', startLine: 1, endLine: 2 };
+    const b = { path: '/uploads/b.txt', startLine: 5, endLine: 9 };
+    const v1 = await writeNote({ threadId: t.id, path: '/notes/c.md', text: 'from a', change: 'copy', copiedFrom: a });
+    await writeNote({ threadId: t.id, path: '/notes/c.md', text: 'from b', change: 'copy', copiedFrom: b });
+    const v3 = await writeNote({ threadId: t.id, path: '/notes/c.md', text: 'rewritten', change: 'write' });
+    expect((await getWorkspaceVersion(v1.id, 1))?.copiedFrom).toEqual(a);
+    expect((await getWorkspaceVersion(v1.id, 2))?.copiedFrom).toEqual(b);
+    expect((await getWorkspaceVersion(v1.id, 3))?.copiedFrom).toBeUndefined();
+    expect(v3.copiedFrom).toBeUndefined();
+  });
+});

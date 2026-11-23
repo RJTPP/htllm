@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Retrieval behaves as for an unindexed library unless a test says otherwise.
+const retrieveMock = vi.hoisted(() => vi.fn(async (): Promise<never> => { throw new Error('Knowledge unavailable'); }));
+vi.mock('./retrieval', () => ({ retrieve: retrieveMock }));
 import { getDb } from '../data/db';
 import { addUpload, writeNote } from '../data/workspace';
 import { contextBand } from '../lib/workspace-text';
@@ -166,5 +170,16 @@ describe('read_file size', () => {
       expect(out.text).toMatch(/Use offset=\d+ to continue\.\)$/);
       expect(out.citations?.[0]?.id.startsWith(big.id)).toBe(true);
     }
+  });
+});
+
+describe('scoped search', () => {
+  it('finds matches in the scoped file even when hybrid ranking prefers other documents', async () => {
+    const db = await getDb();
+    await db.put('documents', { id: 'doc-other', libraryId: 'lib', filename: 'other.txt', mimeType: 'text/plain', sizeBytes: 9, chunkCount: 0, createdAt: 1, extractedText: 'Atlas Atlas Atlas launch launch' });
+    retrieveMock.mockResolvedValueOnce({ context: '', sources: [], citations: [{ id: 'c', chunkId: 'c', documentId: 'doc-other', filename: 'other.txt', excerpt: 'Atlas Atlas Atlas launch launch' }] } as never);
+    const out = await workspaceReadTools(ctx).find((t) => t.name === 'search')!.execute({ query: 'Atlas launches', path: '/library/Team-Docs/plan.txt' }, signal);
+    expect(out.text).toContain('/library/Team-Docs/plan.txt:1');
+    expect(out.text).not.toContain('other.txt');
   });
 });

@@ -22,9 +22,13 @@ const cell = (v: string) => v.replace(/\|/g, '\\|').replace(/\n/g, ' ');
  * Filter, group, aggregate and sort a CSV (first row = header) and return a
  * Markdown table. Comparisons are numeric when both sides parse as numbers.
  */
-export function queryCsv(text: string, q: CsvQuery, separator?: string): { table: string; matched: number; total: number } {
-  const source = separator === '\t' ? text.replace(/\t/g, ',') : text;
-  const { rows: all } = parseCsv(source, 100_000);
+/** Largest file query_csv answers for; above it, totals would silently be wrong. */
+export const MAX_CSV_ROWS = 200_000;
+
+export function queryCsv(text: string, q: CsvQuery, separator = ','): { table: string; matched: number; total: number } {
+  // +1 for the header row; a truncated parse means the file is too large to answer correctly.
+  const { rows: all, truncated } = parseCsv(text, MAX_CSV_ROWS + 1, separator);
+  if (truncated) throw new Error(`This file has more than ${MAX_CSV_ROWS.toLocaleString()} rows; query_csv would give incomplete totals. Use grep or read_file on parts of it instead.`);
   const [header = [], ...rows] = all.filter((r) => r.some((c) => c.trim() !== ''));
   const col = (name: string) => {
     const i = header.findIndex((h) => h.trim().toLowerCase() === name.trim().toLowerCase());
@@ -51,7 +55,11 @@ export function queryCsv(text: string, q: CsvQuery, separator?: string): { table
     if (agg.fn !== 'count' && ai < 0) throw new Error(`${agg.fn} needs a column.`);
     const gi = q.group_by ? col(q.group_by) : -1;
     const groups = new Map<string, string[][]>();
-    for (const r of matched) { const k = gi < 0 ? '' : r[gi] ?? ''; groups.set(k, [...(groups.get(k) ?? []), r]); }
+    for (const r of matched) {
+      const k = gi < 0 ? '' : r[gi] ?? '';
+      const group = groups.get(k);
+      if (group) group.push(r); else groups.set(k, [r]);
+    }
     const label = agg.fn === 'count' ? 'count' : `${agg.fn}(${header[ai]})`;
     outHeader = gi < 0 ? [label] : [header[gi]!, label];
     out = [...groups].map(([k, rs]) => {

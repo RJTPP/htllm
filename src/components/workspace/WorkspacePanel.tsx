@@ -107,6 +107,8 @@ function FileView({ fileId, version, refreshKey, onVersion, onBack, onClose }: {
   const current = Math.min(Math.max(1, version ?? file.version), file.version);
   const record = versions.find((v) => v.version === current);
   const text = record?.text ?? (current === file.version ? file.text : '');
+  // Provenance belongs to the version shown, not to whatever the latest copy was.
+  const copiedFrom = record ? record.copiedFrom : current === file.version ? file.copiedFrom : undefined;
   const name = file.path.split('/').pop() ?? file.path;
   return <>
     <PanelHeader onClose={onClose}>
@@ -124,8 +126,8 @@ function FileView({ fileId, version, refreshKey, onVersion, onBack, onClose }: {
       <span className="flex-1 min-w-0 truncate">{record ? `${CHANGE_LABEL[record.change]} · ${fmtRelativeTime(record.createdAt)}` : ''}</span>
       <button onClick={() => void downloadVersion(file.id, current)} aria-label={`Download ${name} v${current}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-line hover:text-text hover:border-line-hi"><Download size={11} /> download</button>
     </div>
-    {file.copiedFrom && <p className="px-3 py-1.5 border-b border-line font-mono text-[10px] text-mute shrink-0">
-      copied from {file.copiedFrom.path}, lines {file.copiedFrom.startLine}–{file.copiedFrom.endLine}{file.copiedFrom.pageStart ? ` (p. ${file.copiedFrom.pageStart}${file.copiedFrom.pageEnd && file.copiedFrom.pageEnd !== file.copiedFrom.pageStart ? `–${file.copiedFrom.pageEnd}` : ''})` : ''}
+    {copiedFrom && <p className="px-3 py-1.5 border-b border-line font-mono text-[10px] text-mute shrink-0">
+      copied from {copiedFrom.path}, lines {copiedFrom.startLine}–{copiedFrom.endLine}{copiedFrom.pageStart ? ` (p. ${copiedFrom.pageStart}${copiedFrom.pageEnd && copiedFrom.pageEnd !== copiedFrom.pageStart ? `–${copiedFrom.pageEnd}` : ''})` : ''}
     </p>}
     <div className="flex-1 overflow-auto p-4"><FileContent path={file.path} text={text} mimeType={file.mimeType} /></div>
   </>;
