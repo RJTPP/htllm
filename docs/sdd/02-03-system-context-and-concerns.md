@@ -42,7 +42,9 @@ analytics or remote logging.
 
 ### 2.3 Operating Constraints
 
-- **No server code.** `astro build` emits a static `dist/`; no SSR adapter, no API routes.
+- **No backend.** `astro build` emits a static `dist/`; no SSR adapter, no API routes, no
+  htllm-run service. The only servers involved are the static host and the endpoints the
+  user adds (§2.2).
 - **CSP in `<meta>`** on every page:
   - Production allows `script-src 'self' blob: 'wasm-unsafe-eval'`, `worker-src 'self'
     blob:`, `font-src 'self'`, and `connect-src 'self' https:` plus `localhost` and
@@ -75,7 +77,7 @@ analytics or remote logging.
 | ID | Concern | Kind | Priority | Acceptance intent |
 | --- | --- | --- | --- | --- |
 | C-1 | Data never leaves the device except to endpoints the user configured. | Privacy, security | Critical | No third-party request on load (browser test). Keys are excluded from backups and logs. |
-| C-2 | No server, so any static host works. | Operational | Critical | `dist/` serves from Pages under a base path, and from a local static server. |
+| C-2 | No backend of our own, so any static host works. | Operational | Critical | `dist/` serves from Pages under a base path, and from a local static server. |
 | C-3 | Model-written content can't run code or exfiltrate data. | Security | Critical | Sanitized Markdown; HTML and SVG shown as code; production CSP without eval; `run_js` guest has no host network or DOM. |
 | C-4 | External actions need explicit approval, and uncertain outcomes are not retried. | Safety | Critical | Every MCP call prompts. Denied, malformed, cancelled and unknown cases are covered by deterministic tests. |
 | C-5 | Citations point only to evidence actually supplied in that answer. | Correctness, trust | Critical | The resolver matches only that answer's saved sources; unknown IDs are shown as unresolved. |
