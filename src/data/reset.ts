@@ -1,20 +1,4 @@
-import { getDb } from './db';
-
-const STORES = [
-  'threads',
-  'messages',
-  'keys',
-  'settings',
-  'promptTemplates',
-  'folders',
-  'libraries',
-  'documents',
-  'chunks',
-  'parents',
-  'embeddings',
-  'summaries',
-  'mcpConnections',
-] as const;
+import { getDb, STORE_NAMES } from './db';
 
 /**
  * Wipes every trace of the app from this browser: all IndexedDB object stores,
@@ -22,8 +6,8 @@ const STORES = [
  */
 export async function resetEverything(): Promise<void> {
   const db = await getDb();
-  const tx = db.transaction([...STORES], 'readwrite');
-  await Promise.all(STORES.map((store) => tx.objectStore(store).clear()));
+  const tx = db.transaction([...STORE_NAMES], 'readwrite');
+  await Promise.all(STORE_NAMES.map((store) => tx.objectStore(store).clear()));
   await tx.done;
 
   if (typeof caches !== 'undefined') {

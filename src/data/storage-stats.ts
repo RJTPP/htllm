@@ -1,4 +1,4 @@
-import { getDb } from './db';
+import { getDb, STORE_NAMES, type StoreName } from './db';
 
 export interface StoreStats {
   name: string;
@@ -11,22 +11,8 @@ export interface StoreStats {
  *  the rest instead of erroring out entirely. */
 export async function getStoreStats(): Promise<StoreStats[]> {
   const db = await getDb();
-  const stores = [
-    'threads',
-    'messages',
-    'keys',
-    'settings',
-    'promptTemplates',
-    'folders',
-    'libraries',
-    'documents',
-    'chunks',
-    'parents',
-    'embeddings',
-    'summaries',
-  ] as const;
   const results: StoreStats[] = [];
-  for (const name of stores) {
+  for (const name of STORE_NAMES) {
     if (!db.objectStoreNames.contains(name)) continue;
     try {
       const tx = db.transaction(name, 'readonly');
@@ -97,19 +83,7 @@ export async function deleteCache(cacheName: string): Promise<void> {
 
 /** Clear a single IndexedDB object store. */
 export async function clearStore(
-  storeName:
-    | 'threads'
-    | 'messages'
-    | 'keys'
-    | 'settings'
-    | 'promptTemplates'
-    | 'folders'
-    | 'libraries'
-    | 'documents'
-    | 'chunks'
-    | 'parents'
-    | 'embeddings'
-    | 'summaries',
+  storeName: StoreName,
 ): Promise<void> {
   const db = await getDb();
   const tx = db.transaction(storeName, 'readwrite');
