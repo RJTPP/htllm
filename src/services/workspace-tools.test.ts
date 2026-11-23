@@ -153,3 +153,18 @@ describe('several attached libraries', () => {
     expect(found.text).toContain('/library/Team-Docs/plan.txt:1');
   });
 });
+
+describe('read_file size', () => {
+  it('never exceeds the result cap with a real file id, so the continue hint survives', async () => {
+    const text = Array.from({ length: 400 }, (_, i) => `row ${i + 1} ${'lorem ipsum '.repeat(4)}`).join('\n');
+    const big = await addUpload({ threadId: 't', path: '/uploads/long.txt', text, mimeType: 'text/plain' });
+    expect(big.id).toHaveLength(36);
+    const read = workspaceReadTools(ctx).find((t) => t.name === 'read_file')!;
+    for (const cap of [3000, 1200]) {
+      const out = await read.execute({ path: '/uploads/long.txt' }, signal, cap);
+      expect(out.text.length).toBeLessThanOrEqual(cap);
+      expect(out.text).toMatch(/Use offset=\d+ to continue\.\)$/);
+      expect(out.citations?.[0]?.id.startsWith(big.id)).toBe(true);
+    }
+  });
+});

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { Message, SourceCitation } from '../../providers/types';
-import { getDocument } from '../../data/documents';
+import { sourceExists } from '../../data/workspace';
 
 // Disclosures here share the ThinkingBlock look (chevron + 10px mono label)
 // so tool activity, sources and reasoning read as one family. Each level
@@ -23,7 +23,7 @@ function Source({ source }: { source: SourceCitation }) {
   const where = source.pageStart
     ? ` · p. ${source.pageStart}${source.pageEnd && source.pageEnd !== source.pageStart ? `–${source.pageEnd}` : ''}`
     : source.headingPath ? ` · ${source.headingPath}` : '';
-  return <details className="group/inner" onToggle={(event) => { if (event.currentTarget.open) void getDocument(source.documentId).then((doc) => setMissing(!doc)); }}>
+  return <details className="group/inner" onToggle={(event) => { if (event.currentTarget.open) void sourceExists(source.documentId).then((exists) => setMissing(!exists)); }}>
     <summary className={summaryBase}><Chevron group="inner" /><Label>{source.filename}{where}</Label></summary>
     <div className="mt-1.5 ml-[5px] border-l-2 border-line pl-3 space-y-1.5">
       {missing && <p className="text-mute">Original document unavailable; saved evidence shown below.</p>}
@@ -36,7 +36,7 @@ export function MessageEvidence({ message, section = 'sources' }: { message: Mes
   const status = message.runStatus === 'running' ? 'in progress / interrupted if reloaded' : message.runStatus;
   return <div className={`space-y-2 font-mono text-[10px] mt-2 ${section === 'activity' ? 'mb-1.5' : ''}`}>
     {section === 'sources' && message.retrievalStatus === 'no-matches' && <p className="text-mute">No matching evidence in the selected library.</p>}
-    {section === 'sources' && message.retrievalStatus === 'unavailable' && <p className="text-[11px] text-err">Knowledge retrieval failed. Retry, or turn off Automatic RAG in Tools → Documents to continue without it.</p>}
+    {section === 'sources' && message.retrievalStatus === 'unavailable' && <p className="text-[11px] text-err">Knowledge retrieval failed. Retry, or turn off Automatic RAG in the Knowledge panel to continue without it.</p>}
     {section === 'sources' && !!message.citations?.length && <details className="group/outer">
       <summary className={summaryBase}><Chevron group="outer" /><Label>Sources supplied to this answer ({message.citations.length})</Label></summary>
       <div className="mt-1.5 ml-[5px] border-l-2 border-line pl-3 space-y-1.5">{message.citations.map((source) => <Source key={source.id} source={source} />)}</div>

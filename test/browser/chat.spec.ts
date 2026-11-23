@@ -726,6 +726,32 @@ test('a Workspace chat can attach several libraries, each mounted read-only', as
   await page.getByRole('button', { name: 'Detach Second library' }).click();
   await expect(panel.getByText('Second library', { exact: true })).toHaveCount(0);
 });
+test('a runaway grep pattern is stopped by its worker deadline and the page stays responsive', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('workspaceFiles', 'readwrite');
+    tx.objectStore('workspaceFiles').put({ id: 'aaa', threadId: 'fixture-thread', path: '/uploads/a.txt', kind: 'upload', text: 'a'.repeat(390) + '\nplain line', mimeType: 'text/plain', version: 1, createdAt: 1, updatedAt: 1 });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  let toolResult = '';
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    const request = route.request().postDataJSON();
+    const tool = request.messages.find((m: { role: string }) => m.role === 'tool');
+    if (tool) toolResult = tool.content;
+    const delta = tool ? { content: 'Pattern was too slow.' } : { tool_calls: [{ index: 0, id: 'g', function: { name: 'grep', arguments: JSON.stringify({ pattern: 'a*a*a*a*b', regex: true }) } }] };
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta, finish_reason: tool ? 'stop' : 'tool_calls' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  const started = Date.now();
+  await composer.fill('Find it'); await composer.press('Enter');
+  // The main thread is not blocked while the worker runs.
+  expect(await page.evaluate(() => 1 + 1)).toBe(2);
+  await expect(page.getByText('Pattern was too slow.', { exact: true })).toBeVisible({ timeout: 15000 });
+  expect(toolResult).toContain('was stopped');
+  expect(Date.now() - started).toBeLessThan(12000);
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';

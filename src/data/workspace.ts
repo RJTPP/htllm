@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import type { WorkspaceFile, WorkspaceVersion } from '../providers/types';
 import { getDb } from './db';
+import { getDocument } from './documents';
 
 /** All files in a chat's workspace, sorted by path. */
 export async function listWorkspaceFiles(threadId: string): Promise<WorkspaceFile[]> {
@@ -91,4 +92,9 @@ export async function versionsByMessages(threadId: string, messageIds: string[])
     if (file) out.push({ path: file.path, version });
   }
   return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/** Whether a cited source still exists: a library document or a workspace file. */
+export async function sourceExists(id: string): Promise<boolean> {
+  return !!(await getDocument(id)) || !!(await getWorkspaceFileById(id));
 }
