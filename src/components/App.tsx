@@ -17,6 +17,7 @@ import { useChat, type RagConfig } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
 import { useToolSupport } from '../hooks/useToolSupport';
 import { getModeDefaults, setModeDefault } from '../data/mode-defaults';
+import { countWorkspaceFiles } from '../data/workspace';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
 import {
   getSetting,
@@ -667,6 +668,8 @@ export default function App() {
   const handleChangeMode = useCallback(
     async (mode: import('../providers/types').ThreadMode) => {
       if (!activeThreadId || messages.length > 0 || (activeThread?.mode ?? 'chat') === mode) return;
+      // Attached files lock the mode too: they belong to a Workspace chat.
+      if (await countWorkspaceFiles(activeThreadId) > 0) return;
       await updateThread(activeThreadId, { mode });
       const preferred = (await getModeDefaults())[mode];
       if (!preferred) return;

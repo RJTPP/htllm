@@ -14,6 +14,8 @@ import { TrimDivider } from './TrimDivider';
 import { ArrowDown, FolderOpen } from 'lucide-react';
 import { WorkspacePanel, type PanelView } from '../workspace/WorkspacePanel';
 import { WorkspaceUIContext, type WorkspaceUI } from '../workspace/WorkspaceContext';
+import { uploadToWorkspace, UPLOAD_ACCEPT } from '../../services/workspace-upload';
+import { countWorkspaceFiles } from '../../data/workspace';
 import { AgentControls } from './AgentControls';
 
 const BOTTOM_SCROLL_THRESHOLD = 48;
@@ -174,6 +176,28 @@ export function ChatPage({
   const workspace = thread?.mode === 'workspace';
   const [panel, setPanel] = useState<PanelView | null>(null);
   useEffect(() => { setPanel(null); }, [thread?.id]);
+  // Uploads (D-5): added to /uploads; any file locks the mode like a message does.
+  const [uploads, setUploads] = useState(0);
+  const [uploadNotice, setUploadNotice] = useState<{ ok: string[]; errors: string[] } | null>(null);
+  const [hasFiles, setHasFiles] = useState(false);
+  // The status line is about the latest attach; clear it when the chat moves on.
+  useEffect(() => { setUploadNotice(null); }, [thread?.id, messages.length]);
+  useEffect(() => {
+    let live = true;
+    if (thread?.id) void countWorkspaceFiles(thread.id).then((n) => { if (live) setHasFiles(n > 0); });
+    return () => { live = false; };
+  }, [thread?.id, uploads, messages.length]);
+  const attachFiles = useCallback(async (files: File[]) => {
+    if (!thread) return;
+    const ok: string[] = []; const errors: string[] = [];
+    setUploadNotice({ ok: [`Adding ${files.length} file${files.length === 1 ? '' : 's'}…`], errors: [] });
+    for (const file of files) {
+      try { const saved = await uploadToWorkspace(thread.id, file); ok.push(`${saved.path}${saved.pages?.length ? ` (${saved.pages.length} pages)` : ''}`); }
+      catch (error) { errors.push(error instanceof Error ? error.message : `${file.name} could not be added.`); }
+    }
+    setUploadNotice({ ok: ok.length ? [`Added ${ok.join(', ')}`] : [], errors });
+    setUploads((n) => n + 1);
+  }, [thread]);
   const workspaceUI = useMemo<WorkspaceUI>(() => ({
     openFile: (fileId, version) => setPanel({ tab: 'file', fileId, version }),
     openFiles: () => setPanel({ tab: 'files' }),
@@ -213,7 +237,7 @@ export function ChatPage({
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto grid-bg">
         {messages.length === 0 ? (
           <EmptyState onOpenPicker={onOpenPicker} modelReady={modelReady} model={loadedModelId}
-            mode={thread.mode ?? 'chat'} onChangeMode={onChangeMode}
+            mode={hasFiles ? undefined : thread.mode ?? 'chat'} onChangeMode={onChangeMode}
             workspaceUnavailable={toolsCapable ? undefined : `${toolsUnavailableReason ?? 'This model cannot use tools.'} Choose a tool-capable HTTP model before sending.`} />
         ) : (
           <div className="max-w-3xl mx-auto px-6 pt-6 pb-6 space-y-5">
@@ -369,13 +393,19 @@ export function ChatPage({
         onSend={onSend}
         onStop={onStop}
         onParams={onParams}
+        onAttachFiles={workspace ? (files) => void attachFiles(files) : undefined}
+        attachAccept={UPLOAD_ACCEPT}
+        notice={uploadNotice && (uploadNotice.ok.length || uploadNotice.errors.length) ? <>
+          {uploadNotice.ok.map((line) => <div key={line} className="text-ok">{line}</div>)}
+          {uploadNotice.errors.map((line) => <div key={line} className="text-err">{line}</div>)}
+        </> : undefined}
       />
     </div>
     {workspace && panel && (
       <WorkspacePanel
         threadId={thread.id}
         libraryName={libraries.find(({ lib }) => lib.id === ragLibraryId)?.lib.name}
-        refreshKey={`${messages.length}:${generating}:${messages.at(-1)?.presentedFiles?.length ?? 0}`}
+        refreshKey={`${messages.length}:${generating}:${messages.at(-1)?.presentedFiles?.length ?? 0}:${uploads}`}
         view={panel}
         onView={setPanel}
         onClose={() => setPanel(null)}

@@ -599,6 +599,32 @@ test('an answer that echoes the internal history format is shown and saved witho
   });
   expect(saved).toEqual(['Updated the list.']);
 });
+test('workspace uploads go to /uploads, lock the mode, and are listed for the model', async ({ page }) => {
+  await seed(page);
+  let system = '';
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    const request = route.request().postDataJSON();
+    system = JSON.stringify(request.messages.filter((m: { role: string }) => m.role === 'system'));
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: 'Seen.' }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  await expect(page.getByLabel('Attach files to this workspace')).toHaveCount(0);
+  await page.getByRole('radiogroup', { name: 'Chat mode' }).getByRole('radio', { name: /^Workspace/ }).click();
+  await page.getByLabel('Workspace file upload').setInputFiles([
+    { name: 'brief.md', mimeType: 'text/markdown', buffer: Buffer.from('# Brief\nShip on Friday.') },
+    { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71]) },
+  ]);
+  await expect(page.getByText('Added /uploads/brief.md')).toBeVisible();
+  await expect(page.getByText(/photo\.png is not supported/)).toBeVisible();
+  // Files lock the mode even before the first message.
+  await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toHaveCount(0);
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('What is in the brief?'); await composer.press('Enter');
+  await expect(page.getByText('Seen.', { exact: true })).toBeVisible();
+  expect(system).toContain('/uploads/brief.md (upload, read-only');
+  await page.getByRole('button', { name: 'Workspace files' }).click();
+  await page.getByRole('complementary', { name: 'Workspace files' }).getByRole('button', { name: /brief\.md/ }).click();
+  await expect(page.getByRole('complementary', { name: 'Workspace files' }).getByText('Ship on Friday.')).toBeVisible();
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
