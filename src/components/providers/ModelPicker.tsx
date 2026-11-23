@@ -62,6 +62,8 @@ export function ModelPicker({
   onSelectApiModel,
   onConfigureProvider,
   contextMin,
+  toolOverrides,
+  onToolOverride,
 }: {
   open: boolean;
   onClose: () => void;
@@ -80,6 +82,8 @@ export function ModelPicker({
   onSelectApiModel: (providerId: string, modelId: string) => void;
   onConfigureProvider: () => void;
   contextMin?: number;
+  toolOverrides: Record<string, boolean>;
+  onToolOverride: (providerId: string, modelId: string, value: boolean | undefined) => void;
 }) {
   const [search, setSearch] = useState('');
   const [family, setFamily] = useState<string | null>(null);
@@ -194,6 +198,8 @@ export function ModelPicker({
             apiModelId={apiModelId}
             onSelect={(modelId) => onSelectApiModel(tab, modelId)}
             onConfigure={onConfigureProvider}
+            toolOverrides={toolOverrides}
+            onToolOverride={onToolOverride}
           />
         </div>
       ) : (
