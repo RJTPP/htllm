@@ -66,21 +66,22 @@ Pages → Components → Hooks → Services → Providers → Data + Workers
 
 - `src/pages/` — Astro pages (static HTML shells)
 - `src/layouts/` — BaseLayout with CSP
-- `src/components/` — React components: App, chat, knowledge, providers, settings, sidebar,
-  storage, system, command, landing, nav, ui
+- `src/components/` — React components: App, chat, workspace (side panel, viewer, cards),
+  knowledge, providers, settings, sidebar, storage, system, command, landing, nav, ui
 - `src/hooks/` — useChat, useThreads, useFolders, useKnowledge, useLibraries,
   useModelParams, useSystem
-- `src/services/` — chat/agent execution loop, tools, document reader, retrieval, MCP
-  client, approvals
+- `src/services/` — chat/agent execution loop, Workspace tools and uploads, document
+  reader, retrieval, MCP client, approvals
 - `src/providers/` — ChatProvider/EmbeddingProvider interfaces, WebLLM client,
   OpenAI-compatible provider, registry
-- `src/data/` — IndexedDB via idb (DB v9): threads, messages, keys, settings,
+- `src/data/` — IndexedDB via idb (DB v10): threads, messages, keys, settings,
   prompt-templates, folders, libraries, documents, chunks, parents, embeddings, summaries,
-  mcp connections; reset and storage stats
+  mcp connections, workspace files and versions; mode defaults, tool overrides; reset and
+  storage stats
 - `src/workers/` — WebLLM worker
 - `src/lib/` — utilities: chunking, PDF extraction, ingest/embedding pipelines, hybrid and
   vector search, RAG context, citations, compaction, token budgeting, sanitizing, export,
-  formatting
+  formatting, workspace paths and text (line model, search, grep), calculator, CSV
 
 ## Code Conventions
 
