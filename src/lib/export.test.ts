@@ -50,3 +50,11 @@ it('validates nested evidence and tool records before replacement', () => {
     expect(() => validateImport(JSON.stringify(data))).toThrow();
   }
 });
+it('type-checks optional thread fields and model parameters', () => {
+  const ok = backup(); Object.assign(ok.threads[0]!, { systemPrompt: 'Be brief', folderId: 'f', modelParams: { temperature: 0.7, contextWindow: 8192, reasoningEffort: 'low' } });
+  expect(validateImport(JSON.stringify(ok)).version).toBe(1);
+  for (const bad of [{ systemPrompt: 3 }, { folderId: {} }, { ragEnabled: 'yes' }, { modelParams: [] }, { modelParams: { temperature: 'hot' } }, { modelParams: { maxTokens: Infinity } }]) {
+    const data = backup(); Object.assign(data.threads[0]!, bad);
+    expect(() => validateImport(JSON.stringify(data))).toThrow();
+  }
+});

@@ -9,6 +9,7 @@ import {
   type StoreStats,
   type CacheEntry,
 } from '../../data/storage-stats';
+import type { StoreName } from '../../data/db';
 import {
   listDocuments,
   deleteDocument,
@@ -43,7 +44,10 @@ const STORE_LABELS: Record<string, string> = {
   libraries: 'Libraries',
   documents: 'Documents',
   chunks: 'Chunks',
+  parents: 'Parent chunks',
   embeddings: 'Embeddings',
+  summaries: 'Summaries',
+  mcpConnections: 'MCP connections',
 };
 
 /** Stores the user should never accidentally clear. */
@@ -211,7 +215,7 @@ export function StorageManager({
   };
 
   const handleClearStore = async (storeName: string) => {
-    await clearStore(storeName as Parameters<typeof clearStore>[0]);
+    await clearStore(storeName as StoreName);
     // Knowledge-related stores feed the BM25 cache — drop it so the
     // next search rebuilds against the current state.
     if (storeName === 'documents' || storeName === 'chunks' || storeName === 'embeddings') {
