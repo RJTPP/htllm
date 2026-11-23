@@ -102,7 +102,7 @@ The repo goes public at release, and everything is ready and verified before the
    `docs/compatibility.md`.
 4. Final PR `wip/release` → `dev` (the user reviews and rebase-merges), then `dev` →
    `main`, the `v1.0.0` tag, and a GitHub release. After the rebase merge, re-point the
-   SDD's `Doc Baseline Commit` to the merged commit.
+   SDD's `Doc Baseline Commit` to the merged commit (done: `ad4b742`).
 
 ## Release gates (revised 2026-11-23)
 

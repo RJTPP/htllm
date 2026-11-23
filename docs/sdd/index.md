@@ -6,9 +6,9 @@ IEEE 1016-inspired internal guidance, unofficial.
 
 - **Title:** htllm — Software Design Description
 - **Version:** 1.0.0
-- **Status:** Release candidate (describes the 1.0.0 code on `wip/release`)
+- **Status:** Current for 1.0.0 (describes `dev` at the baseline commit)
 - **Date of Issue:** 2026-11-23
-- **Doc Baseline Commit:** 89cf2c6
+- **Doc Baseline Commit:** ad4b742
 - **Last Reviewed On:** 2026-11-23
 - **Issuing Organization:** htllm (personal open-source project)
 - **Authors:** @RJTPP, Claude Code
@@ -25,9 +25,9 @@ IEEE 1016-inspired internal guidance, unofficial.
     thinking mode, Markdown rendering, storage manager, accent colors.
   - 2026-05-22 v0.1.0. Initial draft covering Phase 1.
 
-The baseline is the code commit this text describes. The final merge to `dev` is a rebase,
-which gives the same changes new commit hashes, so the baseline is re-pointed after that
-merge (roadmap R4).
+The baseline is the `dev` commit this text was last checked against: the 1.0.0
+release preparation, merged from `wip/release`. Every later change to a decision,
+store or contract updates this document in the same pull request.
 
 ## Document Map
 
