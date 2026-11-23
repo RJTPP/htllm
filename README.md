@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="public/og-image.png" alt="ht<llm>: private AI chat that runs in your browser" width="720">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+    <img src="docs/assets/banner-light.png" alt="ht<llm>" width="355">
+  </picture>
 </p>
 
 <p align="center">
