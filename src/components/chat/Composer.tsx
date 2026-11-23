@@ -115,6 +115,14 @@ export function Composer({
 }) {
   const [input, setInput] = useState('');
   const attachRef = useRef<HTMLInputElement>(null);
+  // Phones get a short placeholder: the long hint wraps to several lines there.
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 639px)');
+    const update = () => setNarrow(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const [images, setImages] = useState<ChatImage[]>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -293,9 +301,11 @@ export function Composer({
               onPaste={handlePaste}
               rows={1}
               placeholder={
-                modelReady
-                  ? 'Type a message — / for commands & templates, Enter to send'
-                  : "Type a message — you'll pick a model on send"
+                narrow
+                  ? 'Message…'
+                  : modelReady
+                    ? 'Type a message — / for commands & templates, Enter to send'
+                    : "Type a message — you'll pick a model on send"
               }
               className="flex-1 resize-none bg-surface border border-line focus:border-accent/60 focus:outline-none px-3 py-2 text-[14px] text-text placeholder:text-mute"
               style={{ maxHeight: '180px' }}
@@ -356,9 +366,10 @@ export function Composer({
               <button
                 onClick={send}
                 disabled={!input.trim()}
-                className="flex items-center gap-1 font-mono text-[12px] px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
+                aria-label="Send"
+                className="flex items-center gap-1 font-mono text-[12px] px-2.5 sm:px-3 py-2 border border-accent/60 text-accent hover:bg-accent/10 disabled:opacity-30"
               >
-                send <ArrowRight size={14} />
+                <span className="hidden sm:inline">send</span> <ArrowRight size={14} />
               </button>
             )}
           </div>

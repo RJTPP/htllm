@@ -59,7 +59,8 @@ The repo goes public at release, and everything is ready and verified before the
    - in Chat mode, the note that the chat has no tools or file access.
 2. "Add to library" (done): send an upload to a Knowledge library, indexing the stored text and
    page offsets so PDF pages survive.
-3. Narrow windows: fix the composer squeeze below about 600 px. Screenshots and a proposal
+3. Narrow windows (done: below 768 px the chat list is a drawer, status chips hide, short placeholder):
+   fix the composer squeeze below about 600 px. Screenshots and a proposal
    come first.
 4. QuickJS `run_js`: design it with the user (sandbox limits, file access, dependency
    approval), then build it.
