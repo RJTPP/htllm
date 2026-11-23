@@ -33,6 +33,11 @@ describe('agent execution boundary', () => {
     expect(history.find((m) => m.toolCalls)?.toolCalls?.[0]?.id).toBe('call-1');
     expect(history.find((m) => m.role === 'tool')?.toolCallId).toBe('call-1');
   });
+  it('keeps the reasoning field of a tool-calling turn when replaying it', async () => {
+    const turn: ChatChunk[] = [{ delta: '', reasoning: 'plan', reasoningField: 'reasoning' }, ...call()];
+    const result = await run([turn], [tool()]);
+    expect(result.requests[1]!.messages.find((m) => m.toolCalls)).toMatchObject({ reasoning: 'plan', reasoningField: 'reasoning' });
+  });
   it('never executes truncated streaming calls', async () => {
     const t = tool(); await expect(run([call().slice(0, 2)], [t])).rejects.toThrow('Incomplete');
     expect(t.execute).not.toHaveBeenCalled();

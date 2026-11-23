@@ -475,7 +475,7 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
       ...(m.toolCalls ? { tool_calls: m.toolCalls.map((c) => ({
         id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments },
       })) } : {}),
-      ...(m.toolCalls && m.reasoning ? { reasoning_content: m.reasoning } : {}),
+      ...(m.toolCalls && m.reasoning ? { [m.reasoningField ?? 'reasoning_content']: m.reasoning } : {}),
     }));
 
     // Build reasoning effort params. Different providers use different fields:
@@ -586,9 +586,12 @@ export class OpenAICompatibleProvider implements ChatProvider, EmbeddingProvider
           }));
 
           // Structured reasoning from API (separate from content).
-          const reasoning = delta?.reasoning_content ?? delta?.reasoning;
-          if (reasoning) {
+          // Use the first non-empty field and remember which one it was.
+          const reasoningField = delta?.reasoning_content ? 'reasoning_content' : delta?.reasoning ? 'reasoning' : undefined;
+          const reasoning = reasoningField ? delta?.[reasoningField] : undefined;
+          if (reasoning && reasoningField) {
             chunk.reasoning = reasoning;
+            chunk.reasoningField = reasoningField;
           }
 
           // Mark the first token for client-side timing measurement.

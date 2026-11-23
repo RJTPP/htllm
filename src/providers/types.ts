@@ -87,10 +87,16 @@ export interface ChatParams {
   signal?: AbortSignal;
 }
 
+/** OpenAI-compatible servers disagree on the reasoning field name: Ollama, vLLM and
+ *  LM Studio use `reasoning`; llama.cpp and DeepSeek-style APIs use `reasoning_content`. */
+export type ReasoningField = 'reasoning_content' | 'reasoning';
+
 export interface ChatChunk {
   delta: string;
   /** Reasoning/thinking delta from structured API fields (not in-content tags). */
   reasoning?: string;
+  /** Wire field the reasoning arrived in, so it can be replayed in the same field. */
+  reasoningField?: ReasoningField;
   finishReason?: 'stop' | 'length' | 'error' | 'tool_calls';
   toolCalls?: { index: number; id?: string; name?: string; arguments?: string }[];
   usage?: UsageStats;

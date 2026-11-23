@@ -40,12 +40,12 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
     signal.throwIfAborted();
     const final = stopTools || callsUsed >= limit;
     const partial = new Map<number, ToolCall>();
-    let text = ''; let reasoning = ''; let finish: ChatChunk['finishReason'];
+    let text = ''; let reasoning = ''; let reasoningField: ChatChunk['reasoningField']; let finish: ChatChunk['finishReason'];
     let turnUsage: ChatChunk['usage'];
     if (size() > available) throw new Error('Tool context budget reached. Start a new turn with fewer tools or a larger context window.');
     for await (const chunk of provider.chat({ ...params, messages, maxTokens: Math.max(1, Math.min(params.maxTokens ?? 512, opts.contextWindow - size())), tools: final ? undefined : definitions, toolChoice: final ? 'none' : 'auto' })) {
       signal.throwIfAborted();
-      text += chunk.delta; reasoning += chunk.reasoning ?? ''; finish = chunk.finishReason ?? finish;
+      text += chunk.delta; reasoning += chunk.reasoning ?? ''; reasoningField = chunk.reasoningField ?? reasoningField; finish = chunk.finishReason ?? finish;
       for (const part of chunk.toolCalls ?? []) {
         if (!Number.isInteger(part.index) || part.index < 0 || part.index > 32) throw new Error('Invalid tool call index');
         const call = partial.get(part.index) ?? { id: '', name: '', arguments: '' };
@@ -66,7 +66,7 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
     if (final || finish !== 'tool_calls') throw new Error('Incomplete or unexpected tool call; nothing was executed.');
     const calls = [...partial.values()];
     if (calls.some((call) => !call.id || !call.name) || new Set(calls.map((c) => c.id)).size !== calls.length) throw new Error('Invalid tool call identifiers');
-    messages.push({ ...wire('assistant', text), toolCalls: calls, reasoning: reasoning || undefined });
+    messages.push({ ...wire('assistant', text), toolCalls: calls, reasoning: reasoning || undefined, reasoningField: reasoning ? reasoningField : undefined });
     for (const call of calls) {
       signal.throwIfAborted();
       const tool = opts.tools.find((t) => t.name === call.name);
