@@ -7,6 +7,7 @@ import { Avatar } from './Avatar';
 import { MessageBody } from './MessageBody';
 import { ThinkingBlock } from './ThinkingBlock';
 import { MessageEvidence } from './MessageEvidence';
+import { PresentedFiles } from '../workspace/PresentedFiles';
 
 function splitContent(content: string | ContentPart[]): { text: string; images: string[] } {
   if (typeof content === 'string') return { text: content, images: [] };
@@ -259,6 +260,7 @@ export const MessageView = memo(function MessageView({
               />
             )}
             <MessageBody content={thinking?.reply ?? text} citations={message.citations} />
+            {!!message.presentedFiles?.length && <PresentedFiles files={message.presentedFiles} />}
             {streaming && (
               <span className="inline-block w-1.5 h-3.5 bg-accent ml-0.5 align-middle blink" />
             )}
