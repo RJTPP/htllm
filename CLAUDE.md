@@ -2,8 +2,8 @@
 
 ## What is this project?
 
-htllm is a fully client-side chat application. There is no server, no telemetry and no
-secrets in source. Models run either in the browser through WebLLM (in a Web Worker) or
+htllm is a fully client-side chat application with no backend of its own (no htllm server
+or account), no telemetry and no secrets in source. Models run either in the browser through WebLLM (in a Web Worker) or
 through OpenAI-compatible HTTP endpoints the user configures (Ollama, LM Studio, cloud).
 Each chat is either Chat (any model, optional cited RAG over a Knowledge library) or
 Workspace (tool-capable HTTP models working on a per-chat folder of files, with small

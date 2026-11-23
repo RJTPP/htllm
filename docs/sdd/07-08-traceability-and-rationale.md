@@ -90,7 +90,7 @@ AD-19 carry over from v0.2.0 where they still hold, and AD-20 onward are new.
 
 | ID | Decision | Rationale | Consequence |
 | --- | --- | --- | --- |
-| AD-1 | Static-only output; no SSR adapter. | Makes "no server" structural. | All routes are known at build time (landing and app). |
+| AD-1 | Static-only output; no SSR adapter. | Makes "no backend" structural. | All routes are known at build time (landing and app). |
 | AD-2 | `ChatProvider` is the only backend contract; components don't branch on provider id. | Adding a backend means adding a provider, not touching UI. | Two known violations (§7.2). |
 | AD-3 | WebLLM runs in a dedicated Web Worker, using web-llm's own worker protocol. | Keeps inference off the main thread with no lifecycle machinery. | One engine per tab; the protocol follows the pinned library version. |
 | AD-4 | All persistence in IndexedDB through `idb`; nothing in localStorage. | Capacity, structure, async access, binary support. | Cascades and migrations are our code (`data/db.ts`). |
@@ -136,7 +136,7 @@ AD-7, AD-8 and AD-12 from v0.2.0 are folded into others or are conventions recor
 | On-demand search in Workspace (D-15) | Inject Automatic RAG in Workspace too | It wastes context and duplicates what `search` gives on demand. |
 | Native OpenAI and Anthropic providers | Direct API clients | Their APIs refuse browser CORS; the OpenAI-compatible provider covers CORS-enabled gateways. |
 | Search by meaning over uploads | Per-chat embeddings for uploads | It needs a second chunk and embedding pipeline per chat. "Add to library" reuses the existing one and keeps PDF pages. |
-| Hosting | A server-backed app, or a desktop wrapper | Contradicts "no server". Pages plus a zip covers online and offline use. |
+| Hosting | A server-backed app, or a desktop wrapper | Contradicts "no backend". Pages plus a zip covers online and offline use. |
 
 ### 8.3 Tradeoff Analysis
 

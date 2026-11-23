@@ -102,8 +102,9 @@ export default function Landing() {
         </div>
 
         <p className="reveal reveal-1 text-mute text-base leading-relaxed mb-7 max-w-xl">
-          Fully client-side WebGPU chat. Models run in your browser — no server, no
-          telemetry, nothing leaves your device. Bring your own models and keys.
+          Private AI chat in your browser. Run a model right here with WebGPU, or connect
+          your own server. No backend, no account, no telemetry: your chats and files stay
+          on this device, and messages go only to the model you choose.
         </p>
 
         <div className="reveal reveal-2 border border-line bg-bg/75 backdrop-blur-sm mb-7 max-w-xl">

@@ -9,7 +9,7 @@ code wins and this document has a bug.
 The SDD exists to:
 
 1. Give a contributor the system's boundaries, layers and invariants before they change
-   code, so that the hard constraints (no server, provider abstraction, worker isolation,
+   code, so that the hard constraints (no backend of our own, provider abstraction, worker isolation,
    CSP) hold.
 2. Record the product decisions behind Chat and Workspace modes (D-1 to D-31) and the
    architectural decisions (AD-1 onward), with reasons and rejected alternatives, so they
