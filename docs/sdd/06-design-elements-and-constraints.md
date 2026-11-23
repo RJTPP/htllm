@@ -2,281 +2,254 @@
 
 ### 6.1 Design Element Catalog (Formal Definitions)
 
-#### ChatProvider (Interface)
+**E-1 Request engine (`hooks/useChat.ts`)**
+- **Component:** `useChat`
+- **Responsibility:** turns a user action (send, regenerate, edit-and-resend, continue,
+  compact) into one model request; streams the reply into state and IndexedDB; enforces
+  the mode rules.
+- **Inputs:** thread id, history, provider and model, model params, persona prompt, RAG
+  config (library ids, Automatic RAG, MCP tool ids, mode), attachments.
+- **Outputs:** saved assistant messages with content, reasoning, citations, activity,
+  presented files, usage and run status; budget state; compaction summaries.
+- **Dependencies:** `services/agent`, `services/retrieval`, `services/workspace-tools`,
+  `services/mcp`, `lib/compact`, `lib/conversation-budget`, `lib/system-context`, `data/*`.
+- **Public Functions:** `useChat()` returns send, regenerate, edit, stop, continue, and
+  manual compact, plus messages, budget and generating state.
 
-- **Component:** `ChatProvider`
-- **Responsibility:** Abstract contract for all LLM backends. Defines how the app discovers models, sends messages, and receives streaming responses.
-- **Inputs:** `ChatParams` (messages, modelId, temperature, topP, maxTokens, penalties, AbortSignal)
-- **Outputs:** `AsyncIterable<ChatChunk>` (streaming deltas with optional usage stats), `ModelInfo[]` (model catalog)
-- **Dependencies:** None (pure interface)
-- **Public Functions:** `listModels()`, `chat(params)`, `unload?()`
+**E-2 Agent loop (`services/agent.ts`)**
+- **Component:** `executeChat`
+- **Responsibility:** streams a reply and, when tools are given, runs the tool-call loop
+  with validation, approval, timeouts, result caps, a repeated-call stop, the call cap,
+  and the unknown-outcome stop.
+- **Inputs:** `ChatProvider`, `ChatParams`, optional `AgentOptions` (`tools`,
+  `contextWindow`, `maxCalls`, `maxResultChars`, `approve`, `timeoutMs`, and callbacks
+  for activity, sources, present and budget).
+- **Outputs:** an async iterable of `ChatChunk`; activity events; sources.
+- **Dependencies:** `services/tools` (lookup, validation), `lib/conversation-budget`,
+  `lib/token-calibration`.
+- **Public Functions:** `executeChat(provider, params, opts?)`.
 
-#### WebLLMProvider
+**E-3 Workspace tools (`services/workspace-tools.ts`)**
+- **Component:** the Workspace tool set and mount.
+- **Responsibility:** presents a chat's uploads, notes and attached libraries as one tree.
+  It implements the file tools and functions with path rules, read-before-write, line
+  windows, citations with line-to-page mapping, and the system prompt and file summary.
+- **Inputs:** `WorkspaceContext` (thread id, library ids, band, message id, read
+  versions), tool arguments.
+- **Outputs:** tool results (`text`, `citations`, `presented`), new note versions.
+- **Dependencies:** `data/workspace`, `data/documents`, `data/chunks`,
+  `services/retrieval`, `services/regex-runner`, `services/js-runner`,
+  `lib/workspace-text`, `lib/workspace-path`, `lib/calc`, `lib/csv-query`.
+- **Public Functions:** `workspaceTools`, `workspaceReadTools`, `workspaceWriteTools`,
+  `workspaceFunctionTools`, `mountWorkspace`, `workspaceSummary`, `attachedContents`,
+  `hasCsv`, `WORKSPACE_PROMPT`, `WORKSPACE_TOOL_SUMMARY`.
 
-- **Component:** `WebLLMProvider`
-- **Responsibility:** Implements `ChatProvider` using `@mlc-ai/web-llm`. Creates a Web Worker, manages model lifecycle (load/unload), translates between `ChatProvider` types and WebLLM's OpenAI-compatible API. `@mlc-ai/web-llm` is lazily imported via dynamic `import()` to keep it out of the main bundle.
-- **Inputs:** `ChatParams` from hooks layer
-- **Outputs:** `AsyncIterable<ChatChunk>` via WebWorkerMLCEngine; `ModelInfo[]` from `prebuiltAppConfig`
-- **Dependencies:** `@mlc-ai/web-llm` (`WebWorkerMLCEngine`, lazily imported), `src/workers/webllm-worker.ts`, `src/providers/webllm/model-list.ts`
-- **Public Functions:** `listModels()`, `chat(params)`, `unload()`, `loadModel(modelId, onProgress)`, `getLoadedModelId()`
-- **Note:** `unload()` now terminates the worker and nulls the engine reference, ensuring full GPU memory release.
+**E-4 Workspace store (`data/workspace.ts`)**
+- **Component:** workspace persistence.
+- **Responsibility:** stores uploads and notes per chat with numbered versions and
+  provenance. It checks the expected version on edit, and refuses writes to a chat that
+  no longer exists.
+- **Inputs:** thread id, path, text, pages, change kind, expected version, message id.
+- **Outputs:** `WorkspaceFile` and `WorkspaceVersion` records.
+- **Dependencies:** `data/db`.
+- **Public Functions:** `addUpload`, `writeNote`, `listWorkspaceFiles`,
+  `getWorkspaceFile`, `getWorkspaceFileById`, `getWorkspaceVersion`,
+  `listWorkspaceVersions`, `countWorkspaceFiles`, `versionsByMessages`, `sourceExists`.
 
-#### WebLLM Worker
+**E-5 Uploads (`services/workspace-upload.ts`)**
+- **Component:** `uploadToWorkspace`
+- **Responsibility:** checks the type and size of a user file, extracts text (pdf.js
+  for PDFs, keeping page offsets), and stores it under `/uploads`.
+- **Inputs:** a `File`, a thread id.
+- **Outputs:** a `WorkspaceFile` (upload), or an `UploadError`.
+- **Dependencies:** `lib/pdf`, `lib/file-kind`, `lib/workspace-path`, `data/workspace`.
+- **Public Functions:** `uploadToWorkspace`, `MAX_UPLOAD_BYTES`, `MAX_UPLOAD_CHARS`,
+  `UPLOAD_ACCEPT`.
 
-- **Component:** `webllm-worker.ts`
-- **Responsibility:** Background thread that hosts the WebLLM inference engine. Receives commands from main thread via postMessage (handled by library), executes GPU inference, streams results back.
-- **Inputs:** postMessage events from `WebWorkerMLCEngine`
-- **Outputs:** postMessage responses (model load progress, chat completion chunks)
-- **Dependencies:** `@mlc-ai/web-llm` (`WebWorkerMLCEngineHandler`), WebGPU API
-- **Public Functions:** None (message-driven, no public API)
+**E-6 Retrieval (`services/retrieval.ts`, `lib/hybrid-search.ts`, `lib/rag-context.ts`)**
+- **Component:** `retrieve`
+- **Responsibility:** checks that a library is indexed for its embedding model, then
+  embeds the query, runs hybrid search, and packs parent blocks into a context with
+  citations.
+- **Inputs:** library id, query, abort signal, character budget.
+- **Outputs:** `{ context, citations, reason? }`, or an error that blocks an ungrounded
+  answer.
+- **Dependencies:** `providers/registry` (embedding provider), `data/libraries`,
+  `data/documents`, `data/chunks`, `data/embeddings`, `data/parents`; `minisearch` in
+  `lib/hybrid-search`.
+- **Public Functions:** `retrieve`, `citation`; in lib, `hybridSearch`,
+  `invalidateHybridSearchCache`, `buildRagContext`.
 
-#### Provider Registry
+**E-7 Ingest and embedding (`lib/ingest.ts`, `lib/embed-pipeline.ts`, `services/library-add.ts`)**
+- **Component:** library import.
+- **Responsibility:** extracts text and page offsets, splits it into child and parent
+  chunks, stores the records, and embeds in batches with progress and cancellation. It
+  can optionally contextualize chunks (off by default). `addToLibrary` sends a Workspace
+  upload into a library and keeps its pages.
+- **Inputs:** a `File`, or stored text with pages; a library id; an embedding provider
+  and model; an abort signal.
+- **Outputs:** document, chunk, parent and embedding records; status callbacks.
+- **Dependencies:** `lib/pdf`, `lib/chunking`, `lib/contextualizer`,
+  `lib/validate-embedding`, `lib/hybrid-search` (cache invalidation), `providers/registry`,
+  `data/*` (`getDb` directly, see §7.2).
+- **Public Functions:** `ingestFile`, `ingestText`, `embedDocument`, `embedAllDocuments`,
+  `addToLibrary`.
 
-- **Component:** `registry.ts`
-- **Responsibility:** Discovers available providers and returns the default. Phase 1 returns only WebLLM. Phase 2 supports Ollama, LM Studio, Groq, OpenRouter, Generic OpenAI-compatible via `OpenAICompatibleProvider`.
-- **Inputs:** None
-- **Outputs:** `ChatProvider[]`, default `ChatProvider`
-- **Dependencies:** `WebLLMProvider`, `OpenAICompatibleProvider`
-- **Public Functions:** `getProviders()`, `getDefaultProvider()`, `getProvider(id)`
-
-#### IDB Database
-
-- **Component:** `db.ts`
-- **Responsibility:** Initializes and manages the IndexedDB database schema, migrations, and singleton connection.
-- **Inputs:** None
-- **Outputs:** `IDBPDatabase` instance
-- **Dependencies:** `idb`
-- **Public Functions:** `getDb()`
-
-#### Thread Repository
-
-- **Component:** `threads.ts`
-- **Responsibility:** CRUD operations for thread records in IndexedDB.
-- **Inputs:** Thread data (title, providerId, modelId, modelParams)
-- **Outputs:** `Thread` objects
-- **Dependencies:** `db.ts`
-- **Public Functions:** `createThread()`, `listThreads()`, `getThread()`, `updateThread()`, `deleteThread()`
-
-#### Message Repository
-
-- **Component:** `messages.ts`
-- **Responsibility:** CRUD operations for message records, indexed by threadId.
-- **Inputs:** Message data (threadId, role, content, usage)
-- **Outputs:** `Message` objects
-- **Dependencies:** `db.ts`
-- **Public Functions:** `addMessage()`, `getMessages()`, `updateMessage()`, `deleteMessagesForThread()`, `deleteMessagesAfter(threadId, afterTimestamp)`, `searchMessages(query)`
-
-#### Key Store
-
-- **Component:** `keys.ts`
-- **Responsibility:** Secure storage of provider API keys in IndexedDB. Keys are never exposed to components directly — only the provider layer reads them.
-- **Inputs:** Provider ID + key string
-- **Outputs:** Key string (to provider layer only)
-- **Dependencies:** `db.ts`
-- **Public Functions:** `setKey()`, `getKey()`, `deleteKey()`
-
-#### System Detect
-
-- **Component:** `system-detect.ts`
-- **Responsibility:** Probes browser capabilities: WebGPU availability, device memory, CPU cores, GPU adapter info, storage quota, network info.
-- **Inputs:** Browser APIs (`navigator.gpu`, `navigator.deviceMemory`, `navigator.storage`, etc.)
-- **Outputs:** `SystemInfo` object
-- **Dependencies:** None (browser APIs only)
-- **Public Functions:** `detectSystem()`
-
-#### Model Fit
-
-- **Component:** `fit.ts`
-- **Responsibility:** Heuristic that estimates whether a model's VRAM requirement fits within the device's estimated GPU memory budget.
-- **Inputs:** `vramRequiredMB` (from model), `deviceMemoryGB` (from system detection)
-- **Outputs:** `{ fits: boolean, tight: boolean }`
-- **Dependencies:** None
-- **Public Functions:** `fitFor(vramMB, deviceMemoryGB)`
-
-#### Export/Import
-
-- **Component:** `export.ts`
-- **Responsibility:** Serializes all IDB stores to JSON for backup; deserializes and restores from JSON.
-- **Inputs:** IDB store contents (for export); JSON blob (for import)
-- **Outputs:** JSON file (for export); IDB writes (for import)
-- **Dependencies:** `db.ts`, all repository modules
-- **Public Functions:** `exportAllData()`, `importAllData(json)`, `exportThread(threadId)`
-
-#### App (Root Component)
-
-- **Component:** `App.tsx`
-- **Responsibility:** Root React island. Orchestrates state via hooks, composes layout (header + sidebar + chat), manages provider lifecycle.
-- **Inputs:** None (root component)
-- **Outputs:** Rendered UI
-- **Dependencies:** All hooks, Sidebar, ChatPanel, SystemRail, ModelPicker
-- **Public Functions:** None (React component)
-
-#### Settings Repository (updated)
-
-- **Component:** `settings.ts`
-- **Responsibility:** Reads and writes user preferences in IDB. Now also stores `accentColor`, `codeTheme`, and `titleMode` settings in addition to model parameter defaults.
-- **Inputs:** Settings key-value pairs
-- **Outputs:** Settings object
-- **Dependencies:** `db.ts`
-- **Public Functions:** `getSettings()`, `updateSettings()`
-
-#### OpenAICompatibleProvider
-
+**E-8 OpenAI-compatible provider (`providers/openai-compat/index.ts`)**
 - **Component:** `OpenAICompatibleProvider`
-- **Responsibility:** Implements `ChatProvider` for any OpenAI-compatible `/v1/chat/completions` endpoint. Supports BYOK authentication, streaming via SSE, client-side TTFT and decode speed measurement, and structured reasoning fields.
-- **Inputs:** `ChatParams` from hooks layer; base URL and API key from IDB
-- **Outputs:** `AsyncIterable<ChatChunk>` with timing stats; `ModelInfo[]` from provider spec
-- **Dependencies:** `src/data/keys.ts`, provider spec in `registry.ts`
-- **Public Functions:** `listModels()`, `chat(params)`
+- **Responsibility:** one adapter for every HTTP backend, configured by a spec (generic,
+  Ollama, LM Studio; OpenRouter goes through the generic spec). It lists models; detects per-model tool support and
+  context windows from server metadata; streams chat with tool calls and reasoning; and
+  computes embeddings.
+- **Inputs:** base URL, optional key, `ChatParams`, `EmbeddingParams`.
+- **Outputs:** `ModelInfo[]`, `ChatChunk` stream, `EmbeddingResult`.
+- **Dependencies:** `fetch`, `data/keys`, `data/settings`, `lib/reasoning`, `lib/errors`.
+- **Public Functions:** `loadConfig`, `configure`, `listModels`, `detectToolSupport`,
+  `detectContextWindow`, `chat`, `embed`, `listEmbeddingModels`.
 
-#### Command Palette
+**E-9 WebLLM provider and worker (`providers/webllm/`, `workers/webllm-worker.ts`)**
+- **Component:** `WebLLMProvider`
+- **Responsibility:** loads in-browser models in a Web Worker with progress, reuses the
+  loaded model when only parameters change, and streams chat. It has no tool calls.
+- **Inputs:** model id, `ChatParams`.
+- **Outputs:** `LoadProgress` and `EngineStatus`, `ChatChunk` stream.
+- **Dependencies:** `@mlc-ai/web-llm` (dynamic import and type-only imports on the main
+  thread; the engine itself runs in the worker), `lib/errors`, WebGPU.
+- **Public Functions:** `listModels`, `loadModel`, `chat`, `unload`; in `model-list`,
+  `getModelList` and `groupByFamily`.
 
-- **Component:** `CommandPalette.tsx`
-- **Responsibility:** Global Cmd+K overlay for thread navigation and full-text message search. Uses cursor-based IDB query for search.
-- **Inputs:** Keyboard shortcut (Cmd+K / Ctrl+K), user query text
-- **Outputs:** Filtered thread list, matching messages with context
-- **Dependencies:** `data/messages.ts` (searchMessages), `data/threads.ts`
-- **Public Functions:** None (React component)
+**E-10 MCP client and approvals (`services/mcp.ts`, `services/approvals.ts`)**
+- **Component:** external tools.
+- **Responsibility:** validates endpoints, connects over Streamable HTTP, discovers
+  tools, wraps the selected ones as executable tools, and gates every call on user
+  approval, with session trust for read-only tools.
+- **Inputs:** an `McpConnection`, a token from the keys store, tool arguments, the
+  user's choice.
+- **Outputs:** tool results; approval requests for the UI.
+- **Dependencies:** `@modelcontextprotocol/client`, `data/mcp`, `data/keys`,
+  `services/tools`.
+- **Public Functions:** `validateMcpUrl`, `inspectMcp`, `externalTools`, `toolId`,
+  `approveTool`, `subscribeApprovals`, `getApproval`, `clearToolTrust`.
 
-#### Folder Repository
+**E-11 Sandboxed runners (`services/regex-runner.ts`, `services/js-runner.ts`, `workers/regex-worker.ts`, `workers/js-worker.ts`, `lib/js-sandbox.ts`)**
+- **Component:** deadline-bound execution.
+- **Responsibility:**
+  - The regex runner tests guarded model patterns off the main thread.
+  - The JS runner runs `run_js` code in QuickJS: only the listed files, a memory and
+    stack limit, an interrupt deadline, capped output, and termination as a backstop.
+- **Inputs:** a pattern and texts; code, files, deadline and memory.
+- **Outputs:** match booleans; `{ ok, output, result?, error? }`.
+- **Dependencies:** `quickjs-emscripten-core`, `@jitl/quickjs-wasmfile-release-sync`.
+- **Public Functions:** `testRegex`, `REGEX_DEADLINE_MS`, `runJs`, `JS_DEADLINE_MS`,
+  `JS_MEMORY_BYTES`, `runScript`.
 
-- **Component:** `folders.ts`
-- **Responsibility:** CRUD operations for folder records in IndexedDB. Folders organize threads into collapsible groups.
-- **Inputs:** Folder data (name)
-- **Outputs:** `Folder` objects
-- **Dependencies:** `db.ts`
-- **Public Functions:** `createFolder()`, `listFolders()`, `renameFolder()`, `deleteFolder()`
+**E-12 Rendering and evidence (`components/chat/MessageView.tsx`, `MessageBody.tsx`, `lib/citations.ts`, `lib/thinking.ts`, `lib/sanitize.ts`)**
+- **Component:** message rendering.
+- **Responsibility:**
+  - renders Markdown through the sanitizer, with code highlighting;
+  - splits reasoning into the thinking section;
+  - resolves citations against the answer's saved sources;
+  - shows tool activity, the source list and dialog, presented-file cards, and the
+    "continue" option.
+- **Inputs:** a `Message` and streaming state.
+- **Outputs:** DOM; source dialog; side panel open requests.
+- **Dependencies:** `marked`, `dompurify` (through `lib/sanitize`), `shiki` (through
+  `lib/highlight`).
+- **Public Functions:** `parseThinking`, `stripThinking`, `citationIndex`,
+  `renderCitationHtml`, `sanitizeHtml`.
 
-#### Storage Stats
+**E-13 Persistence layer (`src/data/`, `lib/export.ts`)**
+- **Component:** stores, migrations, cascades, backup.
+- **Responsibility:** owns the DB v10 schema and its migrations; CRUD per store; the
+  atomic thread-delete cascade; storage statistics, clears and reset; validated export
+  and import.
+- **Inputs:** records, ids, a backup JSON.
+- **Outputs:** records; a backup file; validation errors.
+- **Dependencies:** `idb`; `lib/export` also uses `services/approvals` (clearing tool
+  trust on import) and `lib/hybrid-search` (cache invalidation).
+- **Public Functions:** `getDb`, `STORE_NAMES`, per-store functions (for example
+  `createThread`, `deleteThreadCascade`, `addMessage`, `writeNote`), `getStoreStats`,
+  `clearStore`, `resetEverything`, `exportAllData`, `importAllData`, `validateImport`.
 
-- **Component:** `storage-stats.ts`
-- **Responsibility:** Enumerates IndexedDB store record counts and Cache API entries with size estimation. Provides clear/delete operations for both.
-- **Inputs:** IDB stores, Cache API
-- **Outputs:** `StoreStats[]`, `CacheEntry[]`
-- **Dependencies:** `db.ts`, Cache API
-- **Public Functions:** `getStoreStats()`, `getCacheEntries()`, `deleteCache(cacheName)`, `clearStore(storeName)`
-
-#### Highlight
-
-- **Component:** `highlight.ts`
-- **Responsibility:** Shiki-based syntax highlighting with result caching. Lazily initializes Shiki on first call. Caches HTML output keyed by `theme:lang:code` to avoid redundant highlighting.
-- **Inputs:** Code string, language identifier, theme name
-- **Outputs:** HTML string with syntax highlighting
-- **Dependencies:** `shiki`
-- **Public Functions:** `highlightCode(code, lang, theme)`, `resetHighlighter()`
-
-#### Thinking Parser
-
-- **Component:** `thinking.ts`
-- **Responsibility:** Parses `<think>...</think>` tags from model output (used by Qwen3, DeepSeek-R1 in local mode). Extracts thinking content and clean reply text. Also provides `stripThinking()` for cleaning history context.
-- **Inputs:** Raw model output string
-- **Outputs:** `{ thinking: string, reply: string, isThinking: boolean }`
-- **Dependencies:** None (pure function)
-- **Public Functions:** `parseThinking(text)`, `stripThinking(text)`
-
-#### Title Generator
-
-- **Component:** `title.ts`
-- **Responsibility:** Generates concise conversation titles by prompting the model. Falls back to trimming the first message on timeout (10s) or error.
-- **Inputs:** `ChatProvider`, model ID, first message text
-- **Outputs:** Title string or null (caller falls back to trim)
-- **Dependencies:** `ChatProvider` (for inference)
-- **Public Functions:** `generateTitle(provider, modelId, firstMessage)`
-
-#### Reset
-
-- **Component:** `reset.ts`
-- **Responsibility:** Full application data reset — clears all IDB stores and Cache API caches. Used by Settings → About → Reset.
-- **Inputs:** None
-- **Outputs:** Void (all data cleared)
-- **Dependencies:** `db.ts`, Cache API
-- **Public Functions:** `resetAll()`
+**E-14 App shell (`components/App.tsx` and navigation)**
+- **Component:** `App`
+- **Responsibility:**
+  - page switching (chat, knowledge, storage) and the thread list;
+  - the drawer on narrow windows;
+  - the model picker, settings and command palette;
+  - the mode chooser on empty chats;
+  - the thread-switch lock during generation.
+- **Inputs:** user navigation, hook state.
+- **Outputs:** rendered pages; thread and folder mutations.
+- **Dependencies:** all hooks; components.
+- **Public Functions:** none outside React (the page root).
 
 ### 6.2 Interfaces and Data Structures
 
-See Section 5.7 for full interface definitions (`ChatProvider`, `ChatParams`, `ChatChunk`, repository functions).
-
-Key data structures are defined in Section 5.4 (Logical View): `Thread`, `Message`, `ContentPart`, `ModelParams`, `PromptTemplate`, `SystemInfo`, `ModelInfo`.
-
-**Versioning:** The IDB schema uses version numbers for migrations. Phase 1 started at version 1; Phase 2 is at version 3 (v2 added `folders` store, v3 added `byUpdatedAt` and `byThreadCreated` compound indexes).
-
-**Error types:**
-
-```typescript
-class ProviderError extends Error {
-  constructor(public providerId: string, message: string, public cause?: unknown)
-}
-
-class StorageError extends Error {
-  constructor(public store: string, public operation: string, message: string, public cause?: unknown)
-}
-
-class FitError extends Error {
-  constructor(public modelId: string, message: string)
-}
-```
+- **`ChatChunk`:** `{ delta, reasoning?, reasoningField?, toolCalls?, usage?,
+  finishReason? }`. A provider must stream deltas in order, and report tool calls with
+  a stable `index` and `id`.
+- **`ExecutableTool`:** a `ToolDefinition` (`name`, `description`, JSON Schema
+  `parameters`, optional `server` and `readOnlyHint`) plus
+  `execute(args, signal, maxChars)`. External tools carry `server`. Built-in Workspace
+  tools don't, and are never listed in `enabledToolIds`, which holds MCP ids only.
+- **`SourceCitation`:** `id`, `chunkId`, `documentId`, `filename` (the path, for
+  Workspace), `excerpt`, and optional `headingPath`, `pageStart`/`pageEnd` and
+  `lineStart`/`lineEnd`. It is saved on the message, so evidence survives document
+  deletion.
+- **`AgentEvent`:** `id`, `tool`, `server?`, `arguments`, `status` (approval, running,
+  complete, denied, error, unknown, stopped), `result?`.
+- **`PresentedFile`:** file id, path, version, caption. A card always opens that version.
+- **Compatibility:**
+  - DB migrations are additive and tested. DB v10 is one-way.
+  - The backup format is version 1, and import rejects other versions.
+  - Tool names and schemas are model-facing, so changing them means re-running the eval.
+  - Source ID formats are model-facing too; the resolver stays tolerant of other
+    spellings of supplied sources.
 
 ### 6.3 Relationships
 
-```
-App ──uses──▶ useSystem ──calls──▶ detectSystem()
-App ──uses──▶ useThreads ──calls──▶ Thread Repository ──uses──▶ IDB
-App ──uses──▶ useChat ──calls──▶ ChatProvider.chat() ──delegates──▶ WebLLMProvider
-App ──uses──▶ useChat ──calls──▶ Message Repository ──uses──▶ IDB
-App ──uses──▶ useModelParams ──calls──▶ Settings Repository ──uses──▶ IDB
-App ──renders──▶ Sidebar ──renders──▶ ThreadList
-App ──renders──▶ ChatPanel ──renders──▶ MessageView, Composer, PromptHints
-App ──renders──▶ ModelPicker (modal) ──renders──▶ ModelCard, ModelParams, StatusPanel
-App ──renders──▶ SystemRail
-
-WebLLMProvider ──creates──▶ Web Worker
-WebLLMProvider ──uses──▶ WebWorkerMLCEngine ──postMessage──▶ WebWorkerMLCEngineHandler (in worker)
-WebLLMProvider ──reads──▶ prebuiltAppConfig (model catalog)
-
-Provider Registry ──instantiates──▶ WebLLMProvider (Phase 1)
-Provider Registry ──instantiates──▶ OpenAICompatibleProvider (Phase 2)
-
-App ──uses──▶ useFolders ──calls──▶ Folder Repository ──uses──▶ IDB
-App ──renders──▶ CommandPalette ──calls──▶ searchMessages ──uses──▶ IDB
-App ──renders──▶ Sidebar ──renders──▶ FolderSection ──renders──▶ ThreadItem
-App ──renders──▶ SettingsModal ──reads/writes──▶ Settings Repository
-App ──renders──▶ StorageManager ──calls──▶ Storage Stats ──uses──▶ IDB + Cache API
-
-MessageBody ──calls──▶ highlightCode ──uses──▶ Shiki (lazy)
-useChat ──calls──▶ parseThinking / stripThinking
-useChat ──calls──▶ generateTitle (via onAutoTitle callback)
-```
+| From | To | Kind | Strength |
+| --- | --- | --- | --- |
+| `useChat` | `executeChat` | Calls once per send | Strong |
+| `executeChat` | `ChatProvider` | Uses through the interface only | Strong, replaceable |
+| `executeChat` | `ExecutableTool[]` | Runs 0..cap calls per answer | Strong |
+| Workspace tools | Workspace store | Reads and writes per chat, 1 chat : n files | Strong |
+| Workspace tools | Retrieval | `search` over attached libraries, 0..n libraries | Weak (keyword fallback) |
+| Thread | Library | n : m (primary plus extras); Chat uses the primary for RAG | Weak (a library outlives chats) |
+| MCP tools | Approvals | Every call, 1 : 1 | Strong (safety) |
+| Message | Workspace versions | Presented and changed versions by message id | Weak (reference) |
+| WebLLM provider | WebLLM worker | One engine per tab | Strong |
 
 ### 6.4 Constraints and Assumptions
 
-| Constraint | Type | Risk if Violated |
-|---|---|---|
-| No server code in output | Architecture | Breaks core privacy guarantee; app won't deploy to static hosts |
-| No `@ts-ignore` without inline reason | Code quality | Technical debt accumulates silently |
-| No `any` types | Code quality | Type safety erosion |
-| Named exports only in lib/providers/data | Convention | Tree-shaking and import discoverability degrade |
-| Conventional Commits | Process | Changelog generation breaks |
-| Lock dependency versions (no ranges) | Stability | Unexpected breakage from upstream changes |
-| CSP meta tag in every page | Security | XSS attack surface expands |
-| WebGPU required for WebLLM | Runtime | Users without WebGPU cannot use in-browser inference (Phase 2 external providers are the workaround) |
-| CSS accent color via variable | Visual design | Accent color hardcoded in multiple places if variable not applied |
-| `@mlc-ai/web-llm` dynamic import only | Bundle size | Static import would include multi-MB module in main bundle |
-
-**Assumptions:**
-
-| Assumption | Risk if Wrong |
-|---|---|
-| `@mlc-ai/web-llm` WebWorkerMLCEngine handles postMessage protocol fully | Would need custom worker protocol |
-| `idb` library is sufficient for all IDB needs (no raw IDB calls needed) | Might need raw calls for complex queries |
-| 256KB image compression is sufficient quality for vision models | May need to increase; model-dependent |
-| `navigator.deviceMemory` is available in target browsers | Already handled: falls back to `null`, fit shows "unknown" |
+| Constraint or assumption | Risk if invalid |
+| --- | --- |
+| Static hosting only, with no response headers under our control (Pages). | A worker loaded from a script URL gets its policy from headers, so it has no CSP restriction on Pages (§8.2, §9). |
+| HTTP model servers allow CORS from the app's origin. | The provider fails with a network error. The guide explains server settings. |
+| Models that support tool calls stream them in the OpenAI format. | Workspace fails or loops. Mitigated by per-model detection, the user override, tool-call repair and the repeated-call stop. |
+| A single user per browser profile; no concurrent writers across tabs. | Two tabs editing one chat can race; edits are version-checked, other writes are last-writer-wins. |
+| Browser storage quota is enough for libraries and weights. | Writes fail with a quota error. The Storage page shows usage and offers clears. |
+| WebGPU is present for in-browser models. | WebLLM is unavailable; HTTP models still work. |
+| Model output is hostile. | Covered by the sanitizer, the CSP, code-only HTML and SVG, approvals and path rules. |
+| The owner approves CSP changes and new runtime dependencies. | The rules in `CLAUDE.md` would be bypassed. |
 
 ### 6.5 Runtime State and Data Notes (Recommended)
 
-| Category | Contents |
-|---|---|
-| **Persistent data (IndexedDB)** | Threads, messages, provider keys, settings, prompt templates, folders |
-| **Runtime state (React)** | Current thread ID, loaded model ID, engine status, system info, generating flag, input text, attached images, model picker open/closed, accent color, folders, command palette query, active page (chat/storage/knowledge), generating lock |
-| **Configuration** | Tailwind theme (build-time), CSP policy (build-time), IDB schema version (code constant) |
-
-**Future evolution note:** Phase 3 will add an `embeddings` store to IndexedDB for RAG vector data. The IDB migration system in `db.ts` supports version bumps for these additions.
+- **Persistent data:** the IndexedDB stores (§5.6) and the WebLLM weights in the Cache
+  API.
+- **Runtime state:**
+  - React state in hooks and components;
+  - the cached BM25 index (rebuilt when the chunk count changes);
+  - the session trust set for read-only MCP tools (cleared on reload);
+  - the loaded WebLLM engine;
+  - per-turn read versions for read-before-write.
+- **Configuration:**
+  - in `settings`: preferences, mode defaults and tool overrides;
+  - in `keys`: API keys and MCP tokens;
+  - build-time: the CSP and the base path.
+- **Future evolution:**
+  - Embedding uploads per chat was considered and set aside in favor of "Add to library".
+  - Storing original binaries for download is deferred.
+  - A pruning policy for old note versions, other than presented ones, may be needed if
+    storage grows.

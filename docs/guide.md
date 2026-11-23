@@ -57,7 +57,8 @@ Workspace needs an HTTP model that can call tools. The model picker shows a **to
 no tools** badge per HTTP model, read from the server where it reports this (LM Studio,
 Ollama, OpenRouter) or assumed otherwise (shown with `?`). Click the badge to override
 it. A Workspace chat with a model marked "no tools" refuses to send and says why.
-In-browser WebLLM models stay in Chat (see `docs/review/2026-11-23-research/webllm-tools.md`).
+In-browser WebLLM models stay in Chat: the bundled web-llm version supports tool calls for
+only a few models, and not reliably (design note in `docs/sdd/07-08-traceability-and-rationale.md` §8.2).
 
 Chats that had Tools switched on before this release open as Workspace chats; all
 others open as Chat. Citations use `[[Source <exact supplied source ID>]]` in both
