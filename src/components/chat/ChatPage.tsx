@@ -1,4 +1,4 @@
-import { useRef, useLayoutEffect, useCallback, useState } from 'react';
+import { useRef, useLayoutEffect, useCallback, useState, useMemo, useEffect } from 'react';
 import type { Thread, Message, ModelInfo, ModelParams, PromptTemplate, ReasoningEffort, ReasoningCapability, ConversationSummary } from '../../providers/types';
 import type { ChatImage } from '../../lib/image';
 import type { LibraryWithStats } from '../../hooks/useKnowledge';
@@ -11,7 +11,9 @@ import type { SlashCommand } from './SlashMenu';
 import { SummaryDivider } from './SummaryDivider';
 import { CompactingIndicator } from './CompactingIndicator';
 import { TrimDivider } from './TrimDivider';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, FolderOpen } from 'lucide-react';
+import { WorkspacePanel, type PanelView } from '../workspace/WorkspacePanel';
+import { WorkspaceUIContext, type WorkspaceUI } from '../workspace/WorkspaceContext';
 import { AgentControls } from './AgentControls';
 
 const BOTTOM_SCROLL_THRESHOLD = 48;
@@ -168,6 +170,15 @@ export function ChatPage({
     onRegenerate();
   }, [modelReady, onOpenPicker, onRegenerate]);
 
+  // Workspace side panel (D-26): the Files list or a file viewer.
+  const workspace = thread?.mode === 'workspace';
+  const [panel, setPanel] = useState<PanelView | null>(null);
+  useEffect(() => { setPanel(null); }, [thread?.id]);
+  const workspaceUI = useMemo<WorkspaceUI>(() => ({
+    openFile: (fileId, version) => setPanel({ tab: 'file', fileId, version }),
+    openFiles: () => setPanel({ tab: 'files' }),
+  }), []);
+
   if (!thread) {
     return (
       <div className="reveal reveal-3 flex-1 overflow-y-auto grid-bg">
@@ -177,10 +188,22 @@ export function ChatPage({
   }
 
   return (
-    <div className="reveal reveal-3 flex flex-col h-full min-h-0 flex-1 relative">
+    <WorkspaceUIContext.Provider value={workspaceUI}>
+    <div className="reveal reveal-3 flex h-full min-h-0 min-w-0 flex-1 relative">
+    <div className="flex flex-col h-full min-h-0 flex-1 min-w-0 relative">
       {/* Floating per-thread menu — system prompt lives here now instead
           of a permanent bar above the messages. */}
-      <div className="absolute top-3 right-3 z-10">
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+        {workspace && (
+          <button
+            onClick={() => setPanel(panel ? null : { tab: 'files' })}
+            aria-label="Workspace files"
+            aria-pressed={!!panel}
+            className={`inline-flex items-center gap-1 px-2 py-1 border font-mono text-[11px] transition-colors bg-bg focus-visible:outline focus-visible:outline-accent ${panel ? 'border-accent/60 text-accent' : 'border-line text-mute hover:text-text'}`}
+          >
+            <FolderOpen size={12} /> files
+          </button>
+        )}
         <ThreadMenu
           value={thread.systemPrompt ?? defaultSystemPrompt}
           defaultPrompt={defaultSystemPrompt}
@@ -348,5 +371,17 @@ export function ChatPage({
         onParams={onParams}
       />
     </div>
+    {workspace && panel && (
+      <WorkspacePanel
+        threadId={thread.id}
+        libraryName={libraries.find(({ lib }) => lib.id === ragLibraryId)?.lib.name}
+        refreshKey={`${messages.length}:${generating}:${messages.at(-1)?.presentedFiles?.length ?? 0}`}
+        view={panel}
+        onView={setPanel}
+        onClose={() => setPanel(null)}
+      />
+    )}
+    </div>
+    </WorkspaceUIContext.Provider>
   );
 }
