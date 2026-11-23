@@ -112,21 +112,20 @@ export const MessageView = memo(function MessageView({
   const isUser = message.role === 'user';
   const { text, images } = useMemo(() => splitContent(message.content), [message.content]);
 
-  // Resolve reasoning/thinking content. Prefer the structured `reasoning`
-  // field (from API providers like DeepSeek, OpenAI o-series). Fall back to
-  // parsing in-content `<think>` tags (WebLLM Qwen3, DeepSeek-R1 local).
+  // Resolve reasoning/thinking content: the structured `reasoning` field (API
+  // providers) plus any in-content `<think>`/`<thought>` blocks. Both can occur in
+  // one message: in a Workspace turn some servers send reasoning separately in early
+  // tool rounds and as tags in later ones.
   const thinking = useMemo(() => {
     if (isUser) return null;
-    if (message.reasoning) {
-      // Structured reasoning from API — content is already clean.
-      // Still "thinking" if streaming + has reasoning but no content yet.
-      return {
-        thinking: message.reasoning,
-        reply: text,
-        isThinking: streaming && !text,
-      };
-    }
-    return parseThinking(text);
+    const inline = parseThinking(text);
+    if (!message.reasoning) return inline;
+    return {
+      thinking: [message.reasoning, inline.thinking].filter(Boolean).join('\n\n'),
+      reply: inline.reply,
+      // Still "thinking" while streaming reasoning with no reply yet.
+      isThinking: inline.isThinking || (streaming && !inline.reply),
+    };
   }, [isUser, text, message.reasoning, streaming]);
 
   // Auto-focus and auto-size the textarea when entering edit mode.
