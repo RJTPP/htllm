@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { SourceCitation } from '../../providers/types';
-import { getDocument } from '../../data/documents';
+import { sourceExists } from '../../data/workspace';
 import { Modal } from '../ui/Modal';
 
 export function SourceDialog({ source, onClose }: { source: SourceCitation | null; onClose: () => void }) {
   const [state, setState] = useState<'checking' | 'available' | 'missing' | 'error'>('checking');
   useEffect(() => {
     let active = true; setState('checking');
-    if (source) void getDocument(source.documentId).then((doc) => { if (active) setState(doc ? 'available' : 'missing'); }).catch(() => { if (active) setState('error'); });
+    if (source) void sourceExists(source.documentId).then((exists) => { if (active) setState(exists ? 'available' : 'missing'); }).catch(() => { if (active) setState('error'); });
     return () => { active = false; };
   }, [source]);
   return <Modal open={!!source} onClose={onClose} title={source?.filename ?? 'Source evidence'} subtitle="Saved evidence supplied to this answer" width="max-w-xl">

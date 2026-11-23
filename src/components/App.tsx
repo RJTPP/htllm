@@ -518,7 +518,12 @@ export default function App() {
           id: 'delete-thread',
           label: 'Delete current thread',
           group: 'Actions',
-          run: () => void deleteThread(activeThreadId),
+          // D-20: say so before deleting a Workspace chat's files.
+          run: () => void (async () => {
+            const files = await countWorkspaceFiles(activeThreadId);
+            if (files && !window.confirm(`Delete this chat and its ${files} workspace file${files === 1 ? '' : 's'}? This cannot be undone.`)) return;
+            await deleteThread(activeThreadId);
+          })(),
         });
       }
       for (const t of threads) {
