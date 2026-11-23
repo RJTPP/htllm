@@ -95,8 +95,8 @@ The repo goes public at release, and everything is ready and verified before the
    - add a Cloudflare DNS record `CNAME htllm → rjtpp.github.io`, set to DNS only;
    - in the repo's Pages settings, choose GitHub Actions as the source, set the custom
      domain and enforce HTTPS.
-3. (Done on `localhost`, except the owner's WebLLM chat and the check from the hosted
-   origin; see `docs/compatibility.md`.) Live smoke test against the gates below, including connecting to LM Studio from the
+3. (Done on `localhost`, including the owner's MCP and WebLLM checks. The check from
+   the hosted origin follows the first deploy; see `docs/compatibility.md`.) Live smoke test against the gates below, including connecting to LM Studio from the
    Pages origin (Chrome local-network access, CORS). Claude runs the LM Studio Chat and Workspace
    checks; the user runs one real MCP tool and one WebLLM chat. Versions are recorded in
    `docs/compatibility.md`.
