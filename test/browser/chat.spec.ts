@@ -52,10 +52,12 @@ test('composer tools open a separate keyboard-accessible dialog and global setti
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0); await expect(tools).toBeFocused();
   await tools.click();
-  await page.getByRole('switch', { name: 'Use tools', exact: true }).click();
-  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).not.toBeChecked();
+  // D-14/D-15: a Workspace chat has no Tools switch and no Automatic RAG; tools stay on.
+  await expect(panel.getByRole('switch', { name: 'Use tools', exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('switch', { name: 'Automatic RAG', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Tools: off (3 available)', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tools: on (3 available)', exact: true })).toBeVisible();
   await tools.click(); await page.getByRole('tab', { name: 'External tools', exact: true }).click(); await page.getByRole('button', { name: 'Manage connections' }).click();
   await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByLabel('MCP endpoint')).toBeVisible();
@@ -69,7 +71,7 @@ test('composer tools open a separate keyboard-accessible dialog and global setti
   await expect(page.getByRole('alert')).toBeVisible();
 });
 
-test('tools work without capability confirmation or a selected library', async ({ page }) => {
+test('workspace tools work without a switch, capability confirmation or a selected library', async ({ page }) => {
   await seed(page, true);
   await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
@@ -81,12 +83,10 @@ test('tools work without capability confirmation or a selected library', async (
     await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
   });
   await page.reload();
-  await page.getByRole('button', { name: 'Tools: off (3 available)', exact: true }).click();
+  // A legacy agentEnabled:false does not matter in a Workspace chat (D-14).
+  await page.getByRole('button', { name: 'Tools: on (3 available)', exact: true }).click();
   await expect(page.getByText('This model supports function/tool calling')).toHaveCount(0);
   await expect(page.getByText('No library selected', { exact: true })).toBeVisible();
-  await expect(page.getByRole('switch', { name: 'Automatic RAG', exact: true })).toBeDisabled();
-  await page.getByRole('switch', { name: 'Use tools', exact: true }).click();
-  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).toBeChecked();
   await page.getByRole('dialog', { name: 'Tools for this chat' }).getByRole('button', { name: 'esc', exact: true }).click();
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   await composer.fill('List the available documents'); await composer.press('Enter');
@@ -125,14 +125,14 @@ test('document agent follows whole-file cursors without skipping text', async ({
 
 test('library selection reuses the custom picker and RAG has distinct on/off styles', async ({ page }) => {
   await seedRag(page);
-  await page.getByRole('button', { name: /^Tools:/ }).click();
+  await page.getByRole('button', { name: /^Knowledge:/ }).click();
   const rag = page.getByRole('switch', { name: 'Automatic RAG', exact: true });
   await expect(rag).toHaveClass(/bg-accent\/10/);
   await rag.click(); await expect(rag).not.toBeChecked();
   await expect(rag).not.toHaveClass(/bg-accent\/10/);
   const pickerButton = page.getByRole('button', { name: 'Choose knowledge library' });
   await pickerButton.click();
-  const picker = page.getByRole('dialog', { name: 'Knowledge for this chat', exact: true });
+  const picker = page.getByRole('dialog', { name: 'Choose a knowledge library', exact: true });
   await expect(picker).toBeVisible();
   await picker.getByRole('button', { name: 'None — no document access', exact: true }).click();
   await expect(picker).toHaveCount(0);
@@ -143,7 +143,7 @@ test('library selection reuses the custom picker and RAG has distinct on/off sty
   await expect(rag).toBeEnabled(); await expect(rag).not.toBeChecked();
   await pickerButton.click(); await page.keyboard.press('Escape');
   await expect(picker).toHaveCount(0);
-  await expect(page.getByRole('dialog', { name: 'Tools for this chat', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Knowledge for this chat', exact: true })).toBeVisible();
 });
 
 test('incremental streaming follows the bottom but preserves an intentional scroll-up', async ({ page }) => {
@@ -260,7 +260,7 @@ async function seed(page: Page, agent = false) {
   await page.evaluate(async (enableAgent) => {
     const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
     const tx = db.transaction(['threads', 'settings', 'libraries'], 'readwrite');
-    tx.objectStore('threads').put({ id: 'fixture-thread', title: 'Fixture chat', providerId: 'openai-compat', modelId: 'fixture-model', createdAt: 1, updatedAt: Date.now(), libraryId: enableAgent ? 'fixture-library' : null, agentEnabled: enableAgent, toolModelKey: 'openai-compat:fixture-model' });
+    tx.objectStore('threads').put({ id: 'fixture-thread', title: 'Fixture chat', providerId: 'openai-compat', modelId: 'fixture-model', createdAt: 1, updatedAt: Date.now(), libraryId: enableAgent ? 'fixture-library' : null, agentEnabled: enableAgent, mode: enableAgent ? 'workspace' : 'chat', toolModelKey: 'openai-compat:fixture-model' });
     tx.objectStore('settings').put({ key: 'provider:openai-compat:baseURL', value: 'https://fixture.test/v1' });
     tx.objectStore('settings').put({ key: 'titleMode', value: 'first-message' });
     tx.objectStore('libraries').put({ id: 'fixture-library', name: 'Fixture library', embeddingModelId: '', createdAt: 1 });
@@ -410,8 +410,6 @@ test('MCP discovery and external writes require approval under production CSP', 
   await expect(page.getByLabel('write_note')).toBeVisible();
   await page.getByLabel('write_note').click();
   await expect(page.getByLabel('write_note')).toBeChecked();
-  await page.getByRole('switch', { name: 'Use tools', exact: true }).click();
-  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).toBeChecked();
   await page.getByRole('dialog', { name: 'Tools for this chat', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
   await page.route('https://fixture.test/v1/chat/completions', async (route) => {
     const request = route.request().postDataJSON();
@@ -445,7 +443,7 @@ test('MCP discovery and external writes require approval under production CSP', 
   await page.getByRole('button', { name: 'Refresh tools', exact: true }).click();
   await expect(page.getByText('connection tested', { exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Tools: off (3 available)', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tools: on (3 available)', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /^Tools: .*\(3 available\)/ }).click();
   await expect(page.getByLabel('write_note')).not.toBeChecked();
   await page.getByRole('button', { name: 'Manage connections' }).click();
@@ -471,35 +469,80 @@ async function seedRag(page: Page) {
   await page.route('https://fixture.test/v1/embeddings', (route) => route.fulfill({ json: { model: 'fixture-embed', data: [{ index: 0, embedding: [1, 0] }] } }));
   await page.reload();
 }
-for (const toolsOn of [false, true]) for (const ragOn of [false, true]) test(`independent Tools=${toolsOn} RAG=${ragOn} settings persist and control requests`, async ({ page }) => {
-  await seedRag(page);
-  let embeddings = 0; let request: { tools?: unknown[]; messages: unknown[] } | undefined;
-  await page.route('https://fixture.test/v1/embeddings', (route) => { embeddings++; return route.fulfill({ json: { model: 'fixture-embed', data: [{ index: 0, embedding: [1, 0] }] } }); });
+async function captureRequests(page: Page) {
+  const seen = { embeddings: 0, request: undefined as { tools?: unknown[]; messages: unknown[] } | undefined };
+  await page.route('https://fixture.test/v1/embeddings', (route) => { seen.embeddings++; return route.fulfill({ json: { model: 'fixture-embed', data: [{ index: 0, embedding: [1, 0] }] } }); });
   await page.route('https://fixture.test/v1/chat/completions', async (route) => {
-    request = route.request().postDataJSON();
+    seen.request = route.request().postDataJSON();
     await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: 'Matrix answer.' }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` });
   });
+  return seen;
+}
+// D-10: Chat has no tools and keeps Automatic RAG as a persisted per-chat choice.
+for (const ragOn of [false, true]) test(`Chat with Automatic RAG=${ragOn} persists the choice and never sends tools`, async ({ page }) => {
+  await seedRag(page);
+  const seen = await captureRequests(page);
+  await page.getByRole('button', { name: /^Knowledge:/ }).click();
+  const panel = page.getByRole('dialog', { name: 'Knowledge for this chat', exact: true });
+  await expect(panel.getByRole('switch', { name: 'Use tools', exact: true })).toHaveCount(0);
+  await expect(panel.getByText('list_documents', { exact: true })).toHaveCount(0);
+  const rag = panel.getByRole('switch', { name: 'Automatic RAG', exact: true });
+  await expect(rag).toBeChecked();
+  if (!ragOn) await rag.click();
+  await expect(rag).toHaveAttribute('aria-checked', String(ragOn));
+  await page.reload();
+  await page.getByRole('button', { name: /^Knowledge:/ }).click();
+  await expect(rag).toHaveAttribute('aria-checked', String(ragOn));
+  await panel.getByRole('button', { name: 'esc', exact: true }).click();
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('When does Atlas launch?'); await composer.press('Enter');
+  await expect(page.getByText('Matrix answer.', { exact: true })).toBeVisible();
+  expect(seen.embeddings > 0).toBe(ragOn); expect(seen.request?.tools?.length ?? 0).toBe(0);
+  expect(JSON.stringify(seen.request?.messages).includes('Atlas launches on November 12.')).toBe(ragOn);
+  if (ragOn) expect(JSON.stringify(seen.request?.messages)).toContain('[[Source <exact supplied source ID>]]');
+});
+// D-14/D-15: Workspace always sends tools and never retrieves before the answer.
+test('Workspace sends tools and never retrieves automatically, even with a library attached', async ({ page }) => {
+  await seedRag(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('threads', 'readwrite'); const store = tx.objectStore('threads');
+    const thread = await new Promise<Record<string, unknown>>((resolve) => { const req = store.get('fixture-thread'); req.onsuccess = () => resolve(req.result); });
+    store.put({ ...thread, mode: 'workspace', automaticRagEnabled: true });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  const seen = await captureRequests(page);
   await page.getByRole('button', { name: /^Tools:/ }).click();
   await expect(page.getByRole('tab', { name: 'Documents', exact: true })).toHaveAttribute('aria-selected', 'true');
   for (const name of ['list_documents', 'search_knowledge', 'read_document']) await expect(page.getByText(name, { exact: true })).toBeVisible();
-  if (toolsOn) await page.getByRole('switch', { name: 'Use tools', exact: true }).click();
-  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).toHaveAttribute('aria-checked', String(toolsOn));
-  await expect(page.getByRole('switch', { name: 'Automatic RAG', exact: true })).toBeChecked();
-  if (!ragOn) await page.getByRole('switch', { name: 'Automatic RAG', exact: true }).click();
-  await expect(page.getByRole('switch', { name: 'Automatic RAG', exact: true })).toHaveAttribute('aria-checked', String(ragOn));
-  await page.reload();
-  await page.getByRole('button', { name: /^Tools:/ }).click();
-  await expect(page.getByRole('switch', { name: 'Use tools', exact: true })).toHaveAttribute('aria-checked', String(toolsOn));
-  await expect(page.getByRole('switch', { name: 'Automatic RAG', exact: true })).toHaveAttribute('aria-checked', String(ragOn));
+  await expect(page.getByRole('switch', { name: 'Automatic RAG', exact: true })).toHaveCount(0);
   await page.getByRole('dialog', { name: 'Tools for this chat' }).getByRole('button', { name: 'esc', exact: true }).click();
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   await composer.fill('When does Atlas launch?'); await composer.press('Enter');
   await expect(page.getByText('Matrix answer.', { exact: true })).toBeVisible();
-  expect(embeddings > 0).toBe(ragOn); expect(!!request?.tools?.length).toBe(toolsOn);
-  expect(JSON.stringify(request?.messages).includes('Atlas launches on November 12.')).toBe(ragOn);
-  if (toolsOn || ragOn) expect(JSON.stringify(request?.messages)).toContain('[[Source <exact supplied source ID>]]');
+  expect(seen.embeddings).toBe(0); expect(seen.request?.tools?.length ?? 0).toBeGreaterThan(0);
+  expect(JSON.stringify(seen.request?.messages)).not.toContain('Atlas launches on November 12.');
+  expect(JSON.stringify(seen.request?.messages)).toContain('[[Source <exact supplied source ID>]]');
 });
 
+test('a Workspace chat refuses to send when its model is marked as unable to use tools', async ({ page }) => {
+  await seed(page, true);
+  let chatRequests = 0;
+  await page.route('https://fixture.test/v1/chat/completions', (route) => { chatRequests++; return route.fulfill({ status: 500 }); });
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('settings', 'readwrite');
+    tx.objectStore('settings').put({ key: 'modelToolOverrides', value: { 'openai-compat:fixture-model': false } });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: /^Tools: unavailable/ })).toBeVisible();
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Hello'); await composer.press('Enter');
+  await expect(page.getByText(/Workspace needs a model that can use tools/)).toBeVisible();
+  expect(chatRequests).toBe(0);
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';

@@ -231,8 +231,17 @@ export default function App() {
   // API threads use the resolved wanted model directly.
   const activeModelId = isApiThread ? wantedModelId : (loadedModelId ?? '');
   const toolSupport = useToolSupport(activeProvider, activeModelId);
-  // Tools run only when the thread has them on AND the model may use them.
-  const ragConfig: RagConfig = { libraryId: ragLibraryId, automaticRagEnabled: activeThread?.automaticRagEnabled, agentEnabled: !!activeThread?.agentEnabled && toolSupport.support.supported, enabledToolIds: activeThread?.enabledToolIds };
+  // D-10/D-14/D-15: Chat has no tools and keeps Automatic RAG (on by default
+  // when a library is attached); Workspace always runs tools and never
+  // retrieves automatically. Tools also need a model that may use them.
+  const workspaceMode = (activeThread?.mode ?? 'chat') === 'workspace';
+  const ragConfig: RagConfig = {
+    libraryId: ragLibraryId,
+    automaticRagEnabled: workspaceMode ? false : activeThread?.automaticRagEnabled ?? true,
+    agentEnabled: workspaceMode && toolSupport.support.supported,
+    enabledToolIds: activeThread?.enabledToolIds,
+    workspace: workspaceMode,
+  };
 
   // D8 Part B — factory for Contextual Retrieval. Knowledge page passes
   // this into useKnowledge; when a library has opted in, the embed pipeline
