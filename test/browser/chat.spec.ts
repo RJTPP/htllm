@@ -256,7 +256,7 @@ async function seed(page: Page, agent = false) {
     await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify(result)}\n\ndata: [DONE]\n\n` });
   });
   await page.goto('/app');
-  await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).some((db) => db.name === 'htllm' && db.version === 9))).toBe(true);
+  await expect.poll(() => page.evaluate(async () => (await indexedDB.databases()).some((db) => db.name === 'htllm' && (db.version ?? 0) >= 10))).toBe(true);
   await page.evaluate(async (enableAgent) => {
     const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
     const tx = db.transaction(['threads', 'settings', 'libraries'], 'readwrite');

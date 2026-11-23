@@ -2,6 +2,16 @@ import { openDB, type IDBPDatabase } from 'idb';
 
 export interface HtllmDB {
   mcpConnections: { key: string; value: import('../providers/types').McpConnection };
+  workspaceFiles: {
+    key: string;
+    value: import('../providers/types').WorkspaceFile;
+    indexes: { byThread: string; byThreadPath: [string, string] };
+  };
+  workspaceVersions: {
+    key: [string, number];
+    value: import('../providers/types').WorkspaceVersion;
+    indexes: { byThread: string; byFile: string };
+  };
   threads: {
     key: string;
     value: import('../providers/types').Thread;
@@ -84,12 +94,14 @@ export const STORE_NAMES = [
   'embeddings',
   'summaries',
   'mcpConnections',
+  'workspaceFiles',
+  'workspaceVersions',
 ] as const;
 
 export type StoreName = (typeof STORE_NAMES)[number];
 
 const DB_NAME = 'htllm';
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 
 /** Stable id for the auto-created "Default" library so migrations and
  *  fresh installs both reference the same record. */
@@ -217,6 +229,26 @@ export function getDb(): Promise<IDBPDatabase<HtllmDB>> {
           if (!chunkStore.indexNames.contains('byParent')) {
             chunkStore.createIndex('byParent', 'parentId');
           }
+        }
+        if (oldVersion >= 1 && oldVersion < 10) {
+          // D-11: chats with the Tools switch on become Workspace chats;
+          // all others become Chat. Existing fields are kept, not dropped.
+          let cursor = await tx.objectStore('threads').openCursor();
+          while (cursor) {
+            if (cursor.value.mode === undefined) {
+              await cursor.update({ ...cursor.value, mode: cursor.value.agentEnabled ? 'workspace' : 'chat' });
+            }
+            cursor = await cursor.continue();
+          }
+        }
+        if (oldVersion < 10) {
+          // Per-chat workspace files and note versions (D-5, D-19, D-28).
+          const files = db.createObjectStore('workspaceFiles', { keyPath: 'id' });
+          files.createIndex('byThread', 'threadId');
+          files.createIndex('byThreadPath', ['threadId', 'path'], { unique: true });
+          const versions = db.createObjectStore('workspaceVersions', { keyPath: ['fileId', 'version'] });
+          versions.createIndex('byThread', 'threadId');
+          versions.createIndex('byFile', 'fileId');
         }
         if (oldVersion < 8) {
           // D10b — auto-compaction snapshots store. One active summary
