@@ -53,11 +53,13 @@ export function ChatPage({
   onChangeAgent,
   toolsCapable,
   toolsUnavailableReason,
+  onChangeMode,
   onManageConnections,
 }: {
   onChangeAgent: (patch: Partial<Thread>) => void;
   toolsCapable: boolean;
   toolsUnavailableReason?: string;
+  onChangeMode: (mode: import('../../providers/types').ThreadMode) => void;
   onManageConnections: () => void;
   thread: Thread | null;
   messages: Message[];
@@ -187,7 +189,9 @@ export function ChatPage({
       </div>
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto grid-bg">
         {messages.length === 0 ? (
-          <EmptyState onOpenPicker={onOpenPicker} modelReady={modelReady} model={loadedModelId} />
+          <EmptyState onOpenPicker={onOpenPicker} modelReady={modelReady} model={loadedModelId}
+            mode={thread.mode ?? 'chat'} onChangeMode={onChangeMode}
+            workspaceUnavailable={toolsCapable ? undefined : `${toolsUnavailableReason ?? 'This model cannot use tools.'} Choose a tool-capable HTTP model before sending.`} />
         ) : (
           <div className="max-w-3xl mx-auto px-6 pt-6 pb-6 space-y-5">
             {(() => {

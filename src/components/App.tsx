@@ -16,6 +16,7 @@ import { useFolders } from '../hooks/useFolders';
 import { useChat, type RagConfig } from '../hooks/useChat';
 import { useModelParams } from '../hooks/useModelParams';
 import { useToolSupport } from '../hooks/useToolSupport';
+import { getModeDefaults, setModeDefault } from '../data/mode-defaults';
 import { seedBuiltInTemplates, listTemplates } from '../data/prompt-templates';
 import {
   getSetting,
@@ -368,6 +369,7 @@ export default function App() {
         if (activeThreadId) {
           updateThread(activeThreadId, { providerId: webllmProvider.id, modelId });
         }
+        void setModeDefault('chat', webllmProvider.id, modelId);
       } catch (err) {
         setEngineStatus('error');
         setLoadProgress({
@@ -645,9 +647,30 @@ export default function App() {
       if (activeThreadId) {
         updateThread(activeThreadId, { providerId, modelId });
       }
+      void setModeDefault(activeThread?.mode ?? 'chat', providerId, modelId);
       setModal(null);
     },
-    [activeThreadId, updateThread],
+    [activeThreadId, activeThread?.mode, updateThread],
+  );
+
+  // D-3/D-21: the mode can change only while the chat is empty, and switching
+  // it moves to the model last used in that mode when one is available.
+  const handleChangeMode = useCallback(
+    async (mode: import('../providers/types').ThreadMode) => {
+      if (!activeThreadId || messages.length > 0 || (activeThread?.mode ?? 'chat') === mode) return;
+      await updateThread(activeThreadId, { mode });
+      const preferred = (await getModeDefaults())[mode];
+      if (!preferred) return;
+      if (preferred.providerId !== webllmProvider.id) {
+        handleSelectApiModel(preferred.providerId, preferred.modelId);
+      } else if (loadedModelId === preferred.modelId) {
+        // An in-browser model is reused only if it is already loaded.
+        setLastProviderId(webllmProvider.id); setLastModelId(preferred.modelId);
+        void setSetting('lastProviderId', webllmProvider.id); void setSetting('lastModelId', preferred.modelId);
+        await updateThread(activeThreadId, { providerId: webllmProvider.id, modelId: preferred.modelId });
+      }
+    },
+    [activeThreadId, activeThread?.mode, messages.length, updateThread, handleSelectApiModel, loadedModelId],
   );
 
   // Jump from an unconfigured provider in the model picker straight to its
@@ -816,6 +839,7 @@ export default function App() {
                 <ChatPage
                   onManageConnections={() => { setSettingsTab('tools'); setModal('settings'); }}
                   toolsCapable={toolSupport.support.supported}
+                  onChangeMode={(mode) => void handleChangeMode(mode)}
                   toolsUnavailableReason={toolSupport.support.source === 'provider' ? 'Tools need an HTTP model that supports tool calling.' : 'This model reports no tool support. You can override this in the model picker.'}
                   onChangeAgent={(patch) => { if (activeThreadId) void updateThread(activeThreadId, patch); }}
                   thread={activeThread}
