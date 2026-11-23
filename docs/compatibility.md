@@ -15,7 +15,7 @@ served on `localhost`.
 | Workspace: attach, read, write, present, open the card | The same LM Studio model; a Markdown upload | Passed. The small upload was included whole; the model ran `write_file` and `present_file`; the card opened v1 in the side panel. The note's facts matched the upload, and the reply's citation resolved to it. |
 | Workspace eval baseline (25 tasks × 3 runs) | The same LM Studio model, keyword search only | Recorded in [eval/README.md](../eval/README.md#results): facts 25 of 25; citations were weak for research answers. |
 | One real MCP tool with approval | `@modelcontextprotocol/server-everything` 2.2.1 over Streamable HTTP on `localhost:3001` | Reported working by the owner (approval prompt and result not separately recorded). |
-| In-browser WebLLM chat | `@mlc-ai/web-llm` 0.2.83, production build on `localhost` | Passed (run by the owner): a model loaded on WebGPU and replied in a Chat-mode chat. |
+| In-browser WebLLM chat | `@mlc-ai/web-llm` 0.2.83, `Qwen2.5-0.5B-Instruct-q4f16_1-MLC` (the first Qwen2.5 0.5B Q4 option), production build on `localhost` | Passed (run by the owner): the model loaded on WebGPU and replied in a Chat-mode chat. |
 
 Browsers used: Chrome 157.0.8103.79 for the automated suite, and Chromium 156 (the
 Claude desktop app's built-in browser) for the live checks.
