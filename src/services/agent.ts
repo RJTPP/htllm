@@ -12,6 +12,8 @@ export interface AgentOptions {
   onSources: (sources: SourceCitation[]) => void;
   maxCalls?: number;
   timeoutMs?: number;
+  /** Cap on any single tool result (Workspace context bands, D-29). Default 8000. */
+  maxResultChars?: number;
 }
 /** One execution pipeline for chat and agents. Wire tool groups stay together. */
 export async function* executeChat(provider: ChatProvider, params: ChatParams, opts?: AgentOptions): AsyncGenerator<ChatChunk> {
@@ -114,7 +116,7 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
               timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60000);
             });
             invoked = true;
-            const maxChars = Math.max(0, Math.min(8000, Math.floor((available - size() - 256) * 4 / ratio)));
+            const maxChars = Math.max(0, Math.min(opts.maxResultChars ?? 8000, Math.floor((available - size() - 256) * 4 / ratio)));
             const output = await Promise.race([tool.execute(args, controller.signal, maxChars), interrupted]);
             signal.throwIfAborted();
             result = output.text.slice(0, maxChars);

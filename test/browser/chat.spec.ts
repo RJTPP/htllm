@@ -39,14 +39,14 @@ test('saved citations render inline, activity follows the model, and code retain
 
 test('composer tools open a separate keyboard-accessible dialog and global settings', async ({ page }) => {
   await seed(page, true);
-  const tools = page.getByRole('button', { name: /^Tools: .*\(3 available\)/ });
+  const tools = page.getByRole('button', { name: /^Tools: .*\(4 available\)/ });
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   expect((await tools.boundingBox())!.y).toBeGreaterThan((await composer.boundingBox())!.y);
   await expect(page.getByLabel('MCP endpoint')).toHaveCount(0);
   await tools.click();
   const panel = page.getByRole('dialog', { name: 'Tools for this chat', exact: true });
   await expect(panel).toBeVisible();
-  await expect(panel.getByText('3 built-in read tools available')).toBeVisible();
+  await expect(panel.getByText('Library mounted read-only at /library/Fixture library')).toBeVisible();
   await page.keyboard.press('Tab');
   await expect(panel.getByRole('button', { name: 'esc', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
@@ -57,7 +57,7 @@ test('composer tools open a separate keyboard-accessible dialog and global setti
   await expect(panel.getByRole('switch', { name: 'Automatic RAG', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Tools: on (3 available)', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tools: on (4 available)', exact: true })).toBeVisible();
   await tools.click(); await page.getByRole('tab', { name: 'External tools', exact: true }).click(); await page.getByRole('button', { name: 'Manage connections' }).click();
   await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByLabel('MCP endpoint')).toBeVisible();
@@ -84,22 +84,23 @@ test('workspace tools work without a switch, capability confirmation or a select
   });
   await page.reload();
   // A legacy agentEnabled:false does not matter in a Workspace chat (D-14).
-  await page.getByRole('button', { name: 'Tools: on (3 available)', exact: true }).click();
+  await page.getByRole('button', { name: 'Tools: on (4 available)', exact: true }).click();
   await expect(page.getByText('This model supports function/tool calling')).toHaveCount(0);
-  await expect(page.getByText('No library selected', { exact: true })).toBeVisible();
+  await expect(page.getByText('No library attached', { exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Tools for this chat' }).getByRole('button', { name: 'esc', exact: true }).click();
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   await composer.fill('List the available documents'); await composer.press('Enter');
   await expect(page.getByText('Tool activity · complete')).toBeVisible();
   await page.getByText('Tool activity · complete').click();
-  await page.getByText('list_documents · complete', { exact: true }).click();
-  await expect(page.getByText('No library selected. No documents or matching evidence are available.', { exact: true })).toBeVisible();
+  await page.getByText('list_files · complete', { exact: true }).click();
+  await expect(page.getByText('The workspace is empty. The user can attach files; you can write notes under /notes.', { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Tools: on (3 available)', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tools: on (4 available)', exact: true })).toBeVisible();
 });
 
-test('document agent follows whole-file cursors without skipping text', async ({ page }) => {
+test('workspace reads follow continue hints through a whole library file without skipping text', async ({ page }) => {
   await seed(page, true);
+  // One 5,000-character line: wrapped into numbered lines so every character stays reachable.
   const original = 'First page\n' + 'x'.repeat(5000) + '\nLast page';
   await page.evaluate(async (text) => {
     const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
@@ -107,20 +108,23 @@ test('document agent follows whole-file cursors without skipping text', async ({
     tx.objectStore('documents').put({ id: 'whole-file', libraryId: 'fixture-library', filename: 'whole.txt', mimeType: 'text/plain', sizeBytes: text.length, chunkCount: 0, createdAt: 1, extractedText: text });
     await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
   }, original);
-  let supplied = '';
+  let supplied = ''; let reads = 0;
   await page.route('https://fixture.test/v1/chat/completions', async (route) => {
     const request = route.request().postDataJSON();
-    const results = request.messages.filter((m: { role: string }) => m.role === 'tool').map((m: { content: string }) => JSON.parse(m.content));
-    supplied = results.map((r: { text: string }) => r.text).join('');
+    const results: string[] = request.messages.filter((m: { role: string }) => m.role === 'tool').map((m: { content: string }) => m.content);
+    supplied = results.map((r) => [...r.matchAll(/^\d+: (.*)$/gm)].map((m) => m[1]).join('')).join('');
+    reads = results.length;
     const last = results.at(-1);
-    const delta = last?.complete ? { content: 'Read the whole file.' } : { tool_calls: [{ index: 0, id: `read-${results.length}`, function: { name: 'read_document', arguments: JSON.stringify({ documentId: 'whole-file', cursor: last?.nextCursor ?? null }) } }] };
-    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta, finish_reason: last?.complete ? 'stop' : 'tool_calls' }] })}\n\ndata: [DONE]\n\n` });
+    const next = last === undefined ? '1' : /Use offset=(\d+) to continue/.exec(last)?.[1];
+    const delta = next ? { tool_calls: [{ index: 0, id: `read-${results.length}`, function: { name: 'read_file', arguments: JSON.stringify({ path: '/library/Fixture library/whole.txt', offset: Number(next) }) } }] } : { content: 'Read the whole file.' };
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta, finish_reason: next ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n` });
   });
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
   await composer.fill('Read the whole file'); await composer.press('Enter');
   await expect(page.getByText('Read the whole file.', { exact: true })).toBeVisible();
-  expect(supplied).toBe(original);
-  await expect(page.getByText('Sources supplied to this answer (2)', { exact: true })).toBeVisible();
+  expect(supplied).toBe(original.replace(/\n/g, ''));
+  expect(reads).toBeGreaterThan(1);
+  await expect(page.getByText(`Sources supplied to this answer (${reads})`, { exact: true })).toBeVisible();
 });
 
 test('library selection reuses the custom picker and RAG has distinct on/off styles', async ({ page }) => {
@@ -251,7 +255,7 @@ async function seed(page: Page, agent = false) {
     if (route.request().url().endsWith('/models')) return route.fulfill({ json: { data: [{ id: 'fixture-model' }] } });
     const request = route.request().postDataJSON();
     const result = agent && request.tools && !request.messages.some((message: {role: string}) => message.role === 'tool')
-      ? { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'list_documents', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] }
+      ? { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-1', type: 'function', function: { name: 'list_files', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] }
       : { choices: [{ delta: { content: 'Fixture answer with <img src=x onerror=alert(1)> safe text.' }, finish_reason: 'stop' }] };
     await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify(result)}\n\ndata: [DONE]\n\n` });
   });
@@ -318,7 +322,7 @@ test('document agent runs a tool, persists its trail, and reloads safely', async
   await composer.fill('List my documents'); await composer.press('Enter');
   await expect(page.getByText('Tool activity · complete')).toBeVisible();
   await page.getByText('Tool activity · complete').click();
-  await expect(page.getByText('list_documents · complete')).toBeVisible();
+  await expect(page.getByText('list_files · complete')).toBeVisible();
   await page.reload(); await expect(page.getByText('Tool activity · complete')).toBeVisible();
 });
 test('regeneration and repeated manual compaction preserve summaries across reload', async ({ page }) => {
@@ -398,7 +402,7 @@ test('MCP discovery and external writes require approval under production CSP', 
     }
     return route.fulfill({ json: { jsonrpc: '2.0', id: request.id, result } });
   });
-  await page.getByRole('button', { name: /^Tools: .*\(3 available\)/ }).click();
+  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
   await page.getByRole('tab', { name: 'External tools', exact: true }).click();
   await page.getByRole('button', { name: 'Manage connections' }).click();
   await page.getByLabel('MCP name').fill('Fixture service');
@@ -406,7 +410,7 @@ test('MCP discovery and external writes require approval under production CSP', 
   await page.getByRole('button', { name: 'Test & add MCP' }).click();
   await expect(page.getByText('connection tested', { exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
-  await page.getByRole('button', { name: /^Tools: .*\(3 available\)/ }).click();
+  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
   await expect(page.getByLabel('write_note')).toBeVisible();
   await page.getByLabel('write_note').click();
   await expect(page.getByLabel('write_note')).toBeChecked();
@@ -436,15 +440,15 @@ test('MCP discovery and external writes require approval under production CSP', 
   await expect(page.getByRole('dialog', { name: 'Approve external tool' })).toHaveCount(0);
   await expect(page.getByText('Tool activity · stopped')).toBeVisible();
   expect(calls).toBe(1);
-  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
+  await page.getByRole('button', { name: /^Tools: .*\(5 available\)/ }).click();
   await page.getByRole('tab', { name: 'External tools', exact: true }).click();
   await expect(page.getByLabel('write_note')).toBeChecked();
   await page.getByRole('button', { name: 'Manage connections' }).click();
   await page.getByRole('button', { name: 'Refresh tools', exact: true }).click();
   await expect(page.getByText('connection tested', { exact: true })).toBeVisible();
   await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'esc', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Tools: on (3 available)', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /^Tools: .*\(3 available\)/ }).click();
+  await expect(page.getByRole('button', { name: 'Tools: on (4 available)', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /^Tools: .*\(4 available\)/ }).click();
   await expect(page.getByLabel('write_note')).not.toBeChecked();
   await page.getByRole('button', { name: 'Manage connections' }).click();
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
@@ -485,7 +489,7 @@ for (const ragOn of [false, true]) test(`Chat with Automatic RAG=${ragOn} persis
   await page.getByRole('button', { name: /^Knowledge:/ }).click();
   const panel = page.getByRole('dialog', { name: 'Knowledge for this chat', exact: true });
   await expect(panel.getByRole('switch', { name: 'Use tools', exact: true })).toHaveCount(0);
-  await expect(panel.getByText('list_documents', { exact: true })).toHaveCount(0);
+  await expect(panel.getByText('list_files', { exact: true })).toHaveCount(0);
   const rag = panel.getByRole('switch', { name: 'Automatic RAG', exact: true });
   await expect(rag).toBeChecked();
   if (!ragOn) await rag.click();
@@ -515,7 +519,7 @@ test('Workspace sends tools and never retrieves automatically, even with a libra
   const seen = await captureRequests(page);
   await page.getByRole('button', { name: /^Tools:/ }).click();
   await expect(page.getByRole('tab', { name: 'Documents', exact: true })).toHaveAttribute('aria-selected', 'true');
-  for (const name of ['list_documents', 'search_knowledge', 'read_document']) await expect(page.getByText(name, { exact: true })).toBeVisible();
+  for (const name of ['list_files', 'read_file', 'search', 'grep']) await expect(page.getByText(name, { exact: true })).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Automatic RAG', exact: true })).toHaveCount(0);
   await page.getByRole('dialog', { name: 'Tools for this chat' }).getByRole('button', { name: 'esc', exact: true }).click();
   const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
