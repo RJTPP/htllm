@@ -34,6 +34,12 @@ inline-handler violation Chrome 157 reports while DOMPurify parses the untrusted
 fixture in its detached document; it still fails on any other violation and
 asserts the fixture's alert never fires.
 
+Chat/Workspace (2026-11-23, `wip/workspace`, PRs #33–#58): 184 unit tests, 30
+production-Chrome scenarios and the deterministic eval pass; typecheck is clean. Phases
+0–3 of [review/2026-11-23.md](review/2026-11-23.md) are built; live checks were run
+against LM Studio with `gemma-4-26b-a4b-it` only, and the remaining live checks are
+listed in that document's §9.
+
 Compaction follow-up: retain the original behavior and add only oversized-input
 splitting plus final aggregation. Deterministic tests cover the unchanged small
 input path, no output-token cap, intermediate failure, aggregation persistence,
