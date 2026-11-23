@@ -82,9 +82,10 @@ The repo goes public at release, and everything is ready and verified before the
    compatibility record is rewritten with the R4.3 smoke-test versions.
 
 **R4 · Release**
-1. Version 1.0.0 in `package.json`, `CHANGELOG.md`, `LICENSE` (MIT, added by the owner),
-   and release notes with known limitations (`docs/releases/v1.0.0.md`, which the release
-   workflow uses as the release text).
+1. (Done; set the changelog date when tagging.) Version 1.0.0 in `package.json`,
+   `CHANGELOG.md`, `LICENSE` (MIT, added by the owner), and release notes with known
+   limitations (`docs/releases/v1.0.0.md`, which the release workflow uses as the
+   release text).
 2. Pages readiness (done; the workflow runs for the first time at the first tag):
    - every app path base-aware, with the browser suite passing under `/` and `/htllm/`;
    - the site served from the custom domain `htllm.rjtpp.com` with base `/`;
@@ -94,7 +95,8 @@ The repo goes public at release, and everything is ready and verified before the
    - add a Cloudflare DNS record `CNAME htllm → rjtpp.github.io`, set to DNS only;
    - in the repo's Pages settings, choose GitHub Actions as the source, set the custom
      domain and enforce HTTPS.
-3. Live smoke test against the gates below, including connecting to LM Studio from the
+3. (Done on `localhost`, except the owner's WebLLM chat and the check from the hosted
+   origin; see `docs/compatibility.md`.) Live smoke test against the gates below, including connecting to LM Studio from the
    Pages origin (Chrome local-network access, CORS). Claude runs the LM Studio Chat and Workspace
    checks; the user runs one real MCP tool and one WebLLM chat. Versions are recorded in
    `docs/compatibility.md`.
