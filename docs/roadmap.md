@@ -1,9 +1,9 @@
 # htllm v1 — Chat, simple RAG, optional agents
 
-> **Status (2026-11-23):** this is the v1 plan and gate list. The "Agent toggle" became
-> the Chat/Workspace modes; the current plan and progress are in
-> [review/2026-11-23.md](review/2026-11-23.md). The release gates below still apply, with
-> "Agent" read as "Workspace".
+> **Status (2026-11-23):** the v1 scope is built, and the "Agent toggle" became the
+> Chat/Workspace modes (plan and progress: [review/2026-11-23.md](review/2026-11-23.md)).
+> The release gates were revised the same day; the original gates are kept below for
+> the record.
 
 The delivery scope is a static browser application with IndexedDB persistence,
 one optional document library per conversation, and an Agent toggle that defaults
@@ -29,7 +29,45 @@ and unverified gates are tracked in [v1-progress.md](v1-progress.md).
    three reference-model runs, live provider/MCP checks, browser compatibility,
    onboarding, design-document reconciliation, and versioned release packaging.
 
-## Release gates
+## Release gates (revised 2026-11-23)
+
+Revised with the user after Chat/Workspace replaced the RAG-versus-agent comparison:
+recall and accuracy percentages measured the old approach and no longer gate a release.
+
+**Must pass to ship**
+
+1. Deterministic tests, typecheck, static build and the production-CSP browser suite
+   pass.
+2. Safety holds and stays tested:
+   - every external (MCP) call needs approval, and unknown outcomes are not retried;
+   - every displayed excerpt was actually supplied;
+   - Workspace file rules (read-only uploads and libraries, `/notes` only, no `..`) are
+     enforced in code;
+   - runaway grep patterns are stopped;
+   - backups made by the app import cleanly.
+3. A short live smoke test on the setups actually used, recorded with exact versions:
+   - LM Studio, Chat with Automatic RAG over a library, giving a cited answer;
+   - LM Studio, Workspace: attach, read, write, present, open the card;
+   - one real MCP tool, called with approval;
+   - one in-browser WebLLM chat (load a model, get a reply).
+4. Docs match the app (SDD reconciled), and the release is packaged: version,
+   changelog, and release notes listing known limitations.
+
+**Tracked after release, not blocking**
+
+- Answer quality: the fixed evaluation, moved to the Workspace tools, run on two or three
+  models as a measurement to watch. The October numbers (evidence 45/45, absent 15/15,
+  research 12/15) used the v1 tools.
+- Qualifying Ollama, cloud endpoints and vLLM with exact versions. Release notes list
+  them as expected to work, not verified.
+- Firefox and Safari. The first release targets Chrome and Edge, and says so.
+
+**Dropped**
+
+- "Agent improves research quality over ordinary RAG": Chat and Workspace are separate
+  modes, not competing strategies.
+
+## Original v1 release gates (superseded)
 
 - Fresh-user model → text PDF → cited answer → Agent → HTTP MCP workflow succeeds.
 - Deterministic safety, isolation, validation, cancellation, rendering, migration,
