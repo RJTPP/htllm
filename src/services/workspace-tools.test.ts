@@ -104,11 +104,22 @@ describe('workspace write tools', () => {
     expect((await run('present_file', { path: '/uploads/report.txt' })).presented?.version).toBe(1);
     await expect(run('present_file', { path: '/library/Team-Docs/plan.txt' })).rejects.toThrow('cannot be presented');
   });
-  it('keeps all eight tool definitions within a small-context budget', () => {
+  it('keeps the default tool definitions within a small-context budget', () => {
     const defs = all().map(({ name, description, parameters }) => ({ name, description, parameters }));
-    expect(defs.map((d) => d.name)).toEqual(['list_files', 'read_file', 'search', 'grep', 'write_file', 'edit_file', 'copy_file', 'present_file']);
-    // ≈1.6k tokens at 4 characters per token: a fifth of an 8k window.
-    expect(JSON.stringify(defs).length).toBeLessThan(6500);
+    expect(defs.map((d) => d.name)).toEqual(['list_files', 'read_file', 'search', 'grep', 'write_file', 'edit_file', 'copy_file', 'present_file', 'calculate']);
+    // ≈1.7k tokens at 4 characters per token: about a fifth of an 8k window.
+    expect(JSON.stringify(defs).length).toBeLessThan(7000);
+    expect(workspaceTools(ctx, { csv: true }).at(-1)?.name).toBe('query_csv');
+  });
+  it('calculates exactly and queries CSV uploads', async () => {
+    expect((await run('calculate', { expression: '600 / 4' })).text).toBe('600 / 4 = 150');
+    await expect(run('calculate', { expression: 'alert(1)' })).rejects.toThrow('Unknown name');
+    await addUpload({ threadId: 't', path: '/uploads/gear.csv', text: 'item,price\nTent,200\nStove,45', mimeType: 'text/csv' });
+    const q = workspaceTools(ctx, { csv: true }).find((t) => t.name === 'query_csv')!;
+    const out = await q.execute({ path: '/uploads/gear.csv', aggregate: { fn: 'sum', column: 'price' } }, signal);
+    expect(out.text).toContain('/uploads/gear.csv: 2 of 2 rows matched.');
+    expect(out.text).toContain('| 245 |');
+    await expect(q.execute({ path: '/uploads/report.txt' }, signal)).rejects.toThrow('not a CSV');
   });
 });
 
