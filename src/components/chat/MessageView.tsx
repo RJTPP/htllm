@@ -86,6 +86,7 @@ export const MessageView = memo(function MessageView({
   generating,
   onRegenerate,
   onEditAndResend,
+  onContinue,
   locked = false,
 }: {
   message: Message;
@@ -96,6 +97,8 @@ export const MessageView = memo(function MessageView({
   generating: boolean;
   onRegenerate: () => void;
   onEditAndResend: (messageId: string, newText: string) => void;
+  /** D-24: send a follow-up when this reply stopped at the tool-call cap. */
+  onContinue?: () => void;
   /** True for messages folded into the active summary — they're no
    *  longer sent verbatim, so editing them is meaningless. Hides the
    *  edit affordance. */
@@ -261,6 +264,12 @@ export const MessageView = memo(function MessageView({
             )}
             <MessageBody content={thinking?.reply ?? text} citations={message.citations} />
             {!!message.presentedFiles?.length && <PresentedFiles files={message.presentedFiles} />}
+            {message.toolBudgetReached && isLast && !streaming && !generating && onContinue && (
+              <div className="mt-2 flex items-center gap-2 font-mono text-[11px] text-mute">
+                <span>Stopped at this chat's tool-call limit.</span>
+                <button onClick={onContinue} className="px-2 py-0.5 border border-accent/60 text-accent hover:bg-accent/10">continue →</button>
+              </div>
+            )}
             {streaming && (
               <span className="inline-block w-1.5 h-3.5 bg-accent ml-0.5 align-middle blink" />
             )}

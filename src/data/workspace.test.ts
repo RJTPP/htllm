@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from './db';
 import { createThread, deleteThreadCascade } from './threads';
-import { addUpload, countWorkspaceFiles, getWorkspaceFile, getWorkspaceVersion, listWorkspaceFiles, listWorkspaceVersions, writeNote } from './workspace';
+import { addUpload, countWorkspaceFiles, getWorkspaceFile, getWorkspaceVersion, listWorkspaceFiles, listWorkspaceVersions, versionsByMessages, writeNote } from './workspace';
 
 beforeEach(async () => { const db = await getDb(); for (const name of db.objectStoreNames) await db.clear(name); });
 const thread = () => createThread({ title: 't', providerId: 'p', modelId: 'm', createdAt: 1, updatedAt: 1, mode: 'workspace' });
@@ -34,5 +34,18 @@ describe('workspace data', () => {
     const db = await getDb();
     expect((await db.getAll('workspaceVersions')).every((v) => v.threadId === b.id)).toBe(true);
     expect((await listWorkspaceFiles(b.id))[0]?.text).toBe('b');
+  });
+});
+
+describe('versionsByMessages', () => {
+  it('reports the latest version each removed reply made, per file', async () => {
+    const t = await thread();
+    await writeNote({ threadId: t.id, path: '/notes/a.md', text: '1', change: 'write', messageId: 'r1' });
+    await writeNote({ threadId: t.id, path: '/notes/a.md', text: '2', change: 'edit', messageId: 'r2' });
+    await writeNote({ threadId: t.id, path: '/notes/a.md', text: '3', change: 'edit', messageId: 'r2' });
+    await writeNote({ threadId: t.id, path: '/notes/b.md', text: 'b', change: 'write', messageId: 'r1' });
+    expect(await versionsByMessages(t.id, ['r2'])).toEqual([{ path: '/notes/a.md', version: 3 }]);
+    expect(await versionsByMessages(t.id, ['r1'])).toEqual([{ path: '/notes/a.md', version: 1 }, { path: '/notes/b.md', version: 1 }]);
+    expect(await versionsByMessages(t.id, [])).toEqual([]);
   });
 });

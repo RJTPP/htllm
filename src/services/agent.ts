@@ -12,6 +12,8 @@ export interface AgentOptions {
   onSources: (sources: SourceCitation[]) => void;
   /** A file the model handed to the user (present_file). */
   onPresent?: (file: import('../providers/types').PresentedFile) => void;
+  /** Called once when the call cap is reached and a final answer is requested. */
+  onBudgetReached?: () => void;
   maxCalls?: number;
   timeoutMs?: number;
   /** Cap on any single tool result (Workspace context bands, D-29). Default 8000. */
@@ -141,6 +143,9 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
       signal.throwIfAborted();
       messages.push({ ...wire('tool', result), toolCallId: call.id });
     }
-    if (callsUsed >= limit) messages.push(wire('user', 'Tool budget reached. Give a final answer using existing evidence and explain any unfinished work.'));
+    if (callsUsed >= limit) {
+      opts.onBudgetReached?.();
+      messages.push(wire('user', 'Tool budget reached. Give a final answer using existing evidence and explain any unfinished work.'));
+    }
   }
 }

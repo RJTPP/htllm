@@ -8,6 +8,7 @@ import type {
 } from '../providers/types';
 import type { ChatImage } from '../lib/image';
 import { addMessage, getMessages, updateMessage, deleteMessage, deleteMessagesAfter } from '../data/messages';
+import { versionsByMessages } from '../data/workspace';
 import { stripThinking } from '../lib/thinking';
 import { retrieve } from '../services/retrieval';
 import { stripEchoedToolData, stubOldActivity, withActivityContext } from '../lib/message-context';
@@ -118,6 +119,9 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [generating, setGenerating] = useState(false);
+  /** D-19: note changes made by replies that regenerate/edit removed. They stay; the user is told. */
+  const [fileChangeNotice, setFileChangeNotice] = useState<{ path: string; version: number }[] | null>(null);
+  useEffect(() => { setFileChangeNotice(null); }, [threadId]);
   const [budget, setBudget] = useState<ConversationBudget | null>(null);
   // D10b — current active summary for the loaded thread, kept in state so
   // the inline divider in MessageView can render the "── summarized N
@@ -269,6 +273,7 @@ export function useChat(
       let citations: import('../providers/types').SourceCitation[] = [];
       let activity: import('../providers/types').AgentEvent[] = [];
       let presentedFiles: import('../providers/types').PresentedFile[] = [];
+      let toolBudgetReached = false;
       let retrievalStatus: Message['retrievalStatus'];
       let closeTools: (() => Promise<void>) | undefined;
       const agent = !!rag?.agentEnabled;
@@ -593,7 +598,7 @@ export function useChat(
               reasoning: fullReasoning || undefined,
               usage: finalUsage,
               citations, activity, retrievalStatus, runStatus: 'running',
-              presentedFiles: presentedFiles.length ? presentedFiles : undefined,
+              presentedFiles: presentedFiles.length ? presentedFiles : undefined, toolBudgetReached: toolBudgetReached || undefined,
             };
             return copy;
           });
@@ -630,6 +635,10 @@ export function useChat(
             for (const source of sources) byId.set(source.id, source);
             citations = [...byId.values()];
           },
+          onBudgetReached: () => {
+            toolBudgetReached = true;
+            void updateMessage(assistantMsg.id, { toolBudgetReached });
+          },
           onPresent: (file) => {
             // One card per file: a later present of the same file shows its newer version.
             presentedFiles = [...presentedFiles.filter((p) => p.fileId !== file.fileId), file];
@@ -656,7 +665,7 @@ export function useChat(
           reasoning: fullReasoning || undefined,
           usage: finalUsage,
           citations, activity, retrievalStatus, runStatus: 'complete',
-          presentedFiles: presentedFiles.length ? presentedFiles : undefined,
+          presentedFiles: presentedFiles.length ? presentedFiles : undefined, toolBudgetReached: toolBudgetReached || undefined,
         });
 
         // Refine this model's token calibration from the GENERATED
@@ -685,14 +694,14 @@ export function useChat(
             reasoning: fullReasoning || undefined,
             usage: finalUsage,
             citations, activity, retrievalStatus, runStatus: 'stopped',
-            presentedFiles: presentedFiles.length ? presentedFiles : undefined,
+            presentedFiles: presentedFiles.length ? presentedFiles : undefined, toolBudgetReached: toolBudgetReached || undefined,
           });
         } else {
           const errorContent = `[error] ${err instanceof Error ? err.message : String(err)}`;
           setMessages((prev) => {
-            return prev.map((message) => message.id === assistantMsg.id ? { ...message, content: errorContent, citations, activity, retrievalStatus, runStatus: 'error', presentedFiles: presentedFiles.length ? presentedFiles : undefined } : message);
+            return prev.map((message) => message.id === assistantMsg.id ? { ...message, content: errorContent, citations, activity, retrievalStatus, runStatus: 'error', presentedFiles: presentedFiles.length ? presentedFiles : undefined, toolBudgetReached: toolBudgetReached || undefined } : message);
           });
-          await updateMessage(assistantMsg.id, { content: errorContent, citations, activity, retrievalStatus, runStatus: 'error', presentedFiles: presentedFiles.length ? presentedFiles : undefined });
+          await updateMessage(assistantMsg.id, { content: errorContent, citations, activity, retrievalStatus, runStatus: 'error', presentedFiles: presentedFiles.length ? presentedFiles : undefined, toolBudgetReached: toolBudgetReached || undefined });
         }
       } finally {
         await closeTools?.();
@@ -713,6 +722,7 @@ export function useChat(
   const send = useCallback(
     async (text: string, images?: ChatImage[]) => {
       if (!threadId || generating) return;
+      setFileChangeNotice(null);
 
       const currentMessages = messagesRef.current;
       const isFirstMessage = currentMessages.length === 0;
@@ -754,6 +764,8 @@ export function useChat(
     const last = currentMessages[currentMessages.length - 1];
     if (!last || last.role !== 'assistant') return;
 
+    const changedFiles = await versionsByMessages(threadId, [last.id]);
+    setFileChangeNotice(changedFiles.length ? changedFiles : null);
     await deleteMessage(last.id);
     const trimmed = currentMessages.slice(0, -1);
     setMessages(trimmed);
@@ -791,7 +803,10 @@ export function useChat(
       // Update the user message in DB.
       await updateMessage(messageId, { content: newContent });
 
-      // Delete everything after this message.
+      // Delete everything after this message. Note changes those replies made stay (D-19).
+      const later = currentMessages.slice(idx + 1).map((m) => m.id);
+      const changedFiles = await versionsByMessages(threadId, later);
+      setFileChangeNotice(changedFiles.length ? changedFiles : null);
       const deletedIds = await deleteMessagesAfter(threadId, messageId);
 
       // Update local state: keep messages up to and including the edited one.
@@ -920,5 +935,7 @@ export function useChat(
     editAndResend,
     stop,
     compactNow,
+    fileChangeNotice,
+    dismissFileChangeNotice: () => setFileChangeNotice(null),
   };
 }
