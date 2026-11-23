@@ -35,3 +35,19 @@ it('fails closed on malformed streamed JSON instead of skipping a call fragment'
   vi.stubGlobal('fetch', async () => stream('data: {broken}\n\n'));
   await expect(async () => { for await (const _ of provider('fixture').chat(params)) { /* drain */ } }).rejects.toThrow('Malformed');
 });
+it('replays reasoning in the field it arrived in and skips empty reasoning fields', async () => {
+  const fetch = vi.fn(async () => stream(
+    event({ choices: [{ delta: { reasoning_content: '', reasoning: 'ollama thought' } }] }) +
+    event({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] }),
+  ));
+  vi.stubGlobal('fetch', fetch);
+  const output: ChatChunk[] = [];
+  for await (const chunk of provider('ollama').chat({ ...params, messages: [...params.messages,
+    { id: 'a', threadId: 't', createdAt: 1, role: 'assistant', content: '', reasoning: 'prior', reasoningField: 'reasoning', toolCalls: [{ id: 'p', name: 'lookup', arguments: '{}' }] },
+    { id: 'r', threadId: 't', createdAt: 1, role: 'tool', content: 'result', toolCallId: 'p' },
+  ] })) output.push(chunk);
+  const request = JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+  expect(request.messages[1]).toMatchObject({ reasoning: 'prior' });
+  expect(request.messages[1]).not.toHaveProperty('reasoning_content');
+  expect(output[0]).toMatchObject({ reasoning: 'ollama thought', reasoningField: 'reasoning' });
+});
