@@ -1,6 +1,6 @@
 import type { SourceCitation, WorkspaceFile } from '../providers/types';
 import type { ExecutableTool } from './tools';
-import { listWorkspaceFiles } from '../data/workspace';
+import { listWorkspaceFiles, writeNote } from '../data/workspace';
 import { listDocumentsByLibrary } from '../data/documents';
 import { getChunksForDocument } from '../data/chunks';
 import { getLibrary } from '../data/libraries';
@@ -70,6 +70,10 @@ export const WORKSPACE_TOOL_SUMMARY: readonly (readonly [string, string])[] = [
   ['read_file', 'Read a file by line range'],
   ['search', 'Find passages by meaning and keywords'],
   ['grep', 'Find exact text'],
+  ['write_file', 'Create or replace a note'],
+  ['edit_file', 'Change exact text in a note'],
+  ['copy_file', 'Copy a file or lines into a note'],
+  ['present_file', 'Hand a finished file to you'],
 ];
 
 /** D-18: uploads and library documents are evidence; the model's notes are not. */
@@ -202,4 +206,141 @@ export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
       },
     },
   ];
+}
+
+/** Largest note a single write may produce (matches the agent's argument cap). */
+const MAX_NOTE_CHARS = 64000;
+
+/** Resolve a destination for writing: only under /notes (D-17). */
+function notePath(input: unknown): string {
+  const path = normalizeWorkspacePath(String(input));
+  if (!path.startsWith('/notes/')) throw new Error(`You can only write under /notes. ${path} is read-only (uploads and library files belong to the user).`);
+  return path;
+}
+
+/**
+ * A write over an existing note needs this turn to have read its current
+ * version, so the model never overwrites text it has not seen, including a
+ * change the user made while the chat ran.
+ */
+function requireCurrentRead(ctx: WorkspaceContext, file: Mounted | undefined, path: string) {
+  if (!file) return undefined;
+  const read = ctx.readVersions.get(path);
+  if (read === undefined) throw new Error(`${path} already exists. Read it with read_file before changing it.`);
+  if (read !== file.version) throw new Error(`${path} changed since you read it (you read v${read}, it is now v${file.version}). Read it again before changing it.`);
+  return file.version;
+}
+
+/** Find `old` in `text`: exactly, or, if absent, line by line ignoring indentation and trailing spaces. */
+export function locateEdit(text: string, old: string): { start: number; end: number; count: number; fuzzy: boolean } {
+  let count = 0; let first = -1;
+  for (let i = text.indexOf(old); i !== -1; i = text.indexOf(old, i + Math.max(1, old.length))) { if (first < 0) first = i; count++; }
+  if (count) return { start: first, end: first + old.length, count, fuzzy: false };
+  const wanted = old.split('\n').map((l) => l.trim());
+  while (wanted.length && wanted.at(-1) === '') wanted.pop();
+  if (!wanted.length) return { start: -1, end: -1, count: 0, fuzzy: true };
+  const lines = text.split('\n');
+  const offsets: number[] = []; let at = 0;
+  for (const line of lines) { offsets.push(at); at += line.length + 1; }
+  const found: { start: number; end: number }[] = [];
+  for (let i = 0; i + wanted.length <= lines.length; i++) {
+    if (wanted.every((w, j) => lines[i + j]!.trim() === w)) {
+      const last = i + wanted.length - 1;
+      found.push({ start: offsets[i]!, end: offsets[last]! + lines[last]!.length });
+    }
+  }
+  const match = found[0];
+  // Refuse a "match" much larger than what was asked for.
+  if (match && match.end - match.start > old.length * 1.5 + 40) return { start: -1, end: -1, count: 0, fuzzy: true };
+  return match ? { ...match, count: found.length, fuzzy: true } : { start: -1, end: -1, count: 0, fuzzy: true };
+}
+
+/** The write side of the Workspace tool set (write, edit, copy, present). */
+export function workspaceWriteTools(ctx: WorkspaceContext): ExecutableTool[] {
+  const load = () => mountWorkspace(ctx);
+  const save = async (path: string, text: string, change: 'write' | 'edit' | 'copy', expectedVersion: number | undefined, copiedFrom?: WorkspaceFile['copiedFrom']) => {
+    if (text.length > MAX_NOTE_CHARS) throw new Error(`Notes are limited to ${MAX_NOTE_CHARS} characters; split the content into several files.`);
+    const saved = await writeNote({ threadId: ctx.threadId, path, text, change, messageId: ctx.messageId, expectedVersion, copiedFrom });
+    ctx.readVersions.set(path, saved.version);
+    return saved;
+  };
+  return [
+    {
+      name: 'write_file',
+      description: 'Create or replace a note under /notes. To change an existing note, read it first (or use edit_file).',
+      parameters: object({ path: { type: 'string', description: 'e.g. /notes/summary.md' }, content: { type: 'string' } }, ['path', 'content']),
+      execute: async (args) => {
+        const path = notePath(args.path);
+        const existing = (await load()).find((f) => f.path === path);
+        const saved = await save(path, String(args.content), 'write', requireCurrentRead(ctx, existing, path));
+        return { text: `${existing ? 'Updated' : 'Created'} ${path} (v${saved.version}, ${saved.text.length} characters).` };
+      },
+    },
+    {
+      name: 'edit_file',
+      description: 'Replace exact text in a note you have read. old_string must match once unless replace_all is true.',
+      parameters: object({ path: { type: 'string' }, old_string: { type: 'string', minLength: 1 }, new_string: { type: 'string' }, replace_all: { type: 'boolean' } }, ['path', 'old_string', 'new_string']),
+      execute: async (args) => {
+        const path = notePath(args.path);
+        const file = (await load()).find((f) => f.path === path);
+        if (!file) throw new Error(`No note at ${path}. Use write_file to create it.`);
+        const version = requireCurrentRead(ctx, file, path);
+        const old = String(args.old_string); const replacement = String(args.new_string);
+        let text: string;
+        if (args.replace_all === true && file.text.includes(old)) {
+          text = file.text.split(old).join(replacement);
+        } else {
+          const found = locateEdit(file.text, old);
+          if (!found.count) throw new Error(`old_string was not found in ${path}. Read the file again and copy the exact text to replace.`);
+          if (found.count > 1) throw new Error(`old_string appears ${found.count} times in ${path}. Include more surrounding text to make it unique, or set replace_all to true.`);
+          text = file.text.slice(0, found.start) + replacement + file.text.slice(found.end);
+        }
+        const saved = await save(path, text, 'edit', version);
+        return { text: `Edited ${path} (v${saved.version}).` };
+      },
+    },
+    {
+      name: 'copy_file',
+      description: 'Copy a whole file, or a line range of it, into a note under /notes. Copies exact text without retyping it.',
+      parameters: object({
+        source: { type: 'string' },
+        destination: { type: 'string', description: 'A path under /notes.' },
+        start_line: { type: 'integer', minimum: 1 },
+        end_line: { type: 'integer', minimum: 1 },
+      }, ['source', 'destination']),
+      execute: async (args) => {
+        const files = await load();
+        const source = findMounted(files, String(args.source));
+        const path = notePath(args.destination);
+        const spans = lineSpans(source.text);
+        if (!spans.length) throw new Error(`${source.path} is empty.`);
+        const first = typeof args.start_line === 'number' ? args.start_line : 1;
+        const last = Math.min(typeof args.end_line === 'number' ? args.end_line : spans.length, spans.length);
+        if (first > last) throw new Error(`start_line ${first} is after end_line ${last} (${source.path} has ${spans.length} lines).`);
+        const text = source.text.slice(spans[first - 1]!.start, spans[last - 1]!.end);
+        const existing = files.find((f) => f.path === path);
+        const saved = await save(path, text, 'copy', requireCurrentRead(ctx, existing, path), {
+          path: source.path, startLine: first, endLine: last,
+          pageStart: pageAt(source.pages, spans[first - 1]!.start), pageEnd: pageAt(source.pages, spans[last - 1]!.start),
+        });
+        return { text: `Copied ${source.path} lines ${first}-${last} to ${path} (v${saved.version}). The copy is your note: edit it freely, but cite the original, not the copy.` };
+      },
+    },
+    {
+      name: 'present_file',
+      description: 'Hand a finished file to the user. It appears as a card they can open and download. Use for deliverables, not scratch work.',
+      parameters: object({ path: { type: 'string' }, caption: { type: 'string', maxLength: 200 } }, ['path']),
+      execute: async (args) => {
+        const file = findMounted(await load(), String(args.path));
+        if (file.kind === 'library') throw new Error('Library documents cannot be presented. Copy the part you need into /notes and present that.');
+        const caption = typeof args.caption === 'string' && args.caption.trim() ? args.caption.trim() : undefined;
+        return { text: `Presented ${file.path} (v${file.version}) to the user.`, presented: { fileId: file.id, path: file.path, version: file.version, caption } };
+      },
+    },
+  ];
+}
+
+/** All eight built-in Workspace tools. */
+export function workspaceTools(ctx: WorkspaceContext): ExecutableTool[] {
+  return [...workspaceReadTools(ctx), ...workspaceWriteTools(ctx)];
 }

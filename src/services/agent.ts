@@ -10,6 +10,8 @@ export interface AgentOptions {
   approve: (tool: ExecutableTool, event: AgentEvent, signal: AbortSignal) => Promise<boolean>;
   onActivity: (events: AgentEvent[]) => void | Promise<void>;
   onSources: (sources: SourceCitation[]) => void;
+  /** A file the model handed to the user (present_file). */
+  onPresent?: (file: import('../providers/types').PresentedFile) => void;
   maxCalls?: number;
   timeoutMs?: number;
   /** Cap on any single tool result (Workspace context bands, D-29). Default 8000. */
@@ -125,6 +127,7 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
               // Only keep excerpts actually included in the supplied result.
               opts.onSources(output.citations.filter((source) => result.includes(source.excerpt)));
             } else opts.onSources(output.citations ?? []);
+            if (output.presented) opts.onPresent?.(output.presented);
             event.status = 'complete';
           } finally { clearTimeout(timer); signal.removeEventListener('abort', abort); }
         }
