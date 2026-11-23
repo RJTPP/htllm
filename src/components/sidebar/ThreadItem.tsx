@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import type { Thread, Folder } from '../../providers/types';
-import { Pencil, Trash2, FolderInput } from 'lucide-react';
+import { Pencil, Trash2, FolderInput, FolderOpen } from 'lucide-react';
 import { shortenModelId, fmtRelativeTime } from '../../lib/format';
 
 export const ThreadItem = memo(function ThreadItem({
@@ -82,6 +82,11 @@ export const ThreadItem = memo(function ThreadItem({
             </div>
           )}
           <div className="font-mono text-[10px] text-mute mt-0.5 truncate">
+            {thread.mode === 'workspace' && (
+              <span title="Workspace chat" aria-label="Workspace chat" className="inline-flex items-center gap-0.5 text-accent mr-1 align-[-1px]">
+                <FolderOpen size={10} />
+              </span>
+            )}
             {thread.modelId ? shortenModelId(thread.modelId) : 'no model'} ·{' '}
             {fmtRelativeTime(thread.updatedAt)}
           </div>
