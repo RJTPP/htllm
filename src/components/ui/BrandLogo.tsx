@@ -1,3 +1,4 @@
+import { Box } from 'lucide-react';
 import metaColor from '@lobehub/icons-static-svg/icons/meta-color.svg?raw';
 import qwenColor from '@lobehub/icons-static-svg/icons/qwen-color.svg?raw';
 import gemmaColor from '@lobehub/icons-static-svg/icons/gemma-color.svg?raw';
@@ -32,15 +33,8 @@ const BRAND_SVG: Record<string, string> = {
 export function BrandLogo({ brand, size = 18 }: { brand: string | null; size?: number }) {
   const svg = brand ? BRAND_SVG[brand] : undefined;
 
-  // Unknown brand — a neutral placeholder square.
-  if (!svg) {
-    return (
-      <span
-        className="inline-block rounded-sm bg-line shrink-0"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
+  // Unknown brand: a neutral model glyph (never the app's own mark).
+  if (!svg) return <Box size={size} strokeWidth={1.75} className="shrink-0 text-mute" aria-hidden="true" />;
 
   return (
     <span

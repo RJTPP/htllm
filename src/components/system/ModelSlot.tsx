@@ -1,5 +1,5 @@
 import type { EngineStatus, LoadProgress, ModelInfo } from '../../providers/types';
-import { Bot } from 'lucide-react';
+import { Box } from 'lucide-react';
 import { BrandLogo } from '../ui/BrandLogo';
 import { shortenModelId } from '../../lib/format';
 import { brandForModelId } from '../../lib/model-meta';
@@ -31,7 +31,7 @@ export function ModelSlot({
       }`}
     >
       <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-        {brand ? <BrandLogo brand={brand} size={18} /> : <Bot size={14} />}
+        {brand ? <BrandLogo brand={brand} size={18} /> : <Box size={14} strokeWidth={1.75} />}
       </span>
       <div className="flex flex-col items-start min-w-0 leading-tight">
         <span className="font-mono text-[9px] uppercase tracking-widest text-mute">chat</span>

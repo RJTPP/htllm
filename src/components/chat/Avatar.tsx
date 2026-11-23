@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { ModelInfo } from '../../providers/types';
-import { User, Bot } from 'lucide-react';
+import { User } from 'lucide-react';
+import { AppMark } from '../ui/AppMark';
 import { BrandLogo } from '../ui/BrandLogo';
 import { brandForModelId } from '../../lib/model-meta';
 
@@ -23,7 +24,7 @@ export const Avatar = memo(function Avatar({
   const brand = modelId ? brandForModelId(modelId, models) : null;
   return (
     <div className="w-7 h-7 shrink-0 rounded-md border border-line bg-surface flex items-center justify-center">
-      {brand ? <BrandLogo brand={brand} size={17} /> : <Bot size={15} className="text-mute" />}
+      {brand ? <BrandLogo brand={brand} size={17} /> : <AppMark size={17} />}
     </div>
   );
 });

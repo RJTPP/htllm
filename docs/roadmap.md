@@ -65,7 +65,8 @@ The repo goes public at release, and everything is ready and verified before the
    approval), then build it.
 5. Self-host the fonts (done; Geist, JetBrains Mono) instead of loading them from Google Fonts:
    no third-party request on load, and the offline zip works.
-6. Icons: list every placeholder (favicon, wordmark, unknown-brand square, assistant
+6. Icons (done: the `ht<llm>` wordmark stays primary; a winking chat-bubble mark serves as
+   favicon, PNGs and assistant avatar; a link-preview image). Original plan: list every placeholder (favicon, wordmark, unknown-brand square, assistant
    avatar), show two or three concepts, apply the one chosen.
 
 **R3 · Docs and quality**

@@ -4,6 +4,8 @@ import tailwind from '@astrojs/tailwind';
 import staticCspHashes from './scripts/csp.mjs';
 
 export default defineConfig({
+  // Pages origin, for absolute link-preview URLs (the /htllm/ base is added in R4).
+  site: 'https://rjtpp.github.io',
   output: 'static',
   integrations: [
     react(),
