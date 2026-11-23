@@ -1,45 +1,54 @@
 # Compatibility
 
-Checked 2026-10-03. These are local implementation results, not a published release.
-Implementation checkpoint: `0cf20dc`, based on `dev` merge `24c1177` (PR #28).
-PR #29 was merged into dev at `88ed94d`. No v1 release has been tagged.
+What 1.0.0 was checked against, with exact versions. "Checked" means it was run and
+seen working on that setup. Anything not in the tables is expected to work but not
+verified.
 
-| Component | Version / configuration | Evidence and boundary |
+Checked on 2026-11-23, on macOS 27.0.1, against the production build (strict CSP)
+served on `localhost`.
+
+## Live checks (real servers)
+
+| Check | Setup | Result |
 | --- | --- | --- |
-| Node / pnpm | 26.8.2 / 11.2.2 | Unit tests, evaluation harness, typecheck, static build |
-| Chrome | 154.0.8037.97, headless macOS | Production CSP, HTTP without WebGPU, PDF pages, saved citations, built-in agent, MCP approval/denial/reload fixtures |
-| Playwright | 1.63.0 | Browser fixture runner; no real model/server qualification implied |
-| MCP client | `@modelcontextprotocol/client` 2.2.0 | Browser bundle and legacy Streamable HTTP fixture (2025-11-25); automatic SDK negotiation enabled |
-| PDF.js | 6.3.289 | Generated one-page text PDF fixture under production CSP |
-| DOMPurify | 3.4.16 | Unsafe HTML/URLs and remote Markdown images removed |
-| Reference HTTP model | `qwen3.6-35b-a3b@iq4_xs` through `localhost:1234/v1`, user-managed LM Studio proxy | Live Chrome RAG answer and sequential `list_documents` / `read_document` passed with saved evidence and reload; full rubric pending. User reports 13,312 chat context; browser smoke used 8,192. No token required. |
-| Reference embeddings | `text-embedding-embeddinggemma-300m-qat` on the same endpoint | Live retrieval of the user's indexed one-chunk test file passed. User reports 2,048 embedding context; long-input boundary not qualified. |
-| Docker MCP Gateway | CLI 0.43.3 | Help confirms streaming transport; no gateway started or servers enabled; browser interoperability pending |
-| Ollama / LM Studio | LM Studio proxy smoke-tested; exact runtime version not supplied | Ollama remains pending; do not infer the upstream runtime from the local proxy name |
-| Edge / Firefox / Safari | Not qualified | Cross-browser release gates pending |
-| WebLLM | 0.2.83 | Existing adapter, separate live qualification pending; no agent support |
+| Chat with Automatic RAG, cited answer | LM Studio 0.4.28+2, chat model `gemma-4-26b-a4b-it` (loaded with 16,384 context; the chat used 8,192), embedding model `text-embedding-embeddinggemma-300m-qat`, a Markdown file in the Default library | Passed. The model list and embeddings were reached over CORS. The answer cited two supplied sections (date and budget) and said the third fact wasn't in its context. Retrieval had returned only two of the three relevant sections. |
+| Workspace: attach, read, write, present, open the card | The same LM Studio model; a Markdown upload | Passed. The small upload was included whole; the model ran `write_file` and `present_file`; the card opened v1 in the side panel. The note's facts matched the upload, and the reply's citation resolved to it. |
+| Workspace eval baseline (25 tasks × 3 runs) | The same LM Studio model, keyword search only | Recorded in [eval/README.md](../eval/README.md#results): facts 25 of 25; citations were weak for research answers. |
+| One real MCP tool with approval | `@modelcontextprotocol/server-everything` 2.2.1 over Streamable HTTP on `localhost:3001` | Reported working by the owner (approval prompt and result not separately recorded). |
+| In-browser WebLLM chat | `@mlc-ai/web-llm` 0.2.83 | Pending: run by the owner before release. |
 
-## Reproduce deterministic checks
+Browsers used: Chrome 157.0.8103.79 for the automated suite, and Chromium 156 (the
+Claude desktop app's built-in browser) for the live checks.
+
+## Automated checks
+
+| Component | Version | What it covers |
+| --- | --- | --- |
+| Node / pnpm | 26.13.1 / 11.2.2 | Typecheck, 214 unit tests, the deterministic eval, static build |
+| Playwright + Chrome | 1.63.0 + Chrome 157.0.8103.79 | 41 scenarios against the production build, under base `/` and `/htllm/`. Model and MCP servers are mocked, so these check app behavior and the CSP, not real-server CORS. |
+| MCP client | `@modelcontextprotocol/client` 2.2.0 | Discovery, approval, denial and reload against a Streamable HTTP fixture |
+| PDF.js | 6.3.289 | Text extraction with page offsets; image-only PDFs rejected |
+| DOMPurify | 3.4.16 | Unsafe HTML and URLs removed from model output |
+| QuickJS | `quickjs-emscripten-core` 0.32.0 | `run_js` in its worker under the production CSP |
+
+Reproduce:
 
 ```sh
-pnpm test
-pnpm typecheck
-pnpm eval
-pnpm build
-pnpm test:browser
+pnpm typecheck && pnpm test && pnpm eval
+pnpm build && pnpm test:browser
+pnpm build:subpath && pnpm test:browser:subpath
 ```
 
-The browser runner currently uses installed Chrome and starts a local preview
-on `127.0.0.1:4322`. Fixture requests are intercepted; this checks application
-behavior and production CSP, not real-server CORS or endpoint availability.
-The static build retains large-bundle warnings (especially WebLLM); they are not
-runtime qualification results.
+## Not verified
 
-Record exact model/runtime versions and three-run answer/citation rubric scores
-before promoting v1. An SDK supporting a protocol version is not evidence that
-every server/model combination has passed interoperability tests.
-
-The first reference-model evaluation (2026-10-03, `qwen3.6-35b-a3b` on an LM Studio
-proxy, v1 document tools) completed 90 answer runs: document evidence 45/45, absence
-handling 15/15, research review RAG 9/15 versus Agent 12/15. It predates the Workspace
-tools; the 1.0.0 smoke test results will be recorded here.
+- **Model servers:** Ollama, vLLM, llama.cpp's server, and cloud gateways such as
+  OpenRouter. They use the same OpenAI-compatible path and are expected to work;
+  reasoning replay under the `reasoning` field (Ollama) was only tested with mocks.
+- **Browsers:** Firefox and Safari. Edge isn't separately checked either; it shares
+  Chrome's engine.
+- **Hosting:** the hosted copy at `https://htllm.rjtpp.com` (live from the first
+  release), including reaching a `localhost` server from that HTTPS origin, is checked
+  after the first deploy.
+- **The Docker MCP gateway** (0.44.3): it can't be used from a browser directly, because
+  it rejects the CORS preflight.
+- **Other model families** in Workspace (Qwen, Llama, gpt-oss): only Gemma 4 was used live.
