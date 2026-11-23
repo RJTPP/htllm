@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Upload, X } from 'lucide-react';
+import { useLibraries, refreshLibrariesShared } from '../../hooks/useLibraries';
+import { LibraryPickerModal } from '../knowledge/LibraryPickerModal';
+import { addToLibrary } from '../../services/library-add';
+import { ArrowLeft, BookPlus, ChevronLeft, ChevronRight, Download, FileText, FolderOpen, Upload, X } from 'lucide-react';
 import type { WorkspaceFile, WorkspaceVersion } from '../../providers/types';
 import { getWorkspaceFileById, listWorkspaceFiles, listWorkspaceVersions } from '../../data/workspace';
 import { downloadText } from '../../lib/export';
@@ -25,7 +28,7 @@ export async function downloadVersion(fileId: string, version: number): Promise<
  * The Workspace side panel (D-26): the chat's Files list, and a viewer that
  * opens a file at a given version with version navigation and download (D-28).
  */
-export function WorkspacePanel({ threadId, libraryName, refreshKey, view, onView, onClose }: {
+export function WorkspacePanel({ threadId, libraryName, refreshKey, view, onView, onClose, onNewLibrary }: {
   threadId: string;
   libraryName?: string;
   /** Changes when the chat changes, so the panel reloads after a turn. */
@@ -33,12 +36,13 @@ export function WorkspacePanel({ threadId, libraryName, refreshKey, view, onView
   view: PanelView;
   onView: (view: PanelView) => void;
   onClose: () => void;
+  onNewLibrary: () => void;
 }) {
   return (
     <aside aria-label="Workspace files" className="absolute inset-y-0 right-0 z-30 w-full sm:w-[420px] shadow-2xl xl:static xl:z-auto xl:w-[440px] xl:shrink-0 xl:shadow-none flex flex-col min-h-0 border-l border-line bg-bg">
       {view.tab === 'files'
         ? <FilesList threadId={threadId} libraryName={libraryName} refreshKey={refreshKey} onOpen={(fileId) => onView({ tab: 'file', fileId })} onClose={onClose} />
-        : <FileView fileId={view.fileId} version={view.version} refreshKey={refreshKey} onVersion={(version) => onView({ ...view, version })} onBack={() => onView({ tab: 'files' })} onClose={onClose} />}
+        : <FileView fileId={view.fileId} version={view.version} refreshKey={refreshKey} onVersion={(version) => onView({ ...view, version })} onBack={() => onView({ tab: 'files' })} onClose={onClose} onNewLibrary={onNewLibrary} />}
     </aside>
   );
 }
@@ -91,8 +95,24 @@ function FilesList({ threadId, libraryName, refreshKey, onOpen, onClose }: { thr
   </>;
 }
 
-function FileView({ fileId, version, refreshKey, onVersion, onBack, onClose }: { fileId: string; version?: number; refreshKey: string; onVersion: (version: number) => void; onBack: () => void; onClose: () => void }) {
+function FileView({ fileId, version, refreshKey, onVersion, onBack, onClose, onNewLibrary }: { fileId: string; version?: number; refreshKey: string; onVersion: (version: number) => void; onBack: () => void; onClose: () => void; onNewLibrary: () => void }) {
   const [file, setFile] = useState<WorkspaceFile | null | undefined>(undefined);
+  // "Add to library": copy this file into a Knowledge library (global, searchable by meaning).
+  const { libraries } = useLibraries();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [libraryStatus, setLibraryStatus] = useState<{ tone: 'mute' | 'ok' | 'err'; text: string } | null>(null);
+  useEffect(() => { setLibraryStatus(null); }, [fileId]);
+  const sendToLibrary = async (libraryId: string | null) => {
+    if (!libraryId) return;
+    const name = libraries.find(({ lib }) => lib.id === libraryId)?.lib.name ?? 'the library';
+    try {
+      const result = await addToLibrary(fileId, libraryId, { onStatus: (s) => setLibraryStatus({ tone: 'mute', text: s === 'adding' ? `Adding to ${name}…` : `Indexing in ${name}…` }) });
+      setLibraryStatus({ tone: 'ok', text: result.indexed ? `Added to ${name} and indexed.` : `Added to ${name}. Index it from the Knowledge page (the library has no embedding model yet).` });
+      await refreshLibrariesShared();
+    } catch (error) {
+      setLibraryStatus({ tone: 'err', text: error instanceof Error ? error.message : 'Could not add the file to the library.' });
+    }
+  };
   const [versions, setVersions] = useState<WorkspaceVersion[]>([]);
   useEffect(() => {
     let live = true;
@@ -124,8 +144,11 @@ function FileView({ fileId, version, refreshKey, onVersion, onBack, onClose }: {
         </div>
       ) : <span>upload · read-only</span>}
       <span className="flex-1 min-w-0 truncate">{record ? `${CHANGE_LABEL[record.change]} · ${fmtRelativeTime(record.createdAt)}` : ''}</span>
+      <button onClick={() => setPickerOpen(true)} aria-label={`Add ${name} to a Knowledge library`} title="Copy this file into a Knowledge library, searchable by meaning in any chat" className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-line hover:text-text hover:border-line-hi"><BookPlus size={11} /> library</button>
       <button onClick={() => void downloadVersion(file.id, current)} aria-label={`Download ${name} v${current}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-line hover:text-text hover:border-line-hi"><Download size={11} /> download</button>
     </div>
+    {libraryStatus && <p role="status" className={`px-3 py-1.5 border-b border-line font-mono text-[10px] shrink-0 ${libraryStatus.tone === 'ok' ? 'text-ok' : libraryStatus.tone === 'err' ? 'text-err' : 'text-mute'}`}>{libraryStatus.text}</p>}
+    <LibraryPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} libraries={libraries} activeLibraryId={null} title="Add to a Knowledge library" onSelect={(id) => { setPickerOpen(false); void sendToLibrary(id); }} onNewLibrary={() => { setPickerOpen(false); onNewLibrary(); }} />
     {copiedFrom && <p className="px-3 py-1.5 border-b border-line font-mono text-[10px] text-mute shrink-0">
       copied from {copiedFrom.path}, lines {copiedFrom.startLine}–{copiedFrom.endLine}{copiedFrom.pageStart ? ` (p. ${copiedFrom.pageStart}${copiedFrom.pageEnd && copiedFrom.pageEnd !== copiedFrom.pageStart ? `–${copiedFrom.pageEnd}` : ''})` : ''}
     </p>}

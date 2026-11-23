@@ -88,7 +88,24 @@ export async function ingestFile(
   } else {
     throw new UnsupportedFileTypeError(file.type, file.name);
   }
+  return ingestText({
+    filename: file.name,
+    mimeType: file.type || (isPdfFile(file) ? 'application/pdf' : isMarkdown ? 'text/markdown' : 'text/plain'),
+    sizeBytes: file.size, text, pages, isMarkdown,
+  }, libraryId, opts);
+}
 
+/**
+ * Ingest text that was already extracted (e.g. a Workspace upload, whose PDF
+ * text and page offsets are stored), so page provenance is kept without the
+ * original file.
+ */
+export async function ingestText(
+  input: { filename: string; mimeType: string; sizeBytes: number; text: string; pages: ExtractedPdf['pages']; isMarkdown: boolean },
+  libraryId: string,
+  opts: HierarchicalChunkOpts & { signal?: AbortSignal } = {},
+): Promise<IngestResult> {
+  const { text, pages, isMarkdown } = input;
   // D8: hierarchical chunking. Children get embedded + searched; parents
   // get returned to the LLM. Persist parents first so we have stable ids
   // to stamp onto the children's parentId field.
@@ -102,9 +119,9 @@ export async function ingestFile(
   const document: Document = {
     id: uuid(), createdAt: Date.now(),
     libraryId,
-    filename: file.name,
-    mimeType: file.type || (isPdfFile(file) ? 'application/pdf' : isMarkdown ? 'text/markdown' : 'text/plain'),
-    sizeBytes: file.size,
+    filename: input.filename,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
     chunkCount: hierarchy.children.length,
     extractedText: text,
     pages,

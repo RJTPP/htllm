@@ -89,7 +89,9 @@ the model's notes cannot.
 
 When the model hands you a file with `present_file`, it appears in the reply as a
 card. Click the card to open it in the side panel, at the version it had then; step
-through versions and download any of them. The **files** button (top right) lists the
+through versions and download any of them. The **library** button in the viewer copies a file into a Knowledge
+library, keeping PDF page numbers, so it can be searched by meaning in any chat. It is indexed right
+away when the library has an embedding model. The **files** button (top right) lists the
 chat's uploads and notes. Markdown is rendered, CSV shows as a table, JSON and code are
 highlighted, and HTML and SVG are shown as code, never run.
 
