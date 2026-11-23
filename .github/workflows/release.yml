@@ -1,8 +1,9 @@
 name: Release
 
-# On a version tag (v*): test, deploy the site to GitHub Pages (base /htllm/), and
-# attach an offline zip (base /) to a draft release. Run by hand, it tests and deploys
-# without touching releases. Actions are pinned to commit SHAs.
+# On a version tag (v*): test, deploy the site to GitHub Pages at htllm.rjtpp.com (the
+# custom domain is set in the repo's Pages settings), and attach the same build as an
+# offline zip to a draft release. Run by hand, it tests and deploys without touching
+# releases. Actions are pinned to commit SHAs.
 on:
   push:
     tags: ['v*']
@@ -35,15 +36,15 @@ jobs:
       - name: Make sure Chrome is available for the browser suite
         run: command -v google-chrome || pnpm exec playwright install --with-deps chrome
 
-      # Offline build, base /: for any static server.
+      # Check that the app still works when hosted under a path (not deployed).
+      - run: pnpm build:subpath
+      - run: pnpm test:browser:subpath
+
+      # The release build, base /: deployed to Pages and zipped for offline use.
       - run: pnpm build
       - run: pnpm test:browser
       - name: Zip the offline build
         run: cd dist && zip -qr "../htllm-${GITHUB_REF_NAME}.zip" .
-
-      # Pages build, base /htllm/.
-      - run: pnpm build:pages
-      - run: pnpm test:browser:pages
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist

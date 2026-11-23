@@ -8,7 +8,7 @@ interface Props {
 }
 
 const { title } = Astro.props;
-// Base-aware asset paths: the Pages build serves the site under /htllm/.
+// Base-aware asset paths, so the site also works when hosted under a path.
 const base = BASE_PATH;
 const description = 'Private AI chat in your browser. Run a model in the browser or on your own server; your chats and files stay on this device.';
 const ogImage = Astro.site ? new URL(`${base}og-image.png`, Astro.site).href : `${base}og-image.png`;

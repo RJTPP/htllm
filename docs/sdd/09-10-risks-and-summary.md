@@ -12,7 +12,8 @@
 | RK-8 | **Upstream API drift** (web-llm worker protocol, MCP SDK, server metadata fields). | Medium | Medium | Exact version pins; detection treats unknown metadata as "unknown", not "no"; a browser suite on every change. | Maintainer |
 | RK-9 | **Large `App.tsx` and `useChat`** slow changes and invite regressions. | Medium | Medium | New logic goes into services and small hooks; browser scenarios cover the main flows. A refactor only with a concrete need. | Maintainer |
 | RK-10 | **Unverified backends and browsers** (Ollama, vLLM, cloud, Firefox, Safari) behave differently. | Medium | Medium | The release notes state they are expected to work but not verified; tracked after release. | Owner |
-| RK-11 | **Base path mistakes** on Pages break workers, wasm or links under `/htllm/`. | Low | High at release | The full browser suite runs under `/htllm/` locally and in the release workflow, and checks that requests stay under the base. The WebLLM worker is only checked for its URL, because the suite has no WebGPU. | Maintainer |
+| RK-11 | **Base path mistakes** break workers, wasm or links when the site is hosted under a path. | Low | Medium | The full browser suite runs under `/htllm/` locally and in the release workflow, and checks that requests stay under the base. The WebLLM worker is only checked for its URL, because the suite has no WebGPU. | Maintainer |
+| RK-12 | **Shared origin.** If the app is served on an origin that also runs other code, that code can read its IndexedDB, including keys, chats and files. | Low with AD-31 | High | A dedicated subdomain for the hosted copy; the README advises self-hosters to do the same. The DNS record stays unproxied, and the domain is verified on GitHub against takeover. | Owner |
 
 ## 10. Summary
 

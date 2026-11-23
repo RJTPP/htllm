@@ -35,7 +35,8 @@ Built on the integration branch `wip/release`. Each step is a PR into it, and on
 goes to `dev`. License: MIT.
 
 Release form:
-- GitHub Pages at `https://rjtpp.github.io/htllm/`;
+- GitHub Pages at `https://htllm.rjtpp.com/`, its own origin (decided 2026-11-23: on
+  `rjtpp.com/htllm/` it would share browser storage with the owner's other Pages sites);
 - a tagged GitHub release (`v1.0.0`) with the built site attached as a zip, for offline
   use with any static server.
 
@@ -85,12 +86,14 @@ The repo goes public at release, and everything is ready and verified before the
    and release notes with known limitations (`docs/releases/v1.0.0.md`, which the release
    workflow uses as the release text).
 2. Pages readiness (done; the workflow runs for the first time at the first tag):
-   - Astro `base: '/htllm/'` with every app path made base-aware;
-   - the build and browser suite run under `/htllm/`;
-   - a GitHub Actions workflow that deploys to Pages and attaches the `dist` zip to the
-     release on a `v*` tag. The zip is a second build with base `/`, because a `/htllm/`
-     build only works under that path.
-   The first live deploy happens when the repo goes public.
+   - every app path base-aware, with the browser suite passing under `/` and `/htllm/`;
+   - the site served from the custom domain `htllm.rjtpp.com` with base `/`;
+   - a GitHub Actions workflow that deploys to Pages and attaches the same build as a
+     zip to a draft release on a `v*` tag.
+   The first live deploy happens when the repo goes public. Owner steps:
+   - add a Cloudflare DNS record `CNAME htllm → rjtpp.github.io`, set to DNS only;
+   - in the repo's Pages settings, choose GitHub Actions as the source, set the custom
+     domain and enforce HTTPS.
 3. Live smoke test against the gates below, including connecting to LM Studio from the
    Pages origin (Chrome local-network access, CORS). Claude runs the LM Studio Chat and Workspace
    checks; the user runs one real MCP tool and one WebLLM chat. Versions are recorded in
