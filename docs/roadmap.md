@@ -32,7 +32,14 @@ and unverified gates are tracked in [v1-progress.md](v1-progress.md).
 ## Plan to 1.0.0 (agreed 2026-11-23)
 
 Built on the integration branch `wip/release`. Each step is a PR into it, and one final PR
-goes to `dev`. Release form: a tagged GitHub release (`v1.0.0`) with no hosting. License: MIT.
+goes to `dev`. License: MIT.
+
+Release form:
+- GitHub Pages at `https://rjtpp.github.io/htllm/`;
+- a tagged GitHub release (`v1.0.0`) with the built site attached as a zip, for offline
+  use with any static server.
+
+The repo goes public at release, and everything is ready and verified before then.
 
 **R1 · Clean the repo** (git history keeps everything removed)
 1. Remove stale and prototype material:
@@ -56,7 +63,9 @@ goes to `dev`. Release form: a tagged GitHub release (`v1.0.0`) with no hosting.
    come first.
 4. QuickJS `run_js`: design it with the user (sandbox limits, file access, dependency
    approval), then build it.
-5. Icons: list every placeholder (favicon, wordmark, unknown-brand square, assistant
+5. Self-host the fonts (Geist, JetBrains Mono) instead of loading them from Google Fonts:
+   no third-party request on load, and the offline zip works.
+6. Icons: list every placeholder (favicon, wordmark, unknown-brand square, assistant
    avatar), show two or three concepts, apply the one chosen.
 
 **R3 · Docs and quality**
@@ -69,10 +78,17 @@ goes to `dev`. Release form: a tagged GitHub release (`v1.0.0`) with no hosting.
 **R4 · Release**
 1. Version 1.0.0 in `package.json`, `CHANGELOG.md`, `LICENSE` (MIT), and release notes
    with known limitations.
-2. Live smoke test against the gates below. Claude runs the LM Studio Chat and Workspace
+2. Pages readiness:
+   - Astro `base: '/htllm/'` with every app path made base-aware;
+   - the build and browser suite run under `/htllm/`;
+   - a GitHub Actions workflow that deploys to Pages and attaches the `dist` zip to the
+     release on a `v*` tag.
+   The first live deploy happens when the repo goes public.
+3. Live smoke test against the gates below, including connecting to LM Studio from the
+   Pages origin (Chrome local-network access, CORS). Claude runs the LM Studio Chat and Workspace
    checks; the user runs one real MCP tool and one WebLLM chat. Versions are recorded in
    `docs/compatibility.md`.
-3. Final PR `wip/release` → `dev` (the user reviews and rebase-merges), then `dev` →
+4. Final PR `wip/release` → `dev` (the user reviews and rebase-merges), then `dev` →
    `main`, the `v1.0.0` tag, and a GitHub release.
 
 ## Release gates (revised 2026-11-23)
