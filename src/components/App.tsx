@@ -638,9 +638,9 @@ export default function App() {
   }, [modelReady, isApiThread, wantedModelId, engineStatus, models, regenerate, handleLoad]);
 
   const handleSend = useCallback(
-    (text: string, images?: import('../lib/image').ChatImage[]) => {
+    (text: string, images?: import('../lib/image').ChatImage[], attachments?: import('../providers/types').MessageAttachment[]) => {
       if (modelReady) {
-        send(text, images);
+        send(text, images, attachments);
         return;
       }
       // Deferred auto-load of an already-cached WebLLM model (no surprise
