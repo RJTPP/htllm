@@ -128,6 +128,16 @@ export interface ImagePart {
 
 export type ContentPart = TextPart | ImagePart;
 
+/** A workspace upload sent with a user message (shown on it; announced to the model). */
+export interface MessageAttachment {
+  fileId: string;
+  path: string;
+  /** Characters of stored text, for size display. */
+  chars: number;
+  /** Page count for PDFs. */
+  pages?: number;
+}
+
 /** D-25…D-28: a file the model handed to the user in this message, at a fixed version. */
 export interface PresentedFile {
   fileId: string;
@@ -139,6 +149,8 @@ export interface PresentedFile {
 export interface Message {
   /** Files presented with present_file during this turn (D-25). */
   presentedFiles?: PresentedFile[];
+  /** User messages: uploads attached with this message. */
+  attachments?: MessageAttachment[];
   /** The tool-call cap was reached in this turn; the UI offers "continue" (D-24). */
   toolBudgetReached?: boolean;
   citations?: SourceCitation[];

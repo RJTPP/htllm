@@ -1,6 +1,6 @@
 import type { SourceCitation, WorkspaceFile } from '../providers/types';
 import type { ExecutableTool } from './tools';
-import { listWorkspaceFiles, writeNote } from '../data/workspace';
+import { getWorkspaceFileById, listWorkspaceFiles, writeNote } from '../data/workspace';
 import { listDocumentsByLibrary } from '../data/documents';
 import { getChunksForDocument } from '../data/chunks';
 import { getLibrary } from '../data/libraries';
@@ -431,4 +431,35 @@ export async function workspaceSummary(ctx: Pick<WorkspaceContext, 'threadId' | 
 /** Whether the workspace holds a CSV/TSV, so query_csv is worth offering. */
 export async function hasCsv(threadId: string, libraryIds: string[]): Promise<boolean> {
   return (await mountWorkspace({ threadId, libraryIds })).some((f) => /\.(csv|tsv)$/i.test(f.path));
+}
+
+/** The line that tells the model which files came with a user message. */
+export function attachmentLine(attachments: import('../providers/types').MessageAttachment[]): string {
+  const items = attachments.map((a) => `${a.path} (${a.pages ? `${a.pages} page${a.pages === 1 ? '' : 's'}` : fmtSize(a.chars)})`);
+  return `[Attached with this message: ${items.join(', ')}]`;
+}
+
+/**
+ * Content of the files attached to the current message, for files small enough
+ * to include whole (a quarter of the read budget), formatted like read_file with
+ * a citable Source ID. Larger files get a pointer to read_file instead.
+ */
+export async function attachedContents(attachments: import('../providers/types').MessageAttachment[], band: Band): Promise<{ text: string; citations: SourceCitation[] }> {
+  const parts: string[] = []; const citations: SourceCitation[] = [];
+  for (const attachment of attachments) {
+    const file = await getWorkspaceFileById(attachment.fileId);
+    if (!file) continue;
+    const mountedFile: Mounted = { path: file.path, kind: file.kind, id: file.id, text: file.text, pages: file.pages, version: file.version, file };
+    if (file.text.length <= band.chars / 4) {
+      const window = readWindow(file.path, file.text, file.pages, 1, band.lines, band.chars);
+      if (window.endLine === window.totalLines && window.totalLines > 0) {
+        const citation = lineCitation(mountedFile, window.startLine, window.endLine, window.excerpt);
+        citations.push(citation);
+        parts.push(`Source ID: ${citation.id}\n${window.output}`);
+        continue;
+      }
+    }
+    parts.push(`(${file.path} is too long to include here; read it with read_file.)`);
+  }
+  return { text: parts.join('\n\n'), citations };
 }

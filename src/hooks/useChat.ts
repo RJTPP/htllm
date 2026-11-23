@@ -13,7 +13,7 @@ import { stripThinking } from '../lib/thinking';
 import { retrieve } from '../services/retrieval';
 import { stripEchoedToolData, stubOldActivity, withActivityContext } from '../lib/message-context';
 import { executeChat } from '../services/agent';
-import { hasCsv, workspaceSummary, workspaceTools } from '../services/workspace-tools';
+import { attachedContents, attachmentLine, hasCsv, workspaceSummary, workspaceTools } from '../services/workspace-tools';
 import { contextBand } from '../lib/workspace-text';
 import { externalTools } from '../services/mcp';
 import { approveTool } from '../services/approvals';
@@ -312,6 +312,11 @@ export function useChat(
         // - Structured `reasoning` field (API providers)
         // Only the two most recent assistant turns keep full tool results.
         const cleaned = stubOldActivity(trimmed).map((m) => {
+          if (m.role === 'user' && m.attachments?.length) {
+            // Tell the model which files came with each message.
+            const line = `\n\n${attachmentLine(m.attachments)}`;
+            return { ...m, content: typeof m.content === 'string' ? m.content + line : [...m.content, { type: 'text' as const, text: line }] };
+          }
           if (m.role !== 'assistant') return m;
           let result = m;
           // Remove structured reasoning field.
@@ -622,6 +627,20 @@ export function useChat(
           closeTools = external.close;
           tools = [...workspaceTools({ threadId, libraryIds, band, messageId: assistantMsg.id, readVersions: new Map() }, { csv: band.chars > 3000 && await hasCsv(threadId, libraryIds) }), ...external.tools];
           sendMessages.unshift({ id: '__agent', threadId, role: 'system', createdAt: Date.now(), content: `${WORKSPACE_PROMPT}\n\n${await workspaceSummary({ threadId, libraryIds })}` });
+          // Small files attached to this message go in whole, as citable reads.
+          const lastUserIndex = sendMessages.map((m) => m.role).lastIndexOf('user');
+          const current = lastUserIndex >= 0 ? history.find((m) => m.id === sendMessages[lastUserIndex]!.id) : undefined;
+          if (current?.attachments?.length) {
+            const inline = await attachedContents(current.attachments, band);
+            if (inline.text) {
+              const target = sendMessages[lastUserIndex]!;
+              const extra = `\n\n${inline.text}`;
+              sendMessages[lastUserIndex] = { ...target, content: typeof target.content === 'string' ? target.content + extra : [...target.content, { type: 'text' as const, text: extra }] };
+              const byId = new Map(citations.map((source) => [source.id, source]));
+              for (const source of inline.citations) byId.set(source.id, source);
+              citations = [...byId.values()];
+            }
+          }
         }
         await updateMessage(assistantMsg.id, { runStatus: 'running', citations, retrievalStatus });
         for await (const chunk of executeChat(provider, {
@@ -730,7 +749,7 @@ export function useChat(
   );
 
   const send = useCallback(
-    async (text: string, images?: ChatImage[]) => {
+    async (text: string, images?: ChatImage[], attachments?: import('../providers/types').MessageAttachment[]) => {
       if (!threadId || generating) return;
       setFileChangeNotice(null);
       setBlockedNotice(null);
@@ -757,6 +776,7 @@ export function useChat(
         role: 'user',
         content: userContent,
         createdAt: Date.now(),
+        ...(attachments?.length ? { attachments } : {}),
       });
       setMessages((prev) => [...prev, userMsg]);
 

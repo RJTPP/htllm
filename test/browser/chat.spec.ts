@@ -601,10 +601,11 @@ test('an answer that echoes the internal history format is shown and saved witho
 });
 test('workspace uploads go to /uploads, lock the mode, and are listed for the model', async ({ page }) => {
   await seed(page);
-  let system = '';
+  let system = ''; let lastUser = '';
   await page.route('https://fixture.test/v1/chat/completions', async (route) => {
     const request = route.request().postDataJSON();
     system = JSON.stringify(request.messages.filter((m: { role: string }) => m.role === 'system'));
+    lastUser = String([...request.messages].reverse().find((m: { role: string }) => m.role === 'user')?.content);
     await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta: { content: 'Seen.' }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` });
   });
   await expect(page.getByLabel('Attach files to this workspace')).toHaveCount(0);
@@ -613,7 +614,7 @@ test('workspace uploads go to /uploads, lock the mode, and are listed for the mo
     { name: 'brief.md', mimeType: 'text/markdown', buffer: Buffer.from('# Brief\nShip on Friday.') },
     { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from([137, 80, 78, 71]) },
   ]);
-  await expect(page.getByText('Added /uploads/brief.md')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Don\'t attach brief.md to this message' })).toBeVisible();
   await expect(page.getByText(/photo\.png is not supported/)).toBeVisible();
   // Files lock the mode even before the first message.
   await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toHaveCount(0);
@@ -621,6 +622,10 @@ test('workspace uploads go to /uploads, lock the mode, and are listed for the mo
   await composer.fill('What is in the brief?'); await composer.press('Enter');
   await expect(page.getByText('Seen.', { exact: true })).toBeVisible();
   expect(system).toContain('/uploads/brief.md (upload, read-only');
+  expect(lastUser).toContain('[Attached with this message: /uploads/brief.md');
+  expect(lastUser).toMatch(/Source ID: [0-9a-f-]{36}:L1-2\n<\/uploads\/brief\.md>\n1: # Brief\n2: Ship on Friday\./);
+  await expect(page.getByRole('button', { name: /Don't attach/ })).toHaveCount(0);
+  await expect(page.getByTitle('Open /uploads/brief.md')).toBeVisible();
   await page.getByRole('button', { name: 'Workspace files' }).click();
   await page.getByRole('complementary', { name: 'Workspace files' }).getByRole('button', { name: /brief\.md/ }).click();
   await expect(page.getByRole('complementary', { name: 'Workspace files' }).getByText('Ship on Friday.')).toBeVisible();
@@ -671,7 +676,7 @@ test('regenerate warns that file changes from the removed reply remain, and dele
 test('end to end: the model reads an upload, writes a note, presents it, and the card opens that version', async ({ page }) => {
   await seed(page, true);
   await page.getByLabel('Workspace file upload').setInputFiles([{ name: 'facts.txt', mimeType: 'text/plain', buffer: Buffer.from('Launch: May 4\nOwner: Dana') }]);
-  await expect(page.getByText('Added /uploads/facts.txt')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Don\'t attach facts.txt to this message' })).toBeVisible();
   const script = [
     { name: 'read_file', arguments: { path: '/uploads/facts.txt' } },
     { name: 'write_file', arguments: { path: '/notes/summary.md', content: '# Summary\n\nLaunch on May 4, owned by Dana.' } },
@@ -795,7 +800,7 @@ test('new chat starts a fresh draft when the current empty chat already has file
   await seed(page);
   await page.getByRole('radiogroup', { name: 'Chat mode' }).getByRole('radio', { name: /^Workspace/ }).click();
   await page.getByLabel('Workspace file upload').setInputFiles([{ name: 'brief.md', mimeType: 'text/markdown', buffer: Buffer.from('# Brief') }]);
-  await expect(page.getByText('Added /uploads/brief.md')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Don\'t attach brief.md to this message' })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toHaveCount(0);
   const threadCount = () => page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });

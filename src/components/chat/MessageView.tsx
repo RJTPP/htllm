@@ -8,6 +8,7 @@ import { MessageBody } from './MessageBody';
 import { ThinkingBlock } from './ThinkingBlock';
 import { MessageEvidence } from './MessageEvidence';
 import { PresentedFiles } from '../workspace/PresentedFiles';
+import { AttachmentChips } from '../workspace/AttachmentChips';
 
 function splitContent(content: string | ContentPart[]): { text: string; images: string[] } {
   if (typeof content === 'string') return { text: content, images: [] };
@@ -238,6 +239,7 @@ export const MessageView = memo(function MessageView({
                   </div>
                 )}
                 {text && <MessageBody content={text} />}
+                {!!message.attachments?.length && <div className="mt-2"><AttachmentChips attachments={message.attachments} /></div>}
               </div>
               <div className="mt-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <CopyButton text={text} />
