@@ -12,6 +12,10 @@ describe('renderKind', () => {
     expect(renderKind('/notes/icon.svg')).toEqual({ kind: 'code', language: 'xml' });
     expect(renderKind('/uploads/report.pdf').kind).toBe('text');
     expect(renderKind('/notes/README').kind).toBe('text');
+    // A known extension wins over a Markdown default MIME type.
+    expect(renderKind('/notes/data.csv', 'text/markdown').kind).toBe('csv');
+    expect(renderKind('/notes/app.py', 'text/markdown').kind).toBe('code');
+    expect(renderKind('/notes/README', 'text/markdown').kind).toBe('markdown');
   });
   it('downloads extracted PDFs honestly as text', () => {
     expect(downloadName('/uploads/report.pdf')).toBe('report.pdf.txt');

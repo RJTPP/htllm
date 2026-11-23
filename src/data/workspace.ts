@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid';
 import type { WorkspaceFile, WorkspaceVersion } from '../providers/types';
 import { getDb } from './db';
 import { getDocument } from './documents';
+import { downloadType } from '../lib/file-kind';
 
 /** All files in a chat's workspace, sorted by path. */
 export async function listWorkspaceFiles(threadId: string): Promise<WorkspaceFile[]> {
@@ -66,13 +67,14 @@ export async function writeNote(input: NoteWrite): Promise<WorkspaceFile> {
   }
   const now = Date.now();
   const file: WorkspaceFile = existing
-    ? { ...existing, text: input.text, version: existing.version + 1, updatedAt: now, ...(input.copiedFrom ? { copiedFrom: input.copiedFrom } : {}) }
-    : { id: uuid(), threadId: input.threadId, path: input.path, kind: 'note', text: input.text, mimeType: input.mimeType ?? 'text/markdown',
+    ? { ...existing, text: input.text, version: existing.version + 1, updatedAt: now, copiedFrom: input.copiedFrom }
+    : { id: uuid(), threadId: input.threadId, path: input.path, kind: 'note', text: input.text, mimeType: input.mimeType ?? downloadType(input.path, 'text/markdown'),
         version: 1, copiedFrom: input.copiedFrom, createdAt: now, updatedAt: now };
   await files.put(file);
   await tx.objectStore('workspaceVersions').put({
     fileId: file.id, threadId: file.threadId, version: file.version, text: file.text,
     messageId: input.messageId, change: existing ? input.change : (input.change === 'copy' ? 'copy' : 'create'), createdAt: now,
+    ...(input.copiedFrom ? { copiedFrom: input.copiedFrom } : {}),
   });
   await tx.done;
   return file;

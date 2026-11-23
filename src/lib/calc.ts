@@ -14,7 +14,9 @@ const CONSTANTS: Record<string, number> = { pi: Math.PI, e: Math.E };
 
 export function calculate(expression: string): number {
   if (expression.length > 500) throw new Error('Expression is too long (500 characters at most).');
-  const src = expression.replace(/,(?=\d{3}\b)/g, ''); // allow 1,234 thousands separators
+  // Commas only separate function arguments: "1,234" is not read as a thousands
+  // separator, because min(2,300) must stay two arguments.
+  const src = expression;
   let i = 0;
   const peek = () => { while (src[i] === ' ') i++; return src[i]; };
   const fail = (msg: string): never => { throw new Error(`${msg} at position ${i + 1} in "${expression}".`); };

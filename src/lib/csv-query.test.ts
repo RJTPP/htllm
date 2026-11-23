@@ -20,5 +20,20 @@ describe('queryCsv', () => {
     expect(() => queryCsv(csv, { columns: ['cost'] })).toThrow('Columns: item, category, price, qty');
     expect(queryCsv(csv, { limit: 1 }).table).toContain('(3 more rows');
     expect(queryCsv('a\tb\n1\t2', { columns: ['b'] }, '\t').table).toContain('| 2 |');
+    // Commas inside TSV fields stay in their column.
+    expect(queryCsv('name\tamount\nACME, Inc.\t42', { columns: ['amount'] }, '\t').table).toContain('| 42 |');
+  });
+});
+
+describe('queryCsv on large files', () => {
+  it('aggregates 90,000 rows quickly and refuses files over the row limit instead of undercounting', async () => {
+    const { MAX_CSV_ROWS } = await import('./csv-query');
+    const rows = Array.from({ length: 90_000 }, (_, i) => `${i},1`).join('\n');
+    const started = performance.now();
+    expect(queryCsv(`id,n\n${rows}`, { aggregate: { fn: 'sum', column: 'n' } }).table).toContain('| 90000 |');
+    expect(performance.now() - started).toBeLessThan(2000);
+    const exact = Array.from({ length: MAX_CSV_ROWS }, () => '1').join('\n');
+    expect(queryCsv(`n\n${exact}`, { aggregate: { fn: 'count' } }).table).toContain(`| ${MAX_CSV_ROWS} |`);
+    expect(() => queryCsv(`n\n${exact}\n1`, { aggregate: { fn: 'count' } })).toThrow('more than');
   });
 });

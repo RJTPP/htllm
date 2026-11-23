@@ -163,6 +163,7 @@ export function validateImport(json: string): ExportData {
         if (!Number.isSafeInteger(row.version) || row.version < 1) throw new Error('Invalid workspace version');
         if (!['create', 'write', 'edit', 'copy', 'user'].includes(row.change)) throw new Error('Invalid workspace version change');
         if (row.messageId !== undefined && typeof row.messageId !== 'string') throw new Error('Invalid workspace version message');
+        if (row.copiedFrom !== undefined && (!row.copiedFrom || typeof row.copiedFrom !== 'object' || !isWorkspacePath(row.copiedFrom.path))) throw new Error('Invalid workspace version source');
       }
       if (store === 'threads') {
         if (row.mode !== undefined && !['chat', 'workspace'].includes(row.mode)) throw new Error('Invalid chat mode');

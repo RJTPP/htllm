@@ -170,12 +170,10 @@ export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
         const inScope = (p: string) => !prefix || p === prefix || p.startsWith(`${prefix}/`);
         const lines: string[] = []; const citations: SourceCitation[] = [];
         // Indexed libraries: the same hybrid engine as Automatic RAG (D-15).
-        const semantic = new Set<string>();
         for (const libraryId of ctx.libraryIds) {
           if (!files.some((f) => f.libraryId === libraryId && inScope(f.path))) continue;
           try {
             const result = await retrieve(libraryId, String(args.query), signal, Math.min(4000, ctx.band.chars));
-            semantic.add(libraryId);
             for (const hit of result.citations) {
               const file = files.find((f) => f.libraryId === libraryId && f.id === hit.documentId);
               if (!file || !inScope(file.path)) continue;
@@ -188,8 +186,12 @@ export function workspaceReadTools(ctx: WorkspaceContext): ExecutableTool[] {
             }
           } catch { /* not indexed or no embedding provider: keyword search covers it below */ }
         }
-        const keywordFiles = files.filter((f) => inScope(f.path) && !(f.libraryId && semantic.has(f.libraryId)));
+        // Keyword matches over every in-scope file, libraries included: hybrid retrieval
+        // ranks the whole library, so a narrow path scope can leave it with nothing.
+        const keywordFiles = files.filter((f) => inScope(f.path));
+        const listed = new Set(citations.map((c) => `${c.filename}:${c.lineStart}`));
         for (const hit of lexicalSearch(keywordFiles, String(args.query), 10)) {
+          if (listed.has(`${hit.path}:${hit.line}`)) continue;
           const file = keywordFiles.find((f) => f.path === hit.path)!;
           if (citable(file)) {
             const citation = lineCitation(file, hit.line, hit.line, hit.text);
@@ -404,7 +406,7 @@ export function workspaceFunctionTools(ctx: WorkspaceContext, opts: { csv: boole
       const file = findMounted(await mounted(ctx), String(args.path));
       const ext = file.path.split('.').pop()?.toLowerCase();
       if (ext !== 'csv' && ext !== 'tsv') throw new Error(`${file.path} is not a CSV or TSV file.`);
-      const { table, matched, total } = queryCsv(file.text, args as CsvQuery, ext === 'tsv' ? '\t' : undefined);
+      const { table, matched, total } = queryCsv(file.text, args as CsvQuery, ext === 'tsv' ? '\t' : ',');
       const text = `${file.path}: ${matched} of ${total} rows matched.\n${table}`;
       const cap = Math.min(ctx.band.chars, maxChars ?? ctx.band.chars);
       return { text: text.length > cap ? `${text.slice(0, cap - 80)}\n(Table cut to fit; lower limit or select fewer columns.)` : text };

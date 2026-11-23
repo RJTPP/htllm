@@ -2,7 +2,7 @@
  * Minimal RFC 4180 CSV parser for the viewer: quoted fields, doubled quotes,
  * commas and newlines inside quotes, CRLF. Bounded so a huge file stays fast.
  */
-export function parseCsv(text: string, maxRows = 2000): { rows: string[][]; truncated: boolean } {
+export function parseCsv(text: string, maxRows = 2000, delimiter = ','): { rows: string[][]; truncated: boolean } {
   const rows: string[][] = [];
   let row: string[] = []; let field = ''; let quoted = false; let i = 0;
   const push = () => { row.push(field); field = ''; };
@@ -13,7 +13,7 @@ export function parseCsv(text: string, maxRows = 2000): { rows: string[][]; trun
       field += c; i++; continue;
     }
     if (c === '"' && field === '') { quoted = true; i++; continue; }
-    if (c === ',') { push(); i++; continue; }
+    if (c === delimiter) { push(); i++; continue; }
     if (c === '\r' && text[i + 1] === '\n') i++;
     if (c === '\n' || c === '\r') {
       push(); rows.push(row); row = []; i++;
