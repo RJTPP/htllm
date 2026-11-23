@@ -8,7 +8,7 @@
 The delivery scope is a static browser application with IndexedDB persistence,
 one optional document library per conversation, and an Agent toggle that defaults
 off. HTTP models may use tools; WebLLM retains chat and RAG. Implementation status
-and unverified gates are tracked in [v1-progress.md](v1-progress.md).
+and unverified gates were tracked in `v1-progress.md` (removed in the 1.0.0 cleanup; see git history).
 
 ## Milestones
 
@@ -41,7 +41,7 @@ Release form:
 
 The repo goes public at release, and everything is ready and verified before then.
 
-**R1 · Clean the repo** (git history keeps everything removed)
+**R1 · Clean the repo** (git history keeps everything removed) — done
 1. Remove stale and prototype material:
    - `prototype/`
    - `docs/archive/`
@@ -148,7 +148,7 @@ recall and accuracy percentages measured the old approach and no longer gate a r
 OAuth, app-launched stdio bridges, OCR, Office files, persistent memory, branching,
 MCP Apps, arbitrary scripts, reranking, separate query rewriting, local embedding
 inference, and broader adapters are outside v1. Add them only after measured
-failures justify the added scope. The old phase plan is [archived](archive/pre-v1-roadmap.md).
+failures justify the added scope. The pre-v1 phase plan is in git history (`docs/archive/pre-v1-roadmap.md`).
 
 The existing `docs/sdd/` set predates this implementation and awaits its separately
 confirmed reconciliation; do not use its older phase-specific claims as v1 status.
