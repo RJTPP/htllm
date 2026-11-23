@@ -37,4 +37,6 @@ export interface WireMessage {
   toolCalls?: ToolCall[];
   toolCallId?: string;
   reasoning?: string;
+  /** Field the reasoning arrived in; replayed in the same field. */
+  reasoningField?: import('./types').ReasoningField;
 }
