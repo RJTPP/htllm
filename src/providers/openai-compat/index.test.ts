@@ -94,3 +94,12 @@ it('reports LM Studio loaded context and OpenRouter maximum context per model', 
   expect(await router.detectContextWindow('big')).toBe(131072);
   expect(await router.detectContextWindow('none')).toBeUndefined();
 });
+it('gives the send-time check the same supported_parameters answer as the picker', async () => {
+  const fetch = vi.fn(async () => json({ data: [{ id: 'chatty', supported_parameters: ['temperature'] }, { id: 'tooly', supported_parameters: ['tools'] }] }));
+  vi.stubGlobal('fetch', fetch);
+  const generic = probeProvider();
+  expect(await generic.detectToolSupport('chatty')).toBe(false);
+  expect(await generic.detectToolSupport('tooly')).toBe(true);
+  expect(await generic.detectToolSupport('unknown')).toBeUndefined();
+  expect(fetch).toHaveBeenCalledTimes(1);
+});

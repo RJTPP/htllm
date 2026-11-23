@@ -769,6 +769,44 @@ test('regenerating a Workspace reply with a no-tools model is refused before any
   await page.reload();
   await expect(page.getByText('Keep this answer.', { exact: true })).toBeVisible();
 });
+test('switching mode on a new chat keeps each mode\'s own default model', async ({ page }) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction('settings', 'readwrite');
+    tx.objectStore('settings').put({ key: 'modeDefaultModels', value: { chat: { providerId: 'openai-compat', modelId: 'fixture-model' }, workspace: { providerId: 'openai-compat', modelId: 'workspace-model' } } });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  const read = () => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const get = <T,>(store: string, key: string) => new Promise<T>((resolve) => { const req = db.transaction(store).objectStore(store).get(key); req.onsuccess = () => resolve(req.result); });
+    const thread = await get<{ modelId: string }>('threads', 'fixture-thread');
+    const defaults = await get<{ value: Record<string, { modelId: string }> }>('settings', 'modeDefaultModels');
+    db.close(); return { model: thread.modelId, chat: defaults.value.chat?.modelId, workspace: defaults.value.workspace?.modelId };
+  });
+  const modes = page.getByRole('radiogroup', { name: 'Chat mode' });
+  await modes.getByRole('radio', { name: /^Workspace/ }).click();
+  await expect.poll(read).toEqual({ model: 'workspace-model', chat: 'fixture-model', workspace: 'workspace-model' });
+  await modes.getByRole('radio', { name: /^Chat/ }).click();
+  await expect.poll(read).toEqual({ model: 'fixture-model', chat: 'fixture-model', workspace: 'workspace-model' });
+});
+test('new chat starts a fresh draft when the current empty chat already has files', async ({ page }) => {
+  await seed(page);
+  await page.getByRole('radiogroup', { name: 'Chat mode' }).getByRole('radio', { name: /^Workspace/ }).click();
+  await page.getByLabel('Workspace file upload').setInputFiles([{ name: 'brief.md', mimeType: 'text/markdown', buffer: Buffer.from('# Brief') }]);
+  await expect(page.getByText('Added /uploads/brief.md')).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toHaveCount(0);
+  const threadCount = () => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const n = await new Promise<number>((resolve) => { const req = db.transaction('threads').objectStore('threads').count(); req.onsuccess = () => resolve(req.result); });
+    db.close(); return n;
+  });
+  const before = await threadCount();
+  await page.getByRole('button', { name: 'new chat' }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Chat mode' })).toBeVisible();
+  await expect.poll(threadCount).toBe(before + 1);
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
