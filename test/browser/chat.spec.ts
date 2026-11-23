@@ -547,6 +547,43 @@ test('a Workspace chat refuses to send when its model is marked as unable to use
   await expect(page.getByText(/Workspace needs a model that can use tools/)).toBeVisible();
   expect(chatRequests).toBe(0);
 });
+test('presented files open at their version in the side panel, with version navigation, download and a Files list', async ({ page }) => {
+  await seed(page, true);
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const tx = db.transaction(['workspaceFiles', 'workspaceVersions', 'messages'], 'readwrite');
+    const now = Date.now();
+    tx.objectStore('workspaceFiles').put({ id: 'note-1', threadId: 'fixture-thread', path: '/notes/plan.md', kind: 'note', text: '# Plan\n\nVersion two', mimeType: 'text/markdown', version: 2, createdAt: now, updatedAt: now });
+    tx.objectStore('workspaceVersions').put({ fileId: 'note-1', threadId: 'fixture-thread', version: 1, text: '# Plan\n\nVersion one', change: 'create', createdAt: now });
+    tx.objectStore('workspaceVersions').put({ fileId: 'note-1', threadId: 'fixture-thread', version: 2, text: '# Plan\n\nVersion two', change: 'edit', createdAt: now });
+    tx.objectStore('workspaceFiles').put({ id: 'up-1', threadId: 'fixture-thread', path: '/uploads/data.csv', kind: 'upload', text: 'name,qty\n"Tent, 2p",1', mimeType: 'text/csv', version: 1, createdAt: now, updatedAt: now });
+    tx.objectStore('messages').put({ id: 'm-a', threadId: 'fixture-thread', role: 'assistant', createdAt: 1, content: 'First draft.', runStatus: 'complete', presentedFiles: [{ fileId: 'note-1', path: '/notes/plan.md', version: 1, caption: 'Draft plan' }] });
+    tx.objectStore('messages').put({ id: 'm-b', threadId: 'fixture-thread', role: 'assistant', createdAt: 2, content: 'Revised.', runStatus: 'complete', presentedFiles: [{ fileId: 'note-1', path: '/notes/plan.md', version: 2 }] });
+    await new Promise<void>((resolve) => { tx.oncomplete = () => resolve(); }); db.close();
+  });
+  await page.reload();
+  // D-28: each card opens the version presented at that time.
+  await page.getByRole('button', { name: 'Open plan.md v1' }).click();
+  const panel = page.getByRole('complementary', { name: 'Workspace files' });
+  await expect(panel.getByText('Version one')).toBeVisible();
+  await expect(panel.getByRole('group', { name: 'Versions' })).toContainText('v1of 2');
+  await panel.getByRole('button', { name: 'Next version' }).click();
+  await expect(panel.getByText('Version two')).toBeVisible();
+  const download = page.waitForEvent('download');
+  await panel.getByRole('button', { name: 'Download plan.md v2' }).click();
+  expect((await download).suggestedFilename()).toBe('plan.md');
+  await page.getByRole('button', { name: 'Open plan.md v2' }).click();
+  await expect(panel.getByText('Version two')).toBeVisible();
+  // Files list, and a CSV upload rendered as a table.
+  await panel.getByRole('button', { name: 'Back to files' }).click();
+  await expect(panel.getByText('Uploads · 1')).toBeVisible(); await expect(panel.getByText('Notes · 1')).toBeVisible();
+  await panel.getByRole('button', { name: /data\.csv/ }).click();
+  await expect(panel.getByRole('cell', { name: 'Tent, 2p' })).toBeVisible();
+  await panel.getByRole('button', { name: 'Close workspace panel' }).click();
+  await expect(panel).toHaveCount(0);
+  await page.getByRole('button', { name: 'Workspace files' }).click();
+  await expect(panel.getByText('Uploads · 1')).toBeVisible();
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
