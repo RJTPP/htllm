@@ -641,8 +641,11 @@ test('a reply stopped at the tool-call cap offers continue', async ({ page }) =>
   await expect(page.getByText('Partial answer.', { exact: true })).toBeVisible();
   await expect(page.getByText("Stopped at this chat's tool-call limit.")).toBeVisible();
   await page.reload();
+  const before = sent.length;
   await page.getByRole('button', { name: 'continue →' }).click();
-  await expect.poll(() => sent.at(-1)).toBe('Continue where you left off.');
+  // The fixture keeps calling tools after continuing, so later requests end with the
+  // cap message again; check that the follow-up itself was sent.
+  await expect.poll(() => sent.slice(before).includes('Continue where you left off.')).toBe(true);
 });
 test('regenerate warns that file changes from the removed reply remain, and delete counts files', async ({ page }) => {
   await seed(page, true);
