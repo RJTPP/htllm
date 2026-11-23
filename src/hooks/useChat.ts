@@ -79,6 +79,8 @@ export interface RagConfig {
   enabledToolIds?: string[];
   /** Workspace chat (D-14): tools must run; a model that cannot use them is an error. */
   workspace?: boolean;
+  /** Workspace: extra libraries mounted read-only next to `libraryId`. */
+  attachedLibraryIds?: string[];
 }
 
 /**
@@ -606,12 +608,13 @@ export function useChat(
 
         let tools: import('../services/tools').ExecutableTool[] = [];
         const band = contextBand(params.contextWindow);
+        const libraryIds = [...new Set([rag?.libraryId, ...(rag?.attachedLibraryIds ?? [])].filter((id): id is string => !!id))];
         if (agent) {
           if (!provider.capabilities.toolCalls) throw new Error('Tool use requires an HTTP model.');
           const external = await externalTools(rag?.enabledToolIds ?? [], controller.signal);
           closeTools = external.close;
-          tools = [...workspaceTools({ threadId, libraryId: rag?.libraryId ?? null, band, messageId: assistantMsg.id, readVersions: new Map() }, { csv: band.chars > 3000 && await hasCsv(threadId, rag?.libraryId ?? null) }), ...external.tools];
-          sendMessages.unshift({ id: '__agent', threadId, role: 'system', createdAt: Date.now(), content: `${WORKSPACE_PROMPT}\n\n${await workspaceSummary({ threadId, libraryId: rag?.libraryId ?? null })}` });
+          tools = [...workspaceTools({ threadId, libraryIds, band, messageId: assistantMsg.id, readVersions: new Map() }, { csv: band.chars > 3000 && await hasCsv(threadId, libraryIds) }), ...external.tools];
+          sendMessages.unshift({ id: '__agent', threadId, role: 'system', createdAt: Date.now(), content: `${WORKSPACE_PROMPT}\n\n${await workspaceSummary({ threadId, libraryIds })}` });
         }
         await updateMessage(assistantMsg.id, { runStatus: 'running', citations, retrievalStatus });
         for await (const chunk of executeChat(provider, {

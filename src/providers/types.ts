@@ -197,6 +197,8 @@ export interface WorkspaceVersion {
 export interface Thread {
   /** Chat vs Workspace (D-2). Undefined means 'chat'. */
   mode?: ThreadMode;
+  /** Workspace: libraries attached in addition to `libraryId`, all read-only to the model. */
+  attachedLibraryIds?: string[];
   /** Undefined preserves legacy behavior: automatic RAG only when tools are off. */
   automaticRagEnabled?: boolean;
   agentEnabled?: boolean;

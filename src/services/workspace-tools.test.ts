@@ -15,7 +15,7 @@ beforeEach(async () => {
   await db.put('documents', { id: 'doc', libraryId: 'lib', filename: 'plan.txt', mimeType: 'text/plain', sizeBytes: 9, chunkCount: 0, createdAt: 1, extractedText: 'Atlas launches on November 12.\nBudget is fixed.', pages: [{ page: 4, start: 0, end: 47 }] });
   await addUpload({ threadId: 't', path: '/uploads/report.txt', text: 'Intro\nAtlas risks: weather.\nEnd', mimeType: 'text/plain' });
   await writeNote({ threadId: 't', path: '/notes/todo.md', text: 'check Atlas date', change: 'write' });
-  ctx = { threadId: 't', libraryId: 'lib', band: contextBand(8192), readVersions: new Map() };
+  ctx = { threadId: 't', libraryIds: ['lib'], band: contextBand(8192), readVersions: new Map() };
 });
 
 describe('workspace read tools', () => {
@@ -137,5 +137,19 @@ describe('workspaceSummary', () => {
     expect(summary).toContain('- /notes/todo.md (note v1');
     expect(summary).toContain('/library/Team-Docs/plan.txt (library, read-only');
     expect(await workspaceSummary(ctx, 1)).toContain('…and 2 more');
+  });
+});
+
+describe('several attached libraries', () => {
+  it('mounts each library under its own folder, de-duplicating names, and searches all of them', async () => {
+    const db = await getDb();
+    await db.put('libraries', { id: 'lib2', name: 'Team/Docs', embeddingModelId: '', createdAt: 2 });
+    await db.put('documents', { id: 'doc2', libraryId: 'lib2', filename: 'risks.txt', mimeType: 'text/plain', sizeBytes: 9, chunkCount: 0, createdAt: 1, extractedText: 'Atlas risk: supplier delay.' });
+    const multi: WorkspaceContext = { ...ctx, libraryIds: ['lib', 'lib2', 'lib', 'missing'] };
+    const paths = (await mountWorkspace(multi)).filter((f) => f.kind === 'library').map((f) => `${f.path}:${f.libraryId}`);
+    expect(paths).toEqual(['/library/Team-Docs (2)/risks.txt:lib2', '/library/Team-Docs/plan.txt:lib']);
+    const found = await workspaceReadTools(multi).find((t) => t.name === 'search')!.execute({ query: 'Atlas' }, signal);
+    expect(found.text).toContain('/library/Team-Docs (2)/risks.txt:1');
+    expect(found.text).toContain('/library/Team-Docs/plan.txt:1');
   });
 });

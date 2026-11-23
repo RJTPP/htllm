@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Wrench, Settings2, FileText, Pencil, BookOpen } from 'lucide-react';
+import { Wrench, Settings2, FileText, Pencil, BookOpen, Plus, X } from 'lucide-react';
 import type { Thread, McpConnection, ThreadMode } from '../../providers/types';
 import { listMcpConnections } from '../../data/mcp';
 import { toolId } from '../../services/mcp';
@@ -25,6 +25,8 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
   const workspace = mode === 'workspace';
   const [open, setOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Which slot the library picker fills: the chat's primary library, or an extra Workspace one.
+  const [pickerTarget, setPickerTarget] = useState<'primary' | 'extra'>('primary');
   const [tab, setTab] = useState<'documents' | 'external'>('documents');
   const automaticRagEnabled = thread.automaticRagEnabled ?? true;
   const [connections, setConnections] = useState<McpConnection[]>([]);
@@ -53,6 +55,8 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
   const count = selectedCount + WORKSPACE_TOOL_SUMMARY.length - 1;
   const reason = workspace && !capable ? unavailableReason ?? 'Tools need an HTTP model that supports tool calling.' : '';
   const library = libraries.find(({ lib }) => lib.id === libraryId)?.lib;
+  const attached = thread.attachedLibraryIds ?? [];
+  const extraLibraries = attached.filter((id) => id !== libraryId).map((id) => libraries.find(({ lib }) => lib.id === id)?.lib).filter((lib): lib is NonNullable<typeof lib> => !!lib);
   const sectionTitle = 'text-[10px] uppercase tracking-widest text-mute';
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const toggleTool = (id: string, checked: boolean) => {
@@ -63,7 +67,7 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
 
   const libraryPicker = (label: string) => <div className="space-y-2">
     <h3 className={sectionTitle}>{label}</h3>
-    <button aria-label="Choose knowledge library" aria-haspopup="dialog" disabled={busy} onClick={() => setPickerOpen(true)} className="w-full flex items-center justify-between gap-2 bg-surface border border-line hover:border-accent/40 px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-accent disabled:opacity-40 disabled:cursor-not-allowed">
+    <button aria-label="Choose knowledge library" aria-haspopup="dialog" disabled={busy} onClick={() => { setPickerTarget('primary'); setPickerOpen(true); }} className="w-full flex items-center justify-between gap-2 bg-surface border border-line hover:border-accent/40 px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-accent disabled:opacity-40 disabled:cursor-not-allowed">
       <span className="min-w-0 truncate text-text">{library?.name ?? 'None — no document access'}</span><Pencil size={12} className="text-mute shrink-0" />
     </button>
     {libraryId && !library?.embeddingModelId && <p className="text-warn">This library has no embedding model yet. Pin one in Knowledge before it can be searched.</p>}
@@ -95,6 +99,16 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
           {tab === 'documents' && <section role="tabpanel" id="tools-panel-documents" aria-labelledby="tools-tab-documents" className="space-y-5">
             {libraryPicker('Attached library (read-only)')}
             <div className="space-y-2">
+              <h3 className={sectionTitle}>More libraries (read-only)</h3>
+              {extraLibraries.length > 0 && <ul className="border border-line divide-y divide-line">
+                {extraLibraries.map((lib) => <li key={lib.id} className="flex items-center gap-2 px-3 py-2">
+                  <span className="flex-1 min-w-0 truncate text-text">{lib.name}</span>
+                  <button disabled={busy} onClick={() => onChange({ attachedLibraryIds: attached.filter((id) => id !== lib.id) })} aria-label={`Detach ${lib.name}`} className="text-mute hover:text-text disabled:opacity-40"><X size={12} /></button>
+                </li>)}
+              </ul>}
+              <button disabled={busy || !libraryId} onClick={() => { setPickerTarget('extra'); setPickerOpen(true); }} title={libraryId ? undefined : 'Attach a library above first'} className="inline-flex items-center gap-1 text-mute hover:text-text disabled:opacity-40"><Plus size={12} /> attach another library</button>
+            </div>
+            <div className="space-y-2">
               <h3 className={sectionTitle}>Built-in workspace tools</h3>
               <ul className="border border-line divide-y divide-line">
                 {WORKSPACE_TOOL_SUMMARY.map(([name, description]) => (
@@ -102,7 +116,7 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
                 ))}
               </ul>
               <p className="flex items-center gap-1.5 text-mute"><FileText size={12} className="shrink-0" />
-                {library ? <span>Library mounted read-only at /library/{library.name.replace(/[\\/]/g, '-')}</span> : <><span>No library attached</span><span>· the model works with uploads and notes only.</span></>}
+                {library ? <span>Library mounted read-only at /library/{library.name.replace(/[\\/]/g, '-')}{extraLibraries.length ? ` and ${extraLibraries.length} more` : ''}</span> : <><span>No library attached</span><span>· the model works with uploads and notes only.</span></>}
               </p>
             </div>
           </section>}
@@ -139,7 +153,11 @@ export function AgentControls({ mode, thread, libraryId, libraries, onSelectLibr
           <p className="text-mute leading-relaxed border-t border-line pt-3">Tools, external MCP tools and file work live in Workspace chats. Start a new chat and choose Workspace to use them.</p>
         </div>
       </Modal>}
-    <LibraryPickerModal open={open && pickerOpen} onClose={() => setPickerOpen(false)} libraries={libraries} activeLibraryId={libraryId} allowNone title="Choose a knowledge library" noneLabel="None — no document access" onSelect={onSelectLibrary} onNewLibrary={() => { setPickerOpen(false); setOpen(false); onNewLibrary(); }} />
+    <LibraryPickerModal open={open && pickerOpen} onClose={() => setPickerOpen(false)} libraries={libraries} activeLibraryId={pickerTarget === 'primary' ? libraryId : null} allowNone={pickerTarget === 'primary'} title={pickerTarget === 'primary' ? 'Choose a knowledge library' : 'Attach another library'} noneLabel="None — no document access"
+      onSelect={(id) => {
+        if (pickerTarget === 'primary') onSelectLibrary(id);
+        else if (id && id !== libraryId && !attached.includes(id)) onChange({ attachedLibraryIds: [...attached, id] });
+      }} onNewLibrary={() => { setPickerOpen(false); setOpen(false); onNewLibrary(); }} />
     {workspace && <ToolApproval />}
   </>;
 }
