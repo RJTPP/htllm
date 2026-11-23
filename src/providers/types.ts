@@ -138,8 +138,6 @@ export interface Thread {
   automaticRagEnabled?: boolean;
   agentEnabled?: boolean;
   enabledToolIds?: string[];
-  /** Legacy persisted capability confirmation; no longer used to gate tools. */
-  toolModelKey?: string;
   id: string;
   title: string;
   providerId: string;
@@ -170,12 +168,6 @@ export interface Thread {
    * state.
    */
   libraryId?: string | null;
-  /**
-   * @deprecated Replaced by libraryId. Older threads may still carry
-   * this flag; the runtime ignores it. Safe to remove in a future
-   * migration once we're confident no users have legacy threads.
-   */
-  ragEnabled?: boolean;
   createdAt: number;
   updatedAt: number;
 }

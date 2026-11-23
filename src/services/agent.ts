@@ -42,7 +42,7 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
     const partial = new Map<number, ToolCall>();
     let text = ''; let reasoning = ''; let finish: ChatChunk['finishReason'];
     let turnUsage: ChatChunk['usage'];
-    if (size() > available) throw new Error('Agent context budget reached. Start a new turn with fewer tools or a larger context window.');
+    if (size() > available) throw new Error('Tool context budget reached. Start a new turn with fewer tools or a larger context window.');
     for await (const chunk of provider.chat({ ...params, messages, maxTokens: Math.max(1, Math.min(params.maxTokens ?? 512, opts.contextWindow - size())), tools: final ? undefined : definitions, toolChoice: final ? 'none' : 'auto' })) {
       signal.throwIfAborted();
       text += chunk.delta; reasoning += chunk.reasoning ?? ''; finish = chunk.finishReason ?? finish;

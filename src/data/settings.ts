@@ -68,12 +68,6 @@ export const DEFAULT_LIBRARY_ID_KEY = 'defaultLibraryId';
  */
 export const REMEMBER_LAST_LIBRARY_KEY = 'rememberLastLibrary';
 
-/**
- * @deprecated Replaced by per-thread libraryId + DEFAULT_LIBRARY_ID_KEY.
- * Kept exported for backwards compat with anything still importing it,
- * but no longer read by the runtime.
- */
-export const DEFAULT_RAG_ENABLED = false;
 
 /**
  * D10b — what to do when the sliding window would drop older messages.
