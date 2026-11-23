@@ -1,6 +1,6 @@
 import type { ChatProvider, ChatParams, ChatChunk, ToolCall, AgentEvent, SourceCitation, WireMessage } from '../providers/types';
 import type { ExecutableTool } from './tools';
-import { parseArguments } from './tools';
+import { findTool, parseArguments } from './tools';
 import { reserveForResponse } from '../lib/conversation-budget';
 import { getCalibrationRatio } from '../lib/token-calibration';
 
@@ -24,6 +24,7 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
   let stopTools = false;
   let promptTokens = 0; let completionTokens = 0;
   const denied = new Set<string>();
+  const recent: string[] = [];
   const definitions = opts.tools.map(({ name, description, parameters }) => ({ name, description, parameters }));
   const wire = (role: WireMessage['role'], content: string): WireMessage => ({ id: crypto.randomUUID(), threadId: '', createdAt: Date.now(), role, content });
   const available = opts.contextWindow - reserveForResponse(opts.contextWindow, params.maxTokens ?? 512);
@@ -47,11 +48,14 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
       signal.throwIfAborted();
       text += chunk.delta; reasoning += chunk.reasoning ?? ''; reasoningField = chunk.reasoningField ?? reasoningField; finish = chunk.finishReason ?? finish;
       for (const part of chunk.toolCalls ?? []) {
-        if (!Number.isInteger(part.index) || part.index < 0 || part.index > 32) throw new Error('Invalid tool call index');
-        const call = partial.get(part.index) ?? { id: '', name: '', arguments: '' };
+        // Some servers omit `index` on whole calls; fall back to the id, then to a new slot.
+        const index = Number.isInteger(part.index) ? part.index
+          : [...partial.entries()].find(([, c]) => part.id && c.id === part.id)?.[0] ?? partial.size;
+        if (index < 0 || index > 32) throw new Error('Invalid tool call index');
+        const call = partial.get(index) ?? { id: '', name: '', arguments: '' };
         call.id += part.id ?? ''; call.name += part.name ?? ''; call.arguments += part.arguments ?? '';
         if (call.arguments.length > 64000) throw new Error('Tool arguments exceed the size limit');
-        partial.set(part.index, call);
+        partial.set(index, call);
       }
       if (chunk.usage) turnUsage = chunk.usage;
       yield { ...chunk, toolCalls: undefined, usage: chunk.usage ? { ...chunk.usage,
@@ -65,11 +69,13 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
     if (!partial.size) return;
     if (final || finish !== 'tool_calls') throw new Error('Incomplete or unexpected tool call; nothing was executed.');
     const calls = [...partial.values()];
-    if (calls.some((call) => !call.id || !call.name) || new Set(calls.map((c) => c.id)).size !== calls.length) throw new Error('Invalid tool call identifiers');
+    // Servers that omit call ids still need matched call/result pairs.
+    calls.forEach((call, i) => { if (!call.id) call.id = `call_${callsUsed + i + 1}`; });
+    if (calls.some((call) => !call.name) || new Set(calls.map((c) => c.id)).size !== calls.length) throw new Error('Invalid tool call identifiers');
     messages.push({ ...wire('assistant', text), toolCalls: calls, reasoning: reasoning || undefined, reasoningField: reasoning ? reasoningField : undefined });
     for (const call of calls) {
       signal.throwIfAborted();
-      const tool = opts.tools.find((t) => t.name === call.name);
+      const tool = findTool(opts.tools, call.name);
       const event: AgentEvent = { id: call.id, tool: tool?.displayName ?? call.name, server: tool?.server, arguments: call.arguments, status: 'running' };
       activity.push(event);
       let result = '';
@@ -78,10 +84,16 @@ export async function* executeChat(provider: ChatProvider, params: ChatParams, o
         if (stopTools) throw new Error('Further tools are stopped because an external outcome is unknown.');
         if (callsUsed >= limit) throw new Error('Tool execution limit reached.');
         callsUsed++;
-        if (!tool) throw new Error('Unknown or disabled tool');
+        if (!tool) throw new Error(`Unknown or disabled tool "${call.name}". Available tools: ${opts.tools.map((t) => t.name).join(', ') || 'none'}.`);
         const args = parseArguments(tool, call.arguments);
         const signature = JSON.stringify([tool.name, args]);
         if (denied.has(signature)) throw new Error('This call was already denied.');
+        // Stop loops: a third identical call in a row is not executed.
+        if (recent.length >= 2 && recent.slice(-2).every((s) => s === signature)) {
+          recent.push(signature);
+          throw new Error('This exact call was already made twice in a row. Use the earlier result or try a different approach.');
+        }
+        recent.push(signature);
         if (tool.server) {
           event.status = 'approval'; await opts.onActivity([...activity]);
           if (!await opts.approve(tool, event, signal)) {

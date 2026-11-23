@@ -38,6 +38,35 @@ describe('agent execution boundary', () => {
     const result = await run([turn], [tool()]);
     expect(result.requests[1]!.messages.find((m) => m.toolCalls)).toMatchObject({ reasoning: 'plan', reasoningField: 'reasoning' });
   });
+  it('tolerates case differences, a missing index and a missing id', async () => {
+    const t = tool();
+    const whole: ChatChunk[] = [{ delta: '', toolCalls: [{ name: 'LOOKUP', arguments: '{"query":"hi"}' } as never] }, { delta: '', finishReason: 'tool_calls' }];
+    const result = await run([whole], [t]);
+    expect(t.execute).toHaveBeenCalledWith({ query: 'hi' }, expect.any(AbortSignal), expect.any(Number));
+    const history = result.requests[1]!.messages;
+    const id = history.find((m) => m.toolCalls)?.toolCalls?.[0]?.id;
+    expect(id).toBeTruthy(); expect(history.find((m) => m.role === 'tool')?.toolCallId).toBe(id);
+  });
+  it('explains unknown tools and invalid arguments so the model can correct itself', async () => {
+    const t = tool();
+    const unknown = await run([call(undefined, 'c1').map((c) => c.toolCalls ? { ...c, toolCalls: c.toolCalls.map((p) => p.name ? { ...p, name: 'serch' } : p) } : c)], [t]);
+    expect(unknown.requests[1]!.messages.find((m) => m.role === 'tool')?.content).toContain('Available tools: lookup');
+    const invalid = await run([call('{"query":4}')], [t]);
+    expect(invalid.requests[1]!.messages.find((m) => m.role === 'tool')?.content).toMatch(/Invalid tool arguments for lookup: .+Rewrite the lookup call/);
+    expect(t.execute).not.toHaveBeenCalled();
+  });
+  it('accepts an empty argument string for a tool without parameters', async () => {
+    const execute = vi.fn(async () => ({ text: 'listed' }));
+    const list: ExecutableTool = { name: 'list', description: 'List', parameters: { type: 'object', properties: {}, additionalProperties: false }, execute };
+    await run([[{ delta: '', toolCalls: [{ index: 0, id: 'c', name: 'list', arguments: '' }] }, { delta: '', finishReason: 'tool_calls' }]], [list]);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+  it('does not execute a third identical call in a row', async () => {
+    const t = tool();
+    const result = await run([call(undefined, 'a'), call(undefined, 'b'), call(undefined, 'c')], [t]);
+    expect(t.execute).toHaveBeenCalledTimes(2);
+    expect(result.requests[3]!.messages.filter((m) => m.role === 'tool').at(-1)?.content).toContain('twice in a row');
+  });
   it('never executes truncated streaming calls', async () => {
     const t = tool(); await expect(run([call().slice(0, 2)], [t])).rejects.toThrow('Incomplete');
     expect(t.execute).not.toHaveBeenCalled();
