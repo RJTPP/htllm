@@ -305,14 +305,18 @@ test('the landing page opens the app under the site base path, and every request
   const base = new URL(baseURL!);
   const outside: string[] = [];
   page.on('request', (request) => { const url = new URL(request.url()); if (url.origin === base.origin && !url.pathname.startsWith(base.pathname)) outside.push(url.pathname); });
+  // Like every other scenario, run without WebGPU, so the app's first screen doesn't
+  // depend on whether the test machine has a GPU (CI runners usually don't).
+  await page.addInitScript(() => Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true }));
+  const appReady = page.getByRole('heading', { name: 'WebGPU is not available' });
   await page.goto('./');
   await page.getByRole('button', { name: 'start →' }).click();
   await expect(page).toHaveURL(`${baseURL}app`);
-  await expect(page.getByRole('heading', { name: 'Chat, or work with files.' })).toBeVisible();
+  await expect(appReady).toBeVisible();
   // A returning visitor goes straight from the landing page to the app.
   await page.goto('./');
   await expect(page).toHaveURL(`${baseURL}app`);
-  await expect(page.getByRole('heading', { name: 'Chat, or work with files.' })).toBeVisible();
+  await expect(appReady).toBeVisible();
   expect(outside).toEqual([]);
 });
 test('HTTP chat works without WebGPU and sanitizes output under production CSP', async ({ page }) => {
