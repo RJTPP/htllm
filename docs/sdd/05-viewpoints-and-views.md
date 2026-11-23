@@ -2,409 +2,312 @@
 
 ### 5.1 Viewpoint-to-View Mapping
 
-| Viewpoint | Concern(s) Addressed | View Section |
-|---|---|---|
-| **Context** | C1 (privacy), C8 (static deploy) | 5.2 |
-| **Composition** | C2 (provider abstraction), C9 (phase discipline) | 5.3 |
-| **Logical** | C2 (provider contract), C7 (streaming) | 5.4 |
-| **Information** | C4 (persistence), C5 (secret safety), C10 (portability) | 5.6 |
-| **Interface** | C2 (provider contract), C3 (worker protocol) | 5.7 |
-| **Interaction/State** | C3 (main thread responsiveness), C6 (model fit), C7 (streaming) | 5.8 |
-| **Process** | C13 (streaming perf), C3 (main thread) | 5.10 |
-| **Dependency** | C8 (static deploy), C3 (WebGPU requirement) | 5.5 |
-| **Resource** | N/A — no server resources. Client resource constraints handled by system detection (C6). | — |
+| Viewpoint | View | Section | Concerns covered |
+| --- | --- | --- | --- |
+| Context | System boundary, actors, trust boundaries | 5.2 | C-1, C-2, C-3, C-4 |
+| Composition | Subsystems and their responsibilities | 5.3 | C-7, C-8 |
+| Logical | Domain entities and invariants | 5.4 | C-5, C-6, C-11 |
+| Dependency | Layer rules, runtime dependencies | 5.5 | C-7, C-8, C-2 |
+| Information | Stores, lifecycle, deletion, backup | 5.6 | C-1, C-11 |
+| Interface | Provider, tool, MCP and citation contracts | 5.7 | C-4, C-5, C-7, C-12 |
+| Interaction / State | Mode lifecycle, agent loop, approval | 5.8 | C-4, C-6, C-9, C-10 |
+| Resource | Context bands, limits, storage | 5.9 | C-9, C-10 |
+
+A deployment view is in §4.2. A separate concurrency view is not needed: everything runs
+on one main thread plus short-lived workers (§5.8).
 
 ### 5.2 Context View
 
 ```mermaid
-graph TB
-    User["End User (Browser)"] --> App
-
-    subgraph App["htllm App (Static site in browser)"]
-        UI["React UI + Hooks"]
-        Prov["Provider Layer"]
-        Data["Data Layer (IDB)"]
-        Work["Web Worker (WebLLM)"]
-        UI --> Prov --> Data
-        Prov --> Work
-    end
-
-    App -.->|model weights| HF["HuggingFace CDN"]
-    App -.->|font files| GF["Google Fonts"]
-    App -.->|"BYOK API calls (Phase 2)"| ExtAPI["Provider APIs"]
+flowchart LR
+  user((User)) --> app[htllm in the browser tab]
+  app -->|chat, embeddings: user-configured base URL + optional key| http[(OpenAI-compatible servers)]
+  app -->|tools/list, tools/call: after approval| mcp[(MCP servers)]
+  app -->|weights download| cdn[(WebLLM weight host)]
+  host[(Static host)] -->|dist/| app
 ```
 
-**Trust boundaries:**
-
-- The app trusts only itself and the user's browser.
-- HuggingFace CDN and Google Fonts are external, untrusted origins allowed by CSP for specific resource types only.
-- No data flows outward except model weight download requests (no user content is sent).
-- Phase 2 providers (Ollama, Groq, etc.) will be explicitly user-configured and user-initiated.
+Trust boundaries:
+- **Model output is untrusted.** It is rendered through a sanitizer, never executed, and
+  only `run_js` interprets it, inside QuickJS (§5.8).
+- **File contents and tool results are untrusted data.** The Workspace prompt says so,
+  and the rules are enforced in code.
+- **External tools need approval.** MCP servers are reached only after the user approves
+  each call. Tool descriptions are shown to the user but never trusted as instructions.
+- **Keys go only to their own endpoint.** A key is sent only to the provider it belongs
+  to, and never appears in exports or logs.
 
 ### 5.3 Composition View
 
-**Subsystem decomposition:**
-
-| Subsystem | Responsibility | Folder |
-|---|---|---|
-| **Pages** | Static HTML shells, CSP headers, font loading | `src/pages/`, `src/layouts/` |
-| **Components** | UI rendering, user interaction, state display | `src/components/` |
-| **Hooks** | State management, bridge between components and data/providers | `src/hooks/` |
-| **Providers** | LLM backend abstraction and implementations | `src/providers/` |
-| **Data** | IndexedDB schema, repositories, migrations | `src/data/` |
-| **Workers** | Background inference execution | `src/workers/` |
-| **Lib** | Pure utilities: system detection, fit heuristics, export/import, errors | `src/lib/` |
-| **Styles** | Tailwind config, global CSS, animations | `src/styles/`, `tailwind.config.mjs` |
-
-**Component subtree:**
-
-```
-src/components/
-├── App.tsx                    # Root island, state orchestration
-├── ui/
-│   ├── Badge.tsx              # Tone-variant label
-│   ├── BrandLogo.tsx          # Model family brand icons
-│   ├── Chevron.tsx            # Collapsible section arrow
-│   ├── Dot.tsx                # Status indicator
-│   ├── Icon.tsx               # Icon wrapper
-│   ├── Modal.tsx              # Reusable modal shell
-│   ├── ProviderLogo.tsx       # Provider brand icons
-│   └── Tooltip.tsx            # Hover tooltip
-├── system/
-│   ├── ModelSlot.tsx           # Model status in nav rail
-│   ├── SystemStats.tsx         # WebGPU/RAM/CPU/storage badges
-│   └── WebGPUBlock.tsx         # WebGPU unavailable block screen
-├── nav/
-│   └── NavRail.tsx             # Left navigation rail
-├── sidebar/
-│   ├── Sidebar.tsx            # Thread list + folder tree
-│   ├── ThreadItem.tsx         # Individual thread entry
-│   └── FolderSection.tsx      # Folder with nested threads
-├── command/
-│   └── CommandPalette.tsx     # Cmd+K global search + navigation
-├── providers/
-│   ├── ApiModelList.tsx       # API provider model list
-│   ├── ModelGridCard.tsx      # Individual model card
-│   ├── ModelPicker.tsx        # Modal: search, family groups, params
-│   ├── ParamControls.tsx      # Temperature, top_p, etc. controls
-│   ├── StatusPanel.tsx        # Loading progress
-│   └── ThreadParams.tsx       # Per-thread parameter override
-├── chat/
-│   ├── Avatar.tsx             # User/assistant avatar
-│   ├── ChatPage.tsx           # Message list + composer + system bar
-│   ├── Composer.tsx           # Input + image attach + /-hints + send/stop
-│   ├── EmptyState.tsx         # Welcome screen
-│   ├── MessageBody.tsx        # Markdown + code highlighting
-│   ├── MessageView.tsx        # Single message (text + images + thinking + stats + copy + edit)
-│   ├── PromptHints.tsx        # /command dropdown
-│   ├── SystemPromptBar.tsx    # System prompt editor bar
-│   └── ThinkingBlock.tsx      # Collapsible reasoning/thinking display
-├── landing/
-│   ├── Landing.tsx            # Animated landing page
-│   └── ShaderBackdrop.tsx     # WebGL shader background
-├── knowledge/
-│   └── KnowledgeStub.tsx      # Phase 3 placeholder
-├── storage/
-│   └── StorageManager.tsx     # Model cache + IDB data management
-└── settings/
-    ├── ImportExport.tsx       # Data export/import UI
-    ├── ProviderConfig.tsx     # BYOK provider configuration
-    └── SettingsModal.tsx      # Settings modal (Templates, Providers, Chat defaults, Appearance, About)
-```
+| Subsystem | Responsibility | Main parts |
+| --- | --- | --- |
+| App shell | Navigation, chat list (a drawer below 768 px), command palette, settings, storage page. | `App`, `NavRail`, `Sidebar`, `CommandPalette`, `SettingsModal`, `StorageManager` |
+| Chat | Composer, mode chooser, message rendering with thinking, evidence and citations, approval prompt, compaction dividers. | `ChatPage`, `Composer`, `MessageView`, `MessageBody`, `MessageEvidence`, `ToolApproval` |
+| Request engine | Builds each request and streams the reply. Covers system context, Automatic RAG, budget and compaction, Workspace setup, and the agent loop. | `useChat`, `services/agent`, `lib/compact`, `lib/conversation-budget`, `lib/system-context` |
+| Workspace | Per-chat files, tools and functions, uploads, presented files, viewer with versions, Files list, add-to-library. | `services/workspace-tools`, `workspace-upload`, `library-add`, `js-runner`, `regex-runner`, `data/workspace`, `components/workspace/*` |
+| Knowledge | Libraries, import (PDF/TXT/MD), chunking, embedding, hybrid retrieval, semantic search UI. | `lib/ingest`, `lib/chunking`, `lib/pdf`, `lib/embed-pipeline`, `lib/hybrid-search`, `lib/rag-context`, `services/retrieval`, `components/knowledge/*` |
+| Providers | Model listing, capability detection (tools, context window), streaming chat, embeddings, WebLLM loading. | `providers/registry`, `providers/openai-compat`, `providers/webllm`, `workers/webllm-worker` |
+| External tools | MCP connection setup, discovery, tool wrapping, approvals and session trust. | `services/mcp`, `services/approvals`, `components/settings/McpSettings` |
+| Persistence | Stores, migrations, cascades, stats, reset, export and import. | `src/data/*`, `lib/export` |
 
 ### 5.4 Logical View
 
-**Core domain types:**
-
+```mermaid
+erDiagram
+  FOLDER ||--o{ THREAD : groups
+  THREAD ||--o{ MESSAGE : has
+  THREAD ||--o{ WORKSPACE_FILE : owns
+  WORKSPACE_FILE ||--|{ WORKSPACE_VERSION : versions
+  THREAD ||--o{ SUMMARY : compacts
+  THREAD }o--o{ LIBRARY : "attaches (primary + extra)"
+  LIBRARY ||--o{ DOCUMENT : contains
+  DOCUMENT ||--o{ PARENT_CHUNK : splits
+  PARENT_CHUNK ||--o{ CHUNK : splits
+  CHUNK ||--o{ EMBEDDING : "per model"
+  MESSAGE }o--o{ WORKSPACE_VERSION : "presents / changes"
 ```
-ChatProvider ─────────── implements ────────── WebLLMProvider
-     │                                              │
-     │ needsModelLoad: boolean                      │ uses WebWorkerMLCEngine
-     │ listModels() → ModelInfo[]                   │
-     │ chat(ChatParams) → AsyncIterable<ChatChunk>  │
-     │ unload?()                                    │
-     │                                              │
-     ▼                                              ▼
-ModelInfo                                    prebuiltAppConfig
-  ├── id: string                                (model catalog)
-  ├── displayName: string
-  ├── family: string
-  ├── vramRequiredMB: number
-  ├── quantization: string
-  ├── cached: boolean
-  ├── vision?: boolean
-  └── reasoning?: ReasoningCapability
 
-Thread ──────── has many ──────── Message
-  ├── id: string                   ├── id: string
-  ├── title: string                ├── threadId: string
-  ├── providerId: string           ├── role: 'user' | 'assistant' | 'system'
-  ├── modelId: string              ├── content: string | ContentPart[]
-  ├── modelParams?: ModelParams    ├── createdAt: number
-  ├── createdAt: number            ├── usage?: UsageStats
-  ├── updatedAt: number            └── reasoning?: string
-  ├── systemPrompt?: string
-  └── folderId?: string
-
-ContentPart = TextPart | ImagePart
-  TextPart:  { type: 'text', text: string }
-  ImagePart: { type: 'image_url', image_url: { url: string }, dimension?: { width, height } }
-
-ModelParams
-  ├── temperature: number       (0–2, default 1.0)
-  ├── topP: number              (0–1, default 1.0)
-  ├── maxTokens: number         (default 4000)
-  ├── presencePenalty: number   (−2 to 2, default 0)
-  ├── frequencyPenalty: number  (−2 to 2, default 0)
-  ├── contextWindow: number     (default 4096)
-  ├── historyMsgs: number       (default 12)
-  └── reasoningEffort: ReasoningEffort  (default 'low')
-
-PromptTemplate
-  ├── id: string
-  ├── title: string
-  ├── content: string
-  ├── isBuiltIn: boolean
-  └── createdAt: number
-
-Folder
-  ├── id: string
-  ├── name: string
-  └── createdAt: number
-
-AccentColor = 'amber' | 'soft-amber' | 'cyan' | 'tokyo-blue' | 'violet' | 'emerald' | 'rose' | 'gray'
-
-ReasoningCapability = 'effort' | 'toggle'
-ReasoningEffort = 'off' | 'low' | 'medium' | 'high'
-
-SystemInfo
-  ├── webgpu: boolean
-  ├── deviceMemoryGB: number | null
-  ├── cores: number | null
-  ├── gpu: { info, maxBufferSize, maxStorageBufferBindingSize } | null
-  ├── storage: { quota, usage, free } | null
-  └── connection: { effectiveType, downlink } | null
-```
+| Entity | Key fields | Invariants |
+| --- | --- | --- |
+| Thread | `mode` (`chat` or `workspace`; undefined means chat), `libraryId`, `attachedLibraryIds`, `automaticRagEnabled`, `enabledToolIds` (MCP ids only), `modelParams`, `systemPrompt`, `folderId` | The mode is changeable only while the chat has no messages and no files; it locks at the first send or upload (D-3, D-12). |
+| Message | `role`, `content` (text or parts with images), `reasoning` and the field it arrived in, `citations`, `activity`, `presentedFiles`, `attachments`, `usage`, `runStatus` | `citations` is the evidence supplied to this answer; rendered references resolve only against it (C-5). |
+| WorkspaceFile | `threadId`, `path`, `kind` (`upload` or `note`), `text`, `pages`, `mimeType`, `version`, `copiedFrom` | `(threadId, path)` is unique. Uploads are read-only to the model. Notes live under `/notes`. Paths are normalized, with no `..`. |
+| WorkspaceVersion | `(fileId, version)`, `text`, `messageId` (absent for user edits), `change` (create, write, edit, copy or user), `copiedFrom` | Every note version is kept. A presented version is never pruned (D-28). |
+| Library | `name`, `embeddingProviderId`, `embeddingModelId` | One embedding model per library. Changing it needs re-embedding. |
+| Document | `libraryId`, `filename`, `extractedText`, `pages` (character offsets), `chunkCount` | Exact text is kept, so Workspace can read it by line and map lines to pages. |
+| Chunk / Parent / Embedding | Child chunks of about 1,600 characters with 240 overlap, mapped into parent blocks; vectors per chunk and model | Retrieval returns a chunk's parent block when it has one (legacy flat chunks return themselves). An embedding is valid only for its model id. |
+| ConversationSummary | `threadId`, `kind` (history or tail), `generation`, `replacedMessageIds` | Re-compaction folds the earlier summary in, so history is never dropped. |
+| McpConnection | `id`, `name`, `url`, discovered `tools` with `readOnlyHint` | The URL is validated (§2.2). The token is in the keys store under `mcp:<id>`. |
 
 ### 5.5 Dependency View
 
-**Runtime dependencies (npm):**
+- **Layer rule:** pages → components → hooks → services → providers → data and
+  workers, plus `lib/` from anywhere. Imports may not point upward. `lib/` should not
+  import from `services/`. `lib/export.ts` does, and is a known slip.
+- **WebLLM:** `@mlc-ai/web-llm` is imported at runtime only in the worker and through
+  dynamic `import()` in `src/providers/webllm/`. Type-only imports are allowed. A static
+  runtime import on the main thread would pull a multi-megabyte module into the main
+  bundle.
+- **IndexedDB** is reached through `src/data/` (with the known slips in §7.2).
 
-| Package | Purpose | Client bundle? | Phase |
-|---|---|---|---|
-| `astro` | Static site framework | No (build only) | 1 |
-| `@astrojs/react` | React integration for Astro | Build bridge | 1 |
-| `@astrojs/tailwind` | Tailwind integration for Astro | Build bridge | 1 |
-| `react`, `react-dom` | UI framework | Yes | 1 |
-| `@mlc-ai/web-llm` | In-browser LLM inference | Yes (worker only) | 1 |
-| `idb` | IndexedDB wrapper | Yes | 1 |
-| `tailwindcss`, `postcss`, `autoprefixer` | Styling | No (build only) | 1 |
-| `shiki` | Syntax highlighting for code blocks | Yes | 2 |
-| `lucide-react` | Icon library | Yes | 2 |
-| `typescript` | Type checking | No (build only) | 1 |
+Runtime dependencies (all pinned, each approved):
 
-**Browser API dependencies:**
+| Package | Used for | Load |
+| --- | --- | --- |
+| astro, @astrojs/react, react, react-dom | Static build, UI | Main bundle |
+| idb | IndexedDB wrapper | Main |
+| @mlc-ai/web-llm | In-browser inference | Worker and dynamic import |
+| @modelcontextprotocol/client | MCP Streamable HTTP client | Main |
+| pdfjs-dist | PDF text extraction | Lazily, with its worker |
+| minisearch | BM25 index | Main |
+| marked, dompurify | Markdown rendering and sanitizing | Main |
+| shiki | Code highlighting (wasm) | Lazily |
+| quickjs-emscripten-core, @jitl/quickjs-wasmfile-release-sync | `run_js` interpreter (232 KB gzipped wasm) | Only the JS worker, on first use |
+| lucide-react, @lobehub/icons-static-svg | Icons, provider logos | Main |
+| uuid | Ids | Main |
 
-| API | Required | Fallback |
-|---|---|---|
-| **WebGPU** (`navigator.gpu`) | For WebLLM inference | Show "WebGPU not available" block screen |
-| **Web Workers** | For background inference | None — required |
-| **IndexedDB** | For all persistence | None — required |
-| **Clipboard API** | For image paste | Graceful degradation (no paste support) |
-| **Storage API** (`navigator.storage.estimate()`) | For free space display | Show "unknown" |
-| **Cache API** (`caches`) | For model weight management in StorageManager | Show "unknown" for cache size |
-
-**Coupling constraints:**
-
-- `@mlc-ai/web-llm` is imported only in `src/providers/webllm/` and `src/workers/webllm-worker.ts`. No other code imports it.
-- `idb` is imported only in `src/data/`. Components use repository functions and hooks.
-- React is not imported in `src/providers/`, `src/data/`, `src/lib/`, or `src/workers/`.
+Coupling note: the OpenAI-compatible provider is the single adapter for every HTTP
+backend. There are three specs: generic (used for OpenRouter, Groq and other gateways),
+Ollama and LM Studio. Differences between servers are spec flags and detection methods,
+not new classes: Ollama's `/api/show`, LM Studio's `/api/v0/models`, OpenRouter's model
+metadata, reasoning field names.
 
 ### 5.6 Information View
 
-**Data stores (IndexedDB database: `htllm`):**
+IndexedDB database `htllm`, version 10, 15 stores:
 
-| Store | Key | Contents | Access Pattern |
-|---|---|---|---|
-| `threads` | `id` (UUID) | Thread metadata (title, model, params, timestamps) | Read on app load; write on create/update/delete |
-| `messages` | `id` (UUID), index on `threadId` | Message content (text, images), role, usage stats | Read on thread switch; write on send/receive |
-| `keys` | `providerId` | Encrypted-at-rest provider API keys | Read on provider init; write on user input |
-| `settings` | `key` (string) | User preferences (default params, theme) | Read on app load; write on settings change |
-| `promptTemplates` | `id` (UUID) | Prompt template title + content | Read on `/` trigger; write on user CRUD |
+| Store | Key / indexes | Holds | Lifecycle |
+| --- | --- | --- | --- |
+| threads | `id`; `byUpdatedAt` | Chats | Delete cascades to messages, summaries, workspace files and versions in one transaction. |
+| messages | `id`; `byThread`, `byThreadCreated` | Turns with evidence, activity, presented files | Removed with the thread, or by regenerate and edit-and-resend after the edit point. |
+| summaries | `id`; `byThread` | Compaction blocks | With the thread |
+| workspaceFiles | `id`; `byThread`, `byThreadPath` (unique) | Uploads and notes (text only) | With the thread (D-20). Never touches library documents. |
+| workspaceVersions | `[fileId, version]`; `byThread`, `byFile` | Note history | With the file. Regenerate keeps files and warns (D-19). |
+| libraries | `id`; `byCreatedAt` | Knowledge libraries | Delete removes their documents, chunks, parents and embeddings. The Default library can't be deleted. |
+| documents | `id`; `byCreatedAt`, `byLibrary` | Imported files with exact text and page offsets | With the library |
+| chunks / parents | `id`; `byDocument`, `byParent` | Retrieval units | With the document |
+| embeddings | `[chunkId, embeddingModelId]`; `byModel`, `byChunk` | Vectors | With the chunk; dropped when a model is invalidated |
+| folders | `id` | Chat folders | Deleting a folder ungroups its chats |
+| promptTemplates | `id` | Slash-command templates (built-ins seeded) | User-managed |
+| settings | `key` | Preferences, mode defaults, tool overrides, accent, compaction mode | User-managed |
+| keys | `providerId` | API keys and MCP tokens | Never exported |
+| mcpConnections | `id` | MCP servers and discovered tools | User-managed |
 
-**Data lifecycle:**
-
-- **Threads/Messages:** Created by user action. Persist indefinitely. Deleted by user (cascade: deleting thread deletes its messages). Exported/imported via JSON.
-- **Keys:** Set by user in provider config UI. Stored in IDB only. Never logged, never sent to unexpected origins. Deleted when user removes provider config.
-- **Settings:** Initialized with defaults. Updated by user. Persist across sessions.
-- **PromptTemplates:** Built-in templates loaded from static data on first run. User can create/edit/delete custom templates.
-
-**Data ownership:** All data is owned by the browser profile. No server-side copy exists. Export is the only backup mechanism.
+**Data rules:**
+- **Migrations** are additive. v10 added `Thread.mode`: chats with tools on became
+  Workspace, all others Chat (D-11). It also added the two workspace stores. DB v10 is
+  one-way: older builds can't open it.
+- **Backup:** export writes one JSON file, version 1, holding every store except `keys`
+  and `embeddings`. Embeddings are rebuilt by re-embedding.
+- **Import:**
+  - it validates every record: thread fields, MCP shape, workspace file paths and
+    versions, orphans;
+  - it refuses credentials;
+  - it migrates older threads to a mode the same way v10 does.
+- **Ownership:** each chat owns its workspace. Libraries are global (D-7). A Workspace
+  chat sees attached libraries live, under `/library/<name>`; nothing is copied, except
+  through "Add to library" (from a chat to a library) and `copy_file` (from a library
+  into `/notes`).
+- **Storage page:** shows per-store counts and sizes, the WebLLM caches, and per-store
+  clears with their cascades.
 
 ### 5.7 Interface View
 
-**ChatProvider interface (the core contract):**
+**Provider contract** (`src/providers/types.ts`):
 
-```typescript
+```ts
 interface ChatProvider {
-  id: string;
-  displayName: string;
-  needsModelLoad: boolean;
-  authMode: 'none' | 'byok-local';
-  capabilities: {
-    streaming: boolean;
-    toolCalls: boolean;
-    vision: boolean;
-  };
+  id: string; displayName: string; authMode: 'none' | 'byok-local'; needsModelLoad: boolean;
+  capabilities: { streaming: boolean; toolCalls: boolean; vision: boolean };
   listModels(): Promise<ModelInfo[]>;
-  chat(params: ChatParams): AsyncIterable<ChatChunk>;
+  detectToolSupport?(modelId: string): Promise<boolean | undefined>;
+  detectContextWindow?(modelId: string): Promise<number | undefined>;
+  chat(params: ChatParams): AsyncIterable<ChatChunk>; // delta, reasoning, toolCalls, usage, finishReason
   unload?(): Promise<void>;
 }
-
-interface ChatParams {
-  messages: Message[];
-  modelId: string;
-  temperature?: number;
-  topP?: number;
-  maxTokens?: number;
-  presencePenalty?: number;
-  frequencyPenalty?: number;
-  reasoningEffort?: ReasoningEffort;
-  signal?: AbortSignal;
-}
-
-interface ChatChunk {
-  delta: string;
-  reasoning?: string;
-  finishReason?: 'stop' | 'length' | 'error';
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    prefillTokensPerSecond?: number;
-    decodeTokensPerSecond?: number;
-    timeToFirstTokenMs?: number;
-  };
-}
+interface EmbeddingProvider { id: string; embed(p: EmbeddingParams): Promise<EmbeddingResult>; listEmbeddingModels(): Promise<EmbeddingModelInfo[]> }
 ```
 
-**Worker protocol (WebLLM-internal):**
+**Streaming and errors:**
+- The OpenAI-compatible provider sends `POST {base}/chat/completions` with
+  `stream: true` and parses SSE.
+- Tool calls arrive in fragments and are accumulated by `index`, tolerating partial JSON.
+- Reasoning is read from `reasoning_content` or `reasoning`, and the field it arrived in
+  is recorded. Within one answer's tool loop, each tool-calling step's reasoning is sent
+  back under that same field. Saved history never includes reasoning (§5.8).
+- HTTP errors surface as readable messages. An aborted request ends the stream; the
+  message is marked stopped and survives reload.
 
-The `@mlc-ai/web-llm` library provides `WebWorkerMLCEngine` (main thread) and `WebWorkerMLCEngineHandler` (worker thread) which handle the postMessage protocol internally. htllm does not define a custom worker protocol — it uses the library's built-in bridge.
+**Tool contract** (`services/tools.ts` `ExecutableTool`): a name, a description, a JSON
+Schema for `parameters`, and `execute(args, signal, maxChars)`, which returns
+`{ text, citations?, presented? }`. Arguments are validated before execution. Invalid
+arguments come back to the model as a prose error result, not an exception. Example
+exchange:
 
-**Data repository interfaces:**
-
-```typescript
-// src/data/threads.ts
-createThread(thread: Omit<Thread, 'id'>): Promise<Thread>
-listThreads(): Promise<Thread[]>
-getThread(id: string): Promise<Thread | undefined>
-updateThread(id: string, patch: Partial<Thread>): Promise<void>
-deleteThread(id: string): Promise<void>
-
-// src/data/messages.ts
-addMessage(message: Omit<Message, 'id'>): Promise<Message>
-getMessages(threadId: string): Promise<Message[]>
-updateMessage(id: string, patch: Partial<Message>): Promise<void>
-deleteMessagesForThread(threadId: string): Promise<void>
-
-// src/data/keys.ts
-setKey(providerId: string, key: string): Promise<void>
-getKey(providerId: string): Promise<string | undefined>
-deleteKey(providerId: string): Promise<void>
+```json
+{ "name": "read_file", "arguments": "{\"path\":\"/library/Project notes/atlas.md\"}" }
 ```
+```text
+Source ID: atlas:L1-1
+1: Atlas launches on November 12. Atlas owner is Mira Chen. ...
+End of file (1 line).
+```
+
+**Workspace tools:**
+
+| Tool | Notes |
+| --- | --- |
+| `list_files` | Lists the workspace tree. |
+| `read_file` | Line windows, with a "continue" hint. |
+| `search` | Hybrid for indexed libraries, keyword otherwise. |
+| `grep` | Plain text, or guarded regex. |
+| `write_file`, `edit_file`, `copy_file` | `/notes` only, read-before-write. |
+| `present_file` | Hands a note version to the user. |
+| `calculate` | Always offered. |
+| `query_csv` | Offered when a CSV or TSV is present and context is above 8k. |
+| `run_js` | Offered above 8k. |
+
+The Tools panel counts the always-on set.
+
+**MCP:**
+- `inspectMcp` connects with the official Streamable HTTP client and lists tools.
+  Discovered tools are stored with `readOnlyHint`.
+- `externalTools` wraps the chat's selected tools as `ExecutableTool`s, named
+  `mcp_<connection>_<n>`.
+- Each call goes through `approveTool`. Read-only tools can be trusted for the session;
+  everything else asks every time.
+- A failure with an unknown outcome ends the turn without a retry.
+
+**Citations:**
+- A model writes `[[Source <ref>]]`, or a grouped form
+  (`[[Source a], [Source b]]` or `[[Source a, Source b]]`).
+- A ref resolves if it is one of:
+  - an exact source ID or chunk ID, optionally with `: filename`;
+  - a 1-based index;
+  - a unique filename or path;
+  - a path with a line or range that points to exactly one supplied source.
+- Anything else renders as `[unresolved source: …]`.
 
 ### 5.8 Interaction / State / Algorithm Views (as applicable)
 
-**Model loading state machine:**
+**Mode lifecycle (D-2 to D-4, D-11, D-12, D-21):**
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Idle
-    Idle --> Loading : user clicks "load"
-    Loading --> Ready : model load success
-    Loading --> Error : WebGPU / network / OOM error
-    Ready --> Idle : user clicks "unload"
-    Ready --> Loading : user loads different model (unload first)
-    Error --> Idle : user acknowledges / tries different model
-    Error --> Loading : user retries same model
-
-    Loading --> Loading : progress events (UI updates bar)
+  [*] --> EmptyChat: new chat (default Chat)
+  EmptyChat --> EmptyChat: switch mode (swaps to that mode's default model)
+  EmptyChat --> ChatLocked: first message in Chat
+  EmptyChat --> WorkspaceLocked: first message or first upload in Workspace
+  ChatLocked --> [*]: delete chat
+  WorkspaceLocked --> [*]: delete chat (also deletes its N files)
 ```
 
-States: `idle` → `loading` → `ready` | `error`. Only one model loaded at a time. Loading a new model first unloads the current one.
+Workspace is offered only when the selected model can call tools. That means the
+provider supports tool calls, the server metadata doesn't say no, and the user hasn't
+marked the model "no tools". Otherwise the chooser explains why.
 
-**Chat streaming flow:**
+**Agent loop (`executeChat`):**
+1. Stream from the provider.
+2. If the reply ends without tool calls, the answer is done.
+3. For each call:
+   - find the tool, retrying the name lowercased;
+   - validate the arguments;
+   - skip the call if it is the third identical one in a row;
+   - ask approval for external tools;
+   - run it with a timeout;
+   - cap the result to the band and the remaining context;
+   - report activity and sources.
+4. Append the results and repeat until the call cap. At the cap, ask the model for a
+   tool-free final answer, and the UI offers "continue".
+5. Cancellation aborts the in-flight request and tool. A tool whose outcome is unknown
+   stops the loop and is shown as unknown.
 
-```mermaid
-flowchart TD
-    A[User presses Enter] --> B{Model ready?\nInput non-empty?}
-    B -->|no| Z[No action]
-    B -->|yes| C[Create user Message in IDB]
-    C --> D[Create placeholder assistant Message in IDB]
-    D --> E[Set generating = true]
-    E --> F["Call provider.chat(params)"]
-    F --> G["Iterate AsyncIterable‹ChatChunk›"]
-    G --> H{Aborted?}
-    H -->|"User clicks Stop\nsignal.abort()"| K
-    H -->|no| I[Append delta to assistant message\nUpdate React state]
-    I --> J[Periodically flush to IDB]
-    J --> G
-    G -->|"stream ends\nfinishReason = stop | length"| K[Final persist to IDB with usage stats]
-    K --> L[Set generating = false]
-    L --> M{First message\nin thread?}
-    M -->|yes| N[Auto-generate thread title]
-    M -->|no| O[Done]
-    N --> O
-```
+**History shaping (each send):**
+- Replies keep their tool activity, replayed as `<historical-tool-data>`. Results older
+  than the last two turns become stubs.
+- Reasoning is stripped from history, both the structured field and in-content tags.
+  It is replayed only inside the answer that produced it (§5.7).
+- When the conversation exceeds its budget, older turns are compacted: manually, or
+  automatically when Compression is set to auto. Otherwise a sliding window drops the
+  oldest turns, and the UI shows where.
 
-**Image attachment algorithm:**
+**Reasoning display:** structured reasoning and any `<think>`/`<thought>` blocks in the
+content are merged into the thinking section. A tag inside code, or written mid-sentence
+in prose, stays text.
 
-1. User clicks attach button or pastes image
-2. Validate: provider supports vision (`capabilities.vision`)
-3. Validate: image count < 3
-4. Read file as data URL
-5. Compress via canvas: scale down if needed, re-encode as JPEG, target ≤256KB
-6. Store `{ url: dataURL, width, height }` in attach state
-7. On send: construct `ContentPart[]` array with text + image parts
-8. Persist multimodal content to IDB message
+**`run_js` isolation:**
+- Each call starts a fresh worker.
+- The worker instantiates the QuickJS wasm, sets a memory limit (64 MiB), a stack limit
+  (1 MB) and an interrupt deadline (3 s). It exposes only `print`, `console.log`,
+  `read(path)` for the listed files, and `files`.
+- The guest has no `fetch`, timers, DOM, storage or `postMessage`, because the
+  interpreter provides none of them.
+- If the worker doesn't answer within the deadline plus 5 s, it is terminated.
+- Output is capped and returned as text. The tool can't write files.
 
-**Prompt template matching algorithm:**
+**Retrieval (Automatic RAG and `search` over libraries):**
+1. Embed the query with the library's model.
+2. Score BM25 (MiniSearch, cached and invalidated on chunk changes) and cosine
+   similarity over child chunks.
+3. Fuse the scores (vector weight 0.7).
+4. Drop results below the threshold; replace each child with its parent block when it
+   has one, keeping the best hit per parent; and pack them into the character budget with
+   source metadata.
 
-1. User types `/` as first character in composer
-2. Debounce 100ms
-3. If input length < 40 chars: search prompt templates by title substring (case-insensitive)
-4. Display matching templates in dropdown (PromptHints component)
-5. Arrow-key navigation, Enter to select
-6. On select: replace composer content with template content
-
-**Thinking/reasoning pipeline:**
-
-1. Check if message has structured `reasoning` field (from API providers like DeepSeek, OpenAI o-series)
-2. If yes: display reasoning in collapsible ThinkingBlock, content is already clean
-3. If no: parse content for `<think>...</think>` tags (WebLLM Qwen3, DeepSeek-R1 local)
-4. If tags found: extract thinking content for ThinkingBlock, strip tags from reply
-5. During streaming: show "thinking" state if reasoning exists but no content yet
-
-### 5.10 Process View
-
-**rAF-throttled streaming:**
-
-During token generation, the provider yields chunks faster than React can render. To prevent render storms:
-
-1. `useChat` accumulates deltas in a ref (not state)
-2. A `requestAnimationFrame` callback flushes accumulated deltas to React state
-3. This limits re-renders to ≤60/s regardless of token throughput
-4. On stream end, a final flush ensures no deltas are lost
-
-**Shiki highlight cache:**
-
-Code block highlighting is expensive. To avoid redundant work:
-
-1. Each code block's HTML is cached in a `Map<string, string>` keyed by `theme:lang:code`
-2. On re-render, cached HTML is returned immediately
-3. Cache persists for tab lifetime (no IDB persistence needed)
-4. Shiki instance is lazily initialized on first highlight call
+A library that isn't fully indexed blocks Chat-mode retrieval with a visible error; it
+does not silently answer ungrounded. In Workspace, `search` falls back to keyword
+matching.
 
 ### 5.9 Resource View (as applicable)
 
-N/A — htllm has no server resources. Client-side resource constraints (GPU VRAM, RAM, storage) are handled by the system detection rail (C6) and model-fit heuristics, which provide guidance to the user rather than enforcing hard limits. The browser itself manages memory pressure and GPU resource allocation.
+| Resource | Budget | Notes |
+| --- | --- | --- |
+| Context window | From the server when it reports one (LM Studio's loaded context, the OpenRouter maximum), else the user's setting. | A one-click suggestion offers the server value. The meter colors at 50, 75 and 90%. |
+| Workspace band ≤ 8k | 120 lines or 3,000 characters per read, 12 calls | `calculate` only, among the functions |
+| Band 8k–32k | 250 lines or 8,000 characters, 16 calls | Adds `query_csv` (with a CSV) and `run_js` |
+| Band > 32k | 400 lines or 16,000 characters, 24 calls | |
+| Attached files inline | Small files go in whole, up to a quarter of the read budget. | Larger files are listed and read on demand. |
+| Automatic RAG | 4,000 characters (less only below a 4k context: about one character per token of context, at least 500) | |
+| Uploads | 25 MB file, 5,000,000 extracted characters | Text, Markdown, JSON, CSV and other text types; text PDFs |
+| Workers | Regex 2 s; JS 3 s plus a 5 s terminate fallback; 64 MiB | A fresh worker per call |
+| Storage | Browser quota per origin | WebLLM weights are the largest consumer. The Storage page shows usage and offers clears. |
