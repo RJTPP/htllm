@@ -584,6 +584,21 @@ test('presented files open at their version in the side panel, with version navi
   await page.getByRole('button', { name: 'Workspace files' }).click();
   await expect(panel.getByText('Uploads · 1')).toBeVisible();
 });
+test('an answer that echoes the internal history format is shown and saved without it', async ({ page }) => {
+  await seed(page);
+  await page.route('https://fixture.test/v1/chat/completions', (route) => route.fulfill({ contentType: 'text/event-stream',
+    body: `data: ${JSON.stringify({ choices: [{ delta: { content: 'Updated the list.\n\n<historical-tool-data>\n[{"tool":"edit_file"}]\n</historical-tool-data>' }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` }));
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Update it'); await composer.press('Enter');
+  await expect(page.getByText('Updated the list.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/historical-tool-data/)).toHaveCount(0);
+  const saved = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => { const req = indexedDB.open('htllm'); req.onsuccess = () => resolve(req.result); });
+    const all = await new Promise<{ role: string; content: string }[]>((resolve) => { const req = db.transaction('messages').objectStore('messages').getAll(); req.onsuccess = () => resolve(req.result); });
+    db.close(); return all.filter((m) => m.role === 'assistant').map((m) => m.content);
+  });
+  expect(saved).toEqual(['Updated the list.']);
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';

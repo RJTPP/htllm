@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { activityContext, stubOldActivity, withActivityContext } from './message-context';
+import { activityContext, stripEchoedToolData, stubOldActivity, withActivityContext } from './message-context';
 import { estimateMessageTokens } from './tokens';
 import { compact } from './compact';
 import type { ChatProvider, Message } from '../providers/types';
@@ -34,4 +34,10 @@ it('sends stubbed rather than full old results to compaction', async () => {
   await compact([big], provider, 'fixture');
   expect(prompt).toContain('Old tool result cleared');
   expect(prompt).not.toContain('evidence evidence evidence');
+});
+it('removes history blocks a model echoed into its answer, closed or not', () => {
+  expect(stripEchoedToolData('Done.\n\n<historical-tool-data>\n[{"tool":"x"}]\n</historical-tool-data>')).toBe('Done.');
+  expect(stripEchoedToolData('Before <historical-tool-data>[1]</historical-tool-data> after')).toBe('Before after');
+  expect(stripEchoedToolData('Done.\n<historical-tool-data>\n[{"tool":"x", "res')).toBe('Done.');
+  expect(stripEchoedToolData('No block here.')).toBe('No block here.');
 });
