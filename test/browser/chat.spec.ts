@@ -665,6 +665,34 @@ test('regenerate warns that file changes from the removed reply remain, and dele
   await page.getByTitle('Delete thread').first().click();
   await expect(page.getByRole('button', { name: 'Delete chat and its 1 workspace file' })).toBeVisible();
 });
+test('end to end: the model reads an upload, writes a note, presents it, and the card opens that version', async ({ page }) => {
+  await seed(page, true);
+  await page.getByLabel('Workspace file upload').setInputFiles([{ name: 'facts.txt', mimeType: 'text/plain', buffer: Buffer.from('Launch: May 4\nOwner: Dana') }]);
+  await expect(page.getByText('Added /uploads/facts.txt')).toBeVisible();
+  const script = [
+    { name: 'read_file', arguments: { path: '/uploads/facts.txt' } },
+    { name: 'write_file', arguments: { path: '/notes/summary.md', content: '# Summary\n\nLaunch on May 4, owned by Dana.' } },
+    { name: 'present_file', arguments: { path: '/notes/summary.md', caption: 'Launch summary' } },
+  ];
+  const results: string[] = [];
+  await page.route('https://fixture.test/v1/chat/completions', async (route) => {
+    const request = route.request().postDataJSON();
+    const done = request.messages.filter((m: { role: string }) => m.role === 'tool');
+    if (done.length) results.push(done.at(-1).content);
+    const step = script[done.length];
+    const delta = step ? { tool_calls: [{ index: 0, id: `s${done.length}`, function: { name: step.name, arguments: JSON.stringify(step.arguments) } }] } : { content: 'Here is the summary [[Source /uploads/facts.txt]].' };
+    await route.fulfill({ contentType: 'text/event-stream', body: `data: ${JSON.stringify({ choices: [{ delta, finish_reason: step ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n` });
+  });
+  const composer = page.getByPlaceholder('Type a message — / for commands & templates, Enter to send');
+  await composer.fill('Summarize the facts'); await composer.press('Enter');
+  await expect(page.getByText(/Here is the summary/)).toBeVisible();
+  expect(results[0]).toContain('1: Launch: May 4');
+  expect(results[1]).toContain('Created /notes/summary.md (v1');
+  expect(results[2]).toContain('Presented /notes/summary.md (v1)');
+  await expect(page.getByRole('link', { name: 'View source 1: /uploads/facts.txt' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open summary.md v1' }).click();
+  await expect(page.getByRole('complementary', { name: 'Workspace files' }).getByText('Launch on May 4, owned by Dana.')).toBeVisible();
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
