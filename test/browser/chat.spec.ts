@@ -862,6 +862,16 @@ test('a workspace upload can be added to a Knowledge library with its pages', as
   });
   expect(doc).toMatchObject({ libraryId: 'fixture-library', pages: [{ page: 1, start: 0, end: 9 }, { page: 2, start: 11, end: 20 }] });
 });
+test('fonts are self-hosted: no third-party requests on load, and Geist renders', async ({ page }) => {
+  const external: string[] = [];
+  page.on('request', (request) => { const url = new URL(request.url()); if (!['127.0.0.1', 'localhost'].includes(url.hostname) && url.protocol.startsWith('http') && url.hostname !== 'fixture.test') external.push(url.hostname); });
+  await seed(page);
+  await page.evaluate(() => document.fonts.ready);
+  expect(await page.evaluate(() => document.fonts.check('16px Geist') && document.fonts.check('16px "JetBrains Mono"'))).toBe(true);
+  const loaded = await page.evaluate(() => [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/"/g, '')));
+  expect(loaded).toContain('Geist');
+  expect(external.filter((host) => /google|gstatic/.test(host))).toEqual([]);
+});
 test('RAG citations survive reload and source deletion with their supplied excerpt', async ({ page }) => {
   await seedRag(page);
   let supplied = '';
