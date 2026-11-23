@@ -71,7 +71,10 @@ Each Workspace chat has its own folder of files:
 - **/uploads**: files you attach with the paperclip in the composer. These are text,
   Markdown, CSV, JSON, code, or PDFs with a text layer, up to 25 MB each. They are
   read-only to the model. PDFs are stored as extracted text with page numbers.
-  Attaching a file locks the chat's mode, like sending a message does.
+  Attaching a file locks the chat's mode, like sending a message does. Attached files
+  wait as chips and go with your next message: the model is told which files came
+  with it. A small file (up to a quarter of the read size below) is included whole,
+  ready to cite. Larger files are read with `read_file`.
 - **/notes**: the model's own files. It creates, edits and copies into them. Every change
   is kept as a numbered version.
 - **/library/&lt;name&gt;**: the attached Knowledge library, plus any extra libraries
