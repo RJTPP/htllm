@@ -71,7 +71,8 @@ The repo goes public at release, and everything is ready and verified before the
    avatar), show two or three concepts, apply the one chosen.
 
 **R3 · Docs and quality**
-1. Move the live eval to the Workspace tools, and run one baseline on the available model.
+1. Move the live eval to the Workspace tools, and run one baseline on the available model
+   (done: Gemma 4 26B on LM Studio, results and findings in `eval/README.md`).
 2. SDD: drift check, then update in place, absorbing the decisions and design from
    `docs/review/`. Then remove `docs/review/`.
 3. Write a README (what, features, privacy, quick start, providers, limitations,
