@@ -1,5 +1,10 @@
 # Architecture Review — Current State + Deferred Refactors
 
+> **Status (2026-11-23):** superseded as the current assessment by
+> [review/2026-11-23.md](review/2026-11-23.md). The weakness flags below were re-checked
+> there (§3.5): Flag 1 still holds, Flag 2 is partly addressed, Flag 3 got worse. The
+> "do not fix" and "do not add" guidance still holds.
+
 Status: **assessment** · Action: **defer fixes until after Phase 3 Part 2 ships**
 
 This document records an honest assessment of htllm's current code structure
