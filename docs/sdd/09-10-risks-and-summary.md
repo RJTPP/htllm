@@ -40,7 +40,7 @@ The design depends on a few load-bearing rules:
 **Open items before and after release:**
 - **Roadmap R4, before release:**
   - the first tagged run of the release workflow (Pages deploy and zip);
-  - the owner's in-browser WebLLM chat, and the smoke test from the hosted origin;
+  - the smoke test from the hosted origin, after the first deploy;
   - re-pointing this document's baseline after the rebase merge.
 - **Known code gaps (§7.2):** the provider-id comparisons in two components, and the
   `lib/` IndexedDB access.
